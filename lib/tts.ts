@@ -57,6 +57,10 @@ export function normalizeTtsProvider(rawValue?: string): TtsProvider {
   return "auto";
 }
 
+export function shouldFallbackToBrowser(provider: TtsProvider): boolean {
+  return provider === "browser";
+}
+
 function scoreVoice(voice: VoiceCandidate, preferredVoiceName?: string): number {
   const name = voice.name.toLowerCase();
   const preferred = preferredVoiceName?.trim().toLowerCase();
@@ -107,6 +111,17 @@ function splitChunkByWords(text: string, maxChunkLength: number): string[] {
 
   if (current) chunks.push(current);
   return chunks;
+}
+
+export async function runSequentially<TInput, TOutput>(
+  items: TInput[],
+  worker: (item: TInput, index: number) => Promise<TOutput>,
+): Promise<TOutput[]> {
+  const output: TOutput[] = [];
+  for (let index = 0; index < items.length; index += 1) {
+    output.push(await worker(items[index], index));
+  }
+  return output;
 }
 
 export function splitSpeechIntoChunks(text: string, maxChunkLength = 140): string[] {
@@ -193,29 +208,54 @@ async function speakWithElevenLabs(
   const chunks = splitSpeechIntoChunks(normalizedText, chunkLength);
   if (!chunks.length) return false;
 
-  const blobs = await Promise.all(chunks.map(async (chunk) => {
-    let response: Response;
-    try {
-      response = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: chunk,
-          profile: styleProfile,
-        }),
-      });
-    } catch {
-      return null;
+  const blobs = await runSequentially(chunks, async (chunk) => {
+    const maxAttempts = 3;
+    let attempt = 0;
+    while (attempt < maxAttempts) {
+      attempt += 1;
+
+      let response: Response;
+      try {
+        response = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: chunk,
+            profile: styleProfile,
+          }),
+        });
+      } catch {
+        return null;
+      }
+
+      if (response.ok) {
+        try {
+          const blob = await response.blob();
+          return blob.size ? blob : null;
+        } catch {
+          return null;
+        }
+      }
+
+      let detail = "";
+      try {
+        detail = await response.text();
+      } catch {
+        detail = "";
+      }
+
+      const isConcurrencyLimit =
+        detail.includes("concurrent_limit_exceeded") || detail.includes("rate_limit_error");
+      if (!isConcurrencyLimit || attempt >= maxAttempts) {
+        console.warn(`[TTS] ElevenLabs chunk request failed status=${response.status} attempt=${attempt}`);
+        return null;
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 220 * attempt));
     }
 
-    if (!response.ok) return null;
-    try {
-      const blob = await response.blob();
-      return blob.size ? blob : null;
-    } catch {
-      return null;
-    }
-  }));
+    return null;
+  });
   if (blobs.some((blob) => !blob)) return false;
   if (speechToken !== activeSpeechToken) return true;
 
@@ -386,9 +426,16 @@ export function speak(text: string, onStart?: () => void, onEnd?: () => void, op
     if (shouldTryElevenLabs) {
       const played = await speakWithElevenLabs(text, speechToken, onStart, onEnd, options);
       if (played || speechToken !== activeSpeechToken) return;
+      console.warn("[TTS] ElevenLabs playback failed; browser fallback is disabled.");
+      onEnd?.();
+      return;
     }
 
     if (speechToken !== activeSpeechToken) return;
+    if (!shouldFallbackToBrowser(provider)) {
+      onEnd?.();
+      return;
+    }
     speakWithBrowserVoices(text, speechToken, onStart, onEnd, options);
   })();
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeTtsProvider } from '@/lib/tts';
+import { normalizeTtsProvider, shouldFallbackToBrowser } from '@/lib/tts';
 import {
   buildElevenLabsRequestConfig,
   normalizeVoiceStyleProfile,
@@ -20,6 +20,17 @@ describe('normalizeTtsProvider', () => {
 
   it('falls back to auto for unknown providers', () => {
     expect(normalizeTtsProvider('something-else')).toBe('auto');
+  });
+});
+
+describe('shouldFallbackToBrowser', () => {
+  it('does not fallback for elevenlabs-only execution', () => {
+    expect(shouldFallbackToBrowser('elevenlabs')).toBe(false);
+    expect(shouldFallbackToBrowser('auto')).toBe(false);
+  });
+
+  it('only allows browser fallback for explicit browser mode', () => {
+    expect(shouldFallbackToBrowser('browser')).toBe(true);
   });
 });
 
