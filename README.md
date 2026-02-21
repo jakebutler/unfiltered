@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Unfiltered
 
-## Getting Started
+Unfiltered is an AI UX researcher that runs live moderated user interviews and surfaces friction moments automatically.
 
-First, run the development server:
+## What It Does
+
+- Runs interview sessions against a prototype URL
+- Streams participant transcription in real time
+- Detects friction signals from speech and behavior
+- Uses configurable decide policies (A, B, and A/B)
+- Produces a findings dashboard with moment cards and exports
+
+## Tech Stack
+
+- Next.js 15 + React 19 + TypeScript
+- Convex backend functions and schema
+- Vitest for unit tests
+
+## Quick Start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create `.env.local` with required keys:
 
-## Learn More
+- `SPEECHMATICS_API_KEY`
+- `FIREWORKS_API_KEY`
+- `MINIMAX_API_KEY`
+- `ELEVENLABS_API_KEY` (optional for narrated output)
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run dev      # local development
+npm run test     # run unit tests
+npm run lint     # lint codebase
+npm run build    # production build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Repo Status
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Current implementation is V1/hackathon scope with study setup, interview runtime, signal processing, decide engine, and findings dashboard.
