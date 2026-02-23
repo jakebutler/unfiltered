@@ -40,6 +40,31 @@ export const start = mutation({
   },
 });
 
+export const createForExperimentVariation = mutation({
+  args: {
+    studyId: v.id("studies"),
+    decideMode: v.union(v.literal("A"), v.literal("B")),
+    experimentRunId: v.optional(v.id("experimentRuns")),
+    experimentVariationId: v.optional(v.id("experimentVariations")),
+  },
+  returns: v.id("sessions"),
+  handler: async (ctx, args) => {
+    await requireAuthIfConfigured(ctx);
+    const study = await ctx.db.get(args.studyId);
+    if (!study) throw new Error("Study not found");
+
+    return ctx.db.insert("sessions", {
+      studyId: args.studyId,
+      currentTaskIndex: 0,
+      status: "active",
+      startedAt: Date.now(),
+      decideMode: args.decideMode,
+      experimentRunId: args.experimentRunId,
+      experimentVariationId: args.experimentVariationId,
+    });
+  },
+});
+
 export const end = mutation({
   args: { sessionId: v.id("sessions") },
   returns: v.null(),

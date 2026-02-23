@@ -46,6 +46,7 @@ export default function StudyDetailPage() {
     <div className="max-w-2xl mx-auto p-8 space-y-6">
       <div className="flex items-center gap-3">
         <Link href="/studies" className="text-muted-foreground text-sm">← Studies</Link>
+        <Link href="/experiments" className="text-muted-foreground text-sm">Experiments</Link>
         <h1 className="text-2xl font-bold">{study.title}</h1>
         <Badge>Mode {study.decideMode}</Badge>
       </div>

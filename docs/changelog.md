@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-02-23 — Experiments console + telemetry/assignment plumbing
+**Commit:** uncommitted
+- Added deterministic experiment matrix generation and Convex-authoritative assignment tracking
+- Added structured run orchestration via `experimentRuns`, `experimentVariations`, and `experimentGlobalState`
+- Added telemetry run metadata and latency event storage/query surfaces
+- Added PostHog analytics actions for exposure and run lifecycle events (non-authoritative for assignment)
+- Added top-level `/experiments` operator console and studies navigation entry points
+- Added experiment matrix/exposure/runtime routing tests
+- Updated dev/lint config for `.next-dev` and generated Convex artifacts
+
 ## 2026-02-21 11:50 — Repo consolidation + doc alignment
 **Commit:** uncommitted
 - Moved project documentation, prompt reference docs, stop-hook config, and scripts into the `unfiltered/` git repo root
