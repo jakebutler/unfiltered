@@ -64,6 +64,10 @@ MOMENT:
 - conversation_signal_summary: ${JSON.stringify({ signal_tags: moment.signalTags })}
 - mouse_summary_near_moment: ${JSON.stringify(moment.mouseSnapshot ?? {})}
 - engagement_state_near_moment: ${JSON.stringify(moment.engagementSnapshot ?? {})}
+- reviewer_verification: ${JSON.stringify({
+  status: moment.verificationStatus ?? "unreviewed",
+  feedback: moment.verificationFeedback ?? "",
+})}
 
 Guidance:
 Use these mapping heuristics (choose best fit):
@@ -72,6 +76,7 @@ Use these mapping heuristics (choose best fit):
 - "where is…" + backtracking + long pauses → discoverability/navigation issue
 - Many pauses/hesitation on form fields → form field friction/micro-friction
 - Confusion immediately after interviewer task prompt → task_prompt_issue
+- If reviewer feedback says this analysis is incorrect, revise your interpretation and recommendations to address that feedback directly.
 
 Output JSON only.`;
 
@@ -96,7 +101,7 @@ Output JSON only.`;
         momentId: moment._id,
         candidateFindingLabel: ((parsed.candidate_finding_label as string) ?? "").slice(0, 90),
         category: category as "copy_language" | "discoverability" | "system_status_feedback" | "navigation_ia" | "form_field_friction" | "task_prompt_issue" | "error_recovery" | "other",
-        interpretation: ((parsed.interpretation as string) ?? "").slice(0, 260),
+        interpretation: typeof parsed.interpretation === "string" ? parsed.interpretation.trim() : "",
         recommendations: Array.isArray(parsed.recommendations) ? (parsed.recommendations as string[]).slice(0, 4) : [],
         verificationQuestion: (parsed.verification_question as string) ?? "",
         labelConfidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
@@ -117,7 +122,11 @@ export const generateThemes = action({
 
     const summaryInput = moments
       .filter((m: { candidateFindingLabel?: string }) => m.candidateFindingLabel)
-      .map((m: { category?: string; candidateFindingLabel?: string; interpretation?: string }) => `- [${m.category}] ${m.candidateFindingLabel}: ${m.interpretation}`)
+      .map((m: { category?: string; candidateFindingLabel?: string; interpretation?: string; verificationStatus?: string; verificationFeedback?: string }) => {
+        const verification = m.verificationStatus ? ` verification=${m.verificationStatus}` : "";
+        const feedback = m.verificationFeedback ? ` feedback="${m.verificationFeedback}"` : "";
+        return `- [${m.category}] ${m.candidateFindingLabel}: ${m.interpretation}${verification}${feedback}`;
+      })
       .join("\n");
 
     let themes: string[] = [];

@@ -261,5 +261,8 @@ export default defineSchema({
     recommendations: v.optional(v.array(v.string())),
     verificationQuestion: v.optional(v.string()),
     labelConfidence: v.optional(v.number()),
+    verificationStatus: v.optional(v.union(v.literal("confirmed"), v.literal("incorrect"))),
+    verificationFeedback: v.optional(v.string()),
+    verifiedAt: v.optional(v.number()),
   }).index("by_session", ["sessionId"]),
 });

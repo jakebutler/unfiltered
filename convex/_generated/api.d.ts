@@ -14,6 +14,7 @@ import type * as engagements from "../engagements.js";
 import type * as experimentRuns from "../experimentRuns.js";
 import type * as findings from "../findings.js";
 import type * as friction from "../friction.js";
+import type * as lib_classifierOutput from "../lib/classifierOutput.js";
 import type * as lib_security from "../lib/security.js";
 import type * as mouse from "../mouse.js";
 import type * as posthog from "../posthog.js";
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   experimentRuns: typeof experimentRuns;
   findings: typeof findings;
   friction: typeof friction;
+  "lib/classifierOutput": typeof lib_classifierOutput;
   "lib/security": typeof lib_security;
   mouse: typeof mouse;
   posthog: typeof posthog;

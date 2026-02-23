@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireAuthIfConfigured } from "./lib/security";
+import { resolveEndTurn } from "../lib/interview/endTurn";
 
 export const create = mutation({
   args: { studyId: v.id("studies") },
@@ -84,6 +85,34 @@ export const advanceTask = mutation({
     if (!session) throw new Error("Session not found");
     await ctx.db.patch(args.sessionId, { currentTaskIndex: session.currentTaskIndex + 1 });
     return null;
+  },
+});
+
+export const endTurn = mutation({
+  args: { sessionId: v.id("sessions") },
+  returns: v.object({ completed: v.boolean(), currentTaskIndex: v.number() }),
+  handler: async (ctx, args) => {
+    await requireAuthIfConfigured(ctx);
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) throw new Error("Session not found");
+    const study = await ctx.db.get(session.studyId);
+    if (!study) throw new Error("Study not found");
+
+    const resolution = resolveEndTurn({
+      currentTaskIndex: session.currentTaskIndex,
+      totalTasks: study.tasks.length,
+    });
+
+    if (resolution.shouldCompleteSession) {
+      await ctx.db.patch(args.sessionId, { status: "complete", endedAt: Date.now() });
+    } else {
+      await ctx.db.patch(args.sessionId, { currentTaskIndex: resolution.nextTaskIndex });
+    }
+
+    return {
+      completed: resolution.shouldCompleteSession,
+      currentTaskIndex: resolution.nextTaskIndex,
+    };
   },
 });
 

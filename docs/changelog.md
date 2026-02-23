@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-02-23 — Decide-engine turn-taking + dashboard transcript verification UX
+**Commit:** uncommitted
+- Added deterministic fast-path routing and richer transcript heuristics for confusion, positive feedback, and "no more to add" cues
+- Added turn-taking cadence controls, interruption acknowledgements, and runtime timing-config resolution
+- Added latency stage instrumentation hooks from decision path through TTS playback
+- Updated interview runtime with live cue triggering, pipeline health diagnostics, and `endTurn` flow
+- Added dashboard transcript verification sidebar plus confirm/incorrect analyst feedback loop
+- Improved friction snippet extraction and review utilities for fragmented transcripts
+- Hardened engagement classifier output parsing and error-note handling with vision-capable default model
+- Added focused tests for decide runtime config/fast-path/turn-taking, snippet selection, dashboard review helpers, and classifier output parsing
+
 ## 2026-02-23 — Experiments console + telemetry/assignment plumbing
 **Commit:** uncommitted
 - Added deterministic experiment matrix generation and Convex-authoritative assignment tracking
