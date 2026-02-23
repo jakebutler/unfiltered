@@ -34,4 +34,12 @@ describe("shouldTriggerDecide", () => {
       shouldTriggerDecide({ ...baseSignals, explicitUncertaintyCount: 1 }, 20),
     ).toBe(true);
   });
+
+  it("returns true when transcript tail contains positive feedback", () => {
+    expect(shouldTriggerDecide(baseSignals, 20, "I like this page")).toBe(true);
+  });
+
+  it("returns true when transcript tail contains no-more-to-add language", () => {
+    expect(shouldTriggerDecide(baseSignals, 20, "No, that's all")).toBe(true);
+  });
 });

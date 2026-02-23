@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireAuthIfConfigured } from "./lib/security";
+import { resolveEndTurn } from "../lib/interview/endTurn";
 
 export const create = mutation({
   args: { studyId: v.id("studies") },
@@ -40,6 +41,31 @@ export const start = mutation({
   },
 });
 
+export const createForExperimentVariation = mutation({
+  args: {
+    studyId: v.id("studies"),
+    decideMode: v.union(v.literal("A"), v.literal("B")),
+    experimentRunId: v.optional(v.id("experimentRuns")),
+    experimentVariationId: v.optional(v.id("experimentVariations")),
+  },
+  returns: v.id("sessions"),
+  handler: async (ctx, args) => {
+    await requireAuthIfConfigured(ctx);
+    const study = await ctx.db.get(args.studyId);
+    if (!study) throw new Error("Study not found");
+
+    return ctx.db.insert("sessions", {
+      studyId: args.studyId,
+      currentTaskIndex: 0,
+      status: "active",
+      startedAt: Date.now(),
+      decideMode: args.decideMode,
+      experimentRunId: args.experimentRunId,
+      experimentVariationId: args.experimentVariationId,
+    });
+  },
+});
+
 export const end = mutation({
   args: { sessionId: v.id("sessions") },
   returns: v.null(),
@@ -59,6 +85,34 @@ export const advanceTask = mutation({
     if (!session) throw new Error("Session not found");
     await ctx.db.patch(args.sessionId, { currentTaskIndex: session.currentTaskIndex + 1 });
     return null;
+  },
+});
+
+export const endTurn = mutation({
+  args: { sessionId: v.id("sessions") },
+  returns: v.object({ completed: v.boolean(), currentTaskIndex: v.number() }),
+  handler: async (ctx, args) => {
+    await requireAuthIfConfigured(ctx);
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) throw new Error("Session not found");
+    const study = await ctx.db.get(session.studyId);
+    if (!study) throw new Error("Study not found");
+
+    const resolution = resolveEndTurn({
+      currentTaskIndex: session.currentTaskIndex,
+      totalTasks: study.tasks.length,
+    });
+
+    if (resolution.shouldCompleteSession) {
+      await ctx.db.patch(args.sessionId, { status: "complete", endedAt: Date.now() });
+    } else {
+      await ctx.db.patch(args.sessionId, { currentTaskIndex: resolution.nextTaskIndex });
+    }
+
+    return {
+      completed: resolution.shouldCompleteSession,
+      currentTaskIndex: resolution.nextTaskIndex,
+    };
   },
 });
 

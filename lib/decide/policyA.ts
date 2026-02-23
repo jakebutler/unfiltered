@@ -1,5 +1,10 @@
 import type { DecideInput, DecideOutput } from './types';
 
+function choosePrompt(options: string[], selector: number): string {
+  if (options.length === 0) return "";
+  return options[Math.abs(selector) % options.length];
+}
+
 export function runPolicyA(input: DecideInput): DecideOutput {
   const { taskTimeSec, taskLabel, engagementState, mouseSummary, conversationCues, hardOverrides } = input;
 
@@ -18,15 +23,30 @@ export function runPolicyA(input: DecideInput): DecideOutput {
 
   // STEP 2 — High-signal frustration / breakdown
   if (conversationCues.negAffectCount >= 1) {
-    return { action: "ask_followup", probeType: "system_status", nextPrompt: "It sounds like something isn't working as expected—what did you expect to happen?", rationale: "Negative affect detected", confidence: 0.90 };
+    const nextPrompt = choosePrompt([
+      "It sounds like something isn't working as expected. What outcome were you expecting there?",
+      "It seems that step didn't match your expectation. What did you think would happen?",
+      "That looked frustrating. What result were you expecting right then?",
+    ], Math.round(taskTimeSec));
+    return { action: "ask_followup", probeType: "system_status", nextPrompt, rationale: "Negative affect detected", confidence: 0.90 };
   }
   if (conversationCues.repeatAttemptLoopFlag || mouseSummary.repeatClicksSameRegion >= 2) {
-    return { action: "ask_followup", probeType: "system_status", nextPrompt: "I noticed repeated attempts there—what feedback did you expect after that action?", rationale: "Repeat attempt loop or repeated clicks", confidence: 0.85 };
+    const nextPrompt = choosePrompt([
+      "I noticed repeated attempts there. What feedback did you expect after that action?",
+      "You tried that a couple times. What were you expecting to happen each time?",
+      "After those repeated clicks, what response were you looking for?",
+    ], Math.round(taskTimeSec));
+    return { action: "ask_followup", probeType: "system_status", nextPrompt, rationale: "Repeat attempt loop or repeated clicks", confidence: 0.85 };
   }
 
   // STEP 3 — Explicit confusion / uncertainty
   if (conversationCues.explicitUncertaintyCount >= 1 || conversationCues.clarificationCount >= 1) {
-    return { action: "ask_followup", probeType: "comprehension", nextPrompt: "What's confusing or unclear right now? What were you expecting to find?", rationale: "Explicit uncertainty or clarification request", confidence: 0.85 };
+    const nextPrompt = choosePrompt([
+      "I heard some uncertainty there. What feels most unclear right now?",
+      "It sounds like this part is confusing. Is there any more detail you wanted to share about that?",
+      "Are you unsure what to do next? What do you think the next step should be?",
+    ], conversationCues.clarificationCount + conversationCues.explicitUncertaintyCount + Math.round(taskTimeSec));
+    return { action: "ask_followup", probeType: "comprehension", nextPrompt, rationale: "Explicit uncertainty or clarification request", confidence: 0.85 };
   }
 
   // STEP 4 — Stuck pattern (multi-signal corroboration)
@@ -41,7 +61,12 @@ export function runPolicyA(input: DecideInput): DecideOutput {
   ].filter(Boolean).length;
 
   if (stuckScore >= 2) {
-    return { action: "ask_followup", probeType: "expectation", nextPrompt: "What are you trying to do right now, and what did you expect would happen?", rationale: `STUCK_SCORE=${stuckScore}`, confidence: 0.80 };
+    const nextPrompt = choosePrompt([
+      "What are you trying to do right now, and what did you expect would happen?",
+      "Before that step, what result were you expecting?",
+      "What outcome made the most sense to you at that moment?",
+    ], stuckScore + Math.round(taskTimeSec));
+    return { action: "ask_followup", probeType: "expectation", nextPrompt, rationale: `STUCK_SCORE=${stuckScore}`, confidence: 0.80 };
   }
 
   // STEP 5 — Task prompt / instruction issues (early in task)

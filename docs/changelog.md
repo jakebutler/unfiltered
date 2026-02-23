@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-02-23 — Experiment assignment model + PostHog analytics integration
+**Commit:** uncommitted
+- Added deterministic experiment matrix generation with Convex-authoritative assignment (`decisionEngineIdAssigned`)
+- Added structured run orchestration tables/functions (`experimentRuns`, `experimentVariations`, `experimentGlobalState`)
+- Added session linkage to experiment run/variation IDs for stable runtime routing
+- Added PostHog analytics action layer for exposure and run lifecycle events (non-authoritative for assignment)
+- Added idempotent exposure markers and failure diagnostics fields on experiment variations
+- Added experiment tests for matrix generation, exposure idempotency, and runtime routing stability
+- Updated voice latency telemetry and experiment writeup docs with the assignment-model delta and failure policy
+- Updated README quickstart to include `npx convex dev` requirement and PostHog env keys
+
 ## 2026-02-21 11:50 — Repo consolidation + doc alignment
 **Commit:** uncommitted
 - Moved project documentation, prompt reference docs, stop-hook config, and scripts into the `unfiltered/` git repo root
