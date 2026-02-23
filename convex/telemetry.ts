@@ -288,14 +288,18 @@ export const listRunSummaries = query({
   handler: async (ctx, args) => {
     await requireAuthIfConfigured(ctx);
     const max = Math.min(Math.max(args.limit ?? 24, 1), 100);
-    const runs = args.experimentId
+    const recentRuns = args.experimentId
       ? await ctx.db
         .query("telemetryRuns")
-        .withIndex("by_experiment", (q) => q.eq("experimentId", args.experimentId!))
-        .collect()
-      : await ctx.db.query("telemetryRuns").collect();
+        .withIndex("by_experiment_started_at", (q) => q.eq("experimentId", args.experimentId!))
+        .order("desc")
+        .take(max)
+      : await ctx.db
+        .query("telemetryRuns")
+        .withIndex("by_started_at")
+        .order("desc")
+        .take(max);
 
-    const recentRuns = runs.sort((a, b) => b.startedAt - a.startedAt).slice(0, max);
     const summaries = await Promise.all(
       recentRuns.map(async (run) => {
         const metrics = await computeRunMetrics(ctx, run._id);

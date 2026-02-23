@@ -199,6 +199,8 @@ export default defineSchema({
     endedAt: v.optional(v.number()),
   })
     .index("by_experiment", ["experimentId"])
+    .index("by_experiment_started_at", ["experimentId", "startedAt"])
+    .index("by_started_at", ["startedAt"])
     .index("by_session", ["sessionId"])
     .index("by_status", ["status"]),
 
