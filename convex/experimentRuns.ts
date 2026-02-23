@@ -6,16 +6,13 @@ import {
   query,
   type MutationCtx,
 } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireAuthIfConfigured } from "./lib/security";
 import type { Id } from "./_generated/dataModel";
 import { generateVariationMatrix } from "../lib/experiments/variationGenerator";
 import { getDecideModeForEngine } from "../lib/experiments/decisionEngineRegistry";
 import { shouldSendExposure } from "../lib/experiments/exposure";
-import { makeFunctionReference } from "convex/server";
-
-const sendVariationExposureRef = makeFunctionReference<"action", { variationId: Id<"experimentVariations"> }>(
-  "posthog:sendVariationExposure",
-);
+import { canResumeRun } from "../lib/experiments/runStatus";
 
 async function getGlobalStateDocId(ctx: MutationCtx): Promise<Id<"experimentGlobalState"> | null> {
   const docs = await ctx.db.query("experimentGlobalState").collect();
@@ -154,7 +151,7 @@ export const startNextSession = mutation({
     });
 
     if (shouldSendExposure(nextPending)) {
-      await ctx.scheduler.runAfter(0, sendVariationExposureRef, {
+      await ctx.scheduler.runAfter(0, internal.posthog.sendVariationExposure, {
         variationId: nextPending._id,
       });
     }
@@ -228,6 +225,9 @@ export const resumeRun = mutation({
     await requireAuthIfConfigured(ctx);
     const run = await ctx.db.get(args.runId);
     if (!run) throw new Error("Run not found");
+    if (!canResumeRun(run.status)) {
+      throw new Error("Only paused runs can be resumed");
+    }
 
     const existingRunning = await ctx.db
       .query("experimentRuns")

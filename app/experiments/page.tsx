@@ -34,7 +34,7 @@ function formatRuntime(startedAt?: number, endedAt?: number) {
 }
 
 export default function ExperimentsPage() {
-  const telemetryEnabled = isExperimentTelemetryEnabled(process.env);
+  const telemetryEnabled = isExperimentTelemetryEnabled();
   const experiments = useQuery(api.telemetry.listExperiments, telemetryEnabled ? {} : "skip");
   const studies = useQuery(api.studies.list, telemetryEnabled ? {} : "skip");
   const activeRuns = useQuery(api.telemetry.listActiveRuns, telemetryEnabled ? {} : "skip");

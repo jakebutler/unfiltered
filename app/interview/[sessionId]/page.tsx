@@ -29,7 +29,7 @@ async function requestMediaPermission(constraints: MediaStreamConstraints): Prom
 }
 
 export default function InterviewPage() {
-  const telemetryEnabled = isExperimentTelemetryEnabled(process.env);
+  const telemetryEnabled = isExperimentTelemetryEnabled();
   const params = useParams();
   const router = useRouter();
   const sessionId = params.sessionId as Id<"sessions">;

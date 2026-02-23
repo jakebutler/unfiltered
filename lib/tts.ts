@@ -353,7 +353,6 @@ function speakWithBrowserVoices(
   const styleProfile = options?.styleProfile ?? "default";
   const emit = options?.onTelemetry;
   emit?.({ stage: "tts_request_start", meta: { provider: "browser" } });
-  emit?.({ stage: "tts_first_audio_byte", meta: { provider: "browser" } });
 
   const tweak = STYLE_TWEAKS[styleProfile];
   const rate = clamp(baseRate + tweak.rateDelta, 0.75, 1.1);
@@ -380,6 +379,7 @@ function speakWithBrowserVoices(
       utterance.onstart = () => {
         if (started) return;
         started = true;
+        emit?.({ stage: "tts_first_audio_byte", meta: { provider: "browser" } });
         emit?.({ stage: "audio_play_start" });
         onStart?.();
       };

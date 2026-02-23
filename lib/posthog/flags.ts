@@ -1,52 +1,36 @@
-interface PostHogCapturePayload {
+export interface PostHogCapturePayload {
   event: string;
   distinct_id: string;
   properties?: Record<string, unknown>;
 }
 
-function getPostHogHost(): string {
-  return process.env.POSTHOG_HOST ?? "https://us.i.posthog.com";
+export interface PostHogConfig {
+  host: string;
+  apiKey: string;
 }
 
-function getPostHogApiKey(): string | undefined {
-  return process.env.POSTHOG_PROJECT_API_KEY
-    ?? process.env.NEXT_PUBLIC_POSTHOG_KEY
-    ?? process.env.POSTHOG_API_KEY;
+export function getPostHogConfig(env: Record<string, string | undefined> = process.env): PostHogConfig | null {
+  const apiKey = env.POSTHOG_PROJECT_API_KEY
+    ?? env.NEXT_PUBLIC_POSTHOG_KEY
+    ?? env.POSTHOG_API_KEY;
+  if (!apiKey) return null;
+  return {
+    host: env.POSTHOG_HOST ?? "https://us.i.posthog.com",
+    apiKey,
+  };
 }
 
 export function isPostHogConfigured(env: Record<string, string | undefined> = process.env): boolean {
-  const apiKey = env.POSTHOG_PROJECT_API_KEY ?? env.NEXT_PUBLIC_POSTHOG_KEY ?? env.POSTHOG_API_KEY;
-  return Boolean(apiKey);
+  return Boolean(getPostHogConfig(env));
 }
 
-export async function capturePostHogEvent(payload: PostHogCapturePayload): Promise<{ ok: true } | { ok: false; error: string }> {
-  const apiKey = getPostHogApiKey();
-  if (!apiKey) {
-    return { ok: false, error: "PostHog API key not configured" };
-  }
-
-  const body = {
+export function buildPostHogCaptureBody(payload: PostHogCapturePayload, apiKey: string): Record<string, unknown> {
+  return {
     api_key: apiKey,
     event: payload.event,
     distinct_id: payload.distinct_id,
     properties: payload.properties ?? {},
   };
-
-  try {
-    const response = await fetch(`${getPostHogHost()}/capture/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      const text = await response.text();
-      return { ok: false, error: `PostHog capture failed (${response.status}): ${text.slice(0, 200)}` };
-    }
-    return { ok: true };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown PostHog error";
-    return { ok: false, error: message };
-  }
 }
 
 export function buildExperimentProperties(input: {
@@ -65,4 +49,3 @@ export function buildExperimentProperties(input: {
     is_structured_experiment: true,
   };
 }
-

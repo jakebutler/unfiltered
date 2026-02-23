@@ -1,14 +1,39 @@
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { requireAuthIfConfigured } from "./lib/security";
 import {
+  buildPostHogCaptureBody,
   buildExperimentProperties,
-  capturePostHogEvent,
+  getPostHogConfig,
+  type PostHogCapturePayload,
 } from "../lib/posthog/flags";
 import { shouldSendExposure } from "../lib/experiments/exposure";
 
-export const sendVariationExposure = action({
+async function capturePostHogEvent(payload: PostHogCapturePayload): Promise<{ ok: true } | { ok: false; error: string }> {
+  const config = getPostHogConfig(process.env);
+  if (!config) {
+    return { ok: false, error: "PostHog API key not configured" };
+  }
+
+  try {
+    const response = await fetch(`${config.host}/capture/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildPostHogCaptureBody(payload, config.apiKey)),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      return { ok: false, error: `PostHog capture failed (${response.status}): ${text.slice(0, 200)}` };
+    }
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown PostHog error";
+    return { ok: false, error: message };
+  }
+}
+
+export const sendVariationExposure = internalAction({
   args: { variationId: v.id("experimentVariations") },
   returns: v.object({ sent: v.boolean() }),
   handler: async (ctx, args) => {
