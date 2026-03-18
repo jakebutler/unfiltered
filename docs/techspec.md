@@ -1,7 +1,7 @@
 # Unfiltered — Technical Spec
 
-**Last updated:** 2026-02-21
-**Status:** V1 implementation in progress (core flows and pipelines coded)
+**Last updated:** 2026-03-18
+**Status:** V1 implementation in progress + Agent testing infrastructure added
 
 ---
 
@@ -18,6 +18,7 @@
 | AI voice | Web Speech API (`speechSynthesis`) |
 | Heatmap rendering | `simpleheat` |
 | Unit tests | Vitest |
+| **Agent testing (new)** | LiveKit Agents + Playwright |
 
 ---
 
@@ -32,10 +33,17 @@
 │   ├── join/[studyId]/page.tsx            # participant consent/start
 │   ├── interview/[sessionId]/page.tsx     # interview runtime orchestrator
 │   ├── dashboard/[sessionId]/page.tsx     # findings dashboard
-│   └── api/speechmatics-token/route.ts    # Speechmatics JWT exchange
+│   ├── api/
+│   │   ├── speechmatics-token/route.ts    # Speechmatics JWT exchange
+│   │   └── livekit-token/route.ts         # LiveKit token generation (new)
+│   ├── test-runner/page.tsx              # agent test configuration (new)
+│   └── test-runner/[runId]/page.tsx       # test run details (new)
 ├── components/
 │   ├── interview/                         # interview room UI
-│   ├── dashboard/                         # findings cards, summary, export, heatmap
+│   ├── dashboard/
+│   │   ├── ...                            # findings cards, summary, export, heatmap
+│   │   └── AgentTraceViewer.tsx          # agent trace visualization (new)
+│   ├── test-runner/                       # test runner UI components (new)
 │   └── ui/                                # shadcn primitives
 ├── hooks/
 │   ├── useSpeechmatics.ts

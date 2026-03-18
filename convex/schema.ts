@@ -173,4 +173,77 @@ export default defineSchema({
     verificationQuestion: v.optional(v.string()),
     labelConfidence: v.optional(v.number()),
   }).index("by_session", ["sessionId"]),
+
+  // Agent testing tables
+  personas: defineTable({
+    demographics: v.object({
+      age: v.number(),
+      gender: v.union(v.literal("male"), v.literal("female"), v.literal("non-binary")),
+      occupation: v.string(),
+      education: v.union(v.literal("high-school"), v.literal("bachelors"), v.literal("masters"), v.literal("phd")),
+      income: v.union(v.literal("low"), v.literal("middle"), v.literal("high")),
+      techSavviness: v.number(),
+    }),
+    background: v.string(),
+    shoppingHabits: v.optional(v.string()),
+    intent: v.string(),
+    traits: v.array(v.string()),
+    createdAt: v.number(),
+  }),
+
+  agentActionTraces: defineTable({
+    sessionId: v.id("sessions"),
+    personaId: v.id("personas"),
+    action: v.union(
+      v.literal("click"),
+      v.literal("type"),
+      v.literal("hover"),
+      v.literal("navigate"),
+      v.literal("select"),
+      v.literal("scroll"),
+      v.literal("wait"),
+      v.literal("think_aloud"),
+    ),
+    target: v.optional(v.string()),
+    text: v.optional(v.string()),
+    description: v.string(),
+    t: v.number(),
+    screenshot: v.optional(v.string()), // Base64 encoded
+  }).index("by_session", ["sessionId"])
+    .index("by_persona", ["personaId"]),
+
+  agentReasoningTraces: defineTable({
+    sessionId: v.id("sessions"),
+    personaId: v.id("personas"),
+    type: v.union(
+      v.literal("observation"),
+      v.literal("reflection"),
+      v.literal("plan"),
+      v.literal("friction"),
+    ),
+    content: v.string(),
+    t: v.number(),
+  }).index("by_session", ["sessionId"])
+    .index("by_persona", ["personaId"]),
+
+  testRuns: defineTable({
+    studyId: v.id("studies"),
+    status: v.union(v.literal("pending"), v.literal("running"), v.literal("complete"), v.literal("failed")),
+    personaIds: v.array(v.id("personas")),
+    config: v.object({
+      count: v.number(),
+      distribution: v.optional(v.any()),
+      parallel: v.optional(v.boolean()),
+    }),
+    resultsSummary: v.optional(v.object({
+      completedCount: v.number(),
+      avgFriction: v.optional(v.number()),
+      avgSUS: v.optional(v.number()),
+      totalActions: v.optional(v.number()),
+    })),
+    sessionIds: v.optional(v.array(v.id("sessions"))),
+    createdAt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+  }).index("by_study", ["studyId"]),
 });
