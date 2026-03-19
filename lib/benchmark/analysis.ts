@@ -1,6 +1,6 @@
 import type { SessionResult } from "@/lib/voice/types";
-import { computeLatencyStats, aggregateAcrossSessions } from "@/lib/voice/metrics";
-import type { AggregatedMetrics, LatencyStats } from "@/lib/voice/metrics";
+import { aggregateAcrossSessions } from "@/lib/voice/metrics";
+import type { LatencyStats } from "@/lib/voice/metrics";
 
 export interface ProviderSummary {
   provider: string;

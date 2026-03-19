@@ -12,12 +12,14 @@ export class OpenAIWhisperTTSProvider implements VoiceProvider {
   private pendingTranscription = "";
   private pendingTranscriptionTimestamp = 0;
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- config reserved for future provider-specific options
   constructor(_config: Record<string, unknown>) {}
 
   async connect(sessionConfig: SessionConfig): Promise<void> {
     this.messages = [{ role: "system", content: sessionConfig.systemPrompt }];
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- timestampMs not needed for HTTP-based Whisper API
   async sendAudio(data: ArrayBuffer, timestampMs: number): Promise<void> {
     const blob = new Blob([data], { type: "audio/webm" });
     const formData = new FormData();

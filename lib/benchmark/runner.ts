@@ -114,7 +114,7 @@ async function executeTurn(
   provider: VoiceProvider,
   turn: ScenarioTurn,
   turnIndex: number,
-  _scenario: Scenario,
+  _scenario: Scenario, // eslint-disable-line @typescript-eslint/no-unused-vars -- reserved for future scenario-specific logic
 ): Promise<TurnMetrics> {
   const metrics: TurnMetrics = {
     turnIndex,

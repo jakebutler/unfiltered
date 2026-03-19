@@ -11,6 +11,7 @@ export class ElevenLabsProvider implements VoiceProvider {
   readonly type: ProviderType = "elevenlabs";
   private styleProfile: VoiceStyleProfile = "default";
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- config comes from env vars via API route
   constructor(_config: Record<string, unknown>) {
     // Config comes from env vars via the API route; no client-side keys needed
   }

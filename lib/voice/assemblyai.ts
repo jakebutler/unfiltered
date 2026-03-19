@@ -13,6 +13,7 @@ export class AssemblyAIProvider implements VoiceProvider {
   private messageResolve: (() => void) | null = null;
   private done = false;
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- config reserved for future provider-specific options
   constructor(_config: Record<string, unknown>) {}
 
   async connect(sessionConfig: SessionConfig): Promise<void> {

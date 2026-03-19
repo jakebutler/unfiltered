@@ -47,8 +47,8 @@ export default function ResultsPage() {
       const sessionEvals = providerSessions.flatMap((s) => evalsBySession.get(s._id) ?? []);
       let manualEvals: ProviderSummary["manualEvals"];
       if (sessionEvals.length > 0) {
-        const avg = (key: string) =>
-          sessionEvals.reduce((sum, e) => sum + ((e as Record<string, number>)[key] ?? 0), 0) / sessionEvals.length;
+        const avg = (key: "transcriptionAccuracy" | "responseRelevance" | "voiceNaturalness" | "conversationFlow" | "professionalism" | "overallQuality") =>
+          sessionEvals.reduce((sum, e) => sum + (e[key] ?? 0), 0) / sessionEvals.length;
         manualEvals = {
           transcriptionAccuracy: avg("transcriptionAccuracy"),
           responseRelevance: avg("responseRelevance"),
