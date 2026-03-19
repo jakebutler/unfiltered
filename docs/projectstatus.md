@@ -2,73 +2,69 @@
 **Last updated:** 2026-03-19
 
 ## What Happened This Session
-- Checked out `feature/voice-benchmark` branch
-- Fixed Vercel build errors:
-  - Removed unused imports in `lib/benchmark/analysis.ts`
-  - Added eslint-disable comments for intentionally unused constructor params in voice provider files
-  - Fixed TypeScript type error in benchmark results page evaluation aggregation
-  - Manually updated `convex/_generated/api.d.ts` to include benchmark modules (workaround since `npx convex dev` requires interactive auth)
-- Build now passes: `npm run build` succeeds
-- All 110 tests passing across 18 files
-- Pushed fix commit (de35d32) to `feature/voice-benchmark`
-- Dev server running at `http://localhost:3000`, benchmark page verified accessible
+- **Git cleanup and branch consolidation:**
+  - Closed PRs #1 and #2 (superseded by PR #3)
+  - Merged PR #5 (voice-benchmark) into main
+  - Merged PR #3 (experiments console, telemetry, dashboard improvements) into main
+  - Merged PR #4 (E2E agent testing with LiveKit) into main
+  - Resolved merge conflicts in `convex/schema.ts` and `tsconfig.json`
+  - Cleaned up local branches and remote tracking refs
+- **Live E2E benchmark test completed:**
+  - OpenAI Whisper+TTS provider tested successfully
+  - 8/8 sessions passed with latency metrics captured
+  - Results stored in Convex and visible on results page
+- **All features now consolidated on `main` branch**
+
+## Current State
+- **Test suite:** 36 files, 171 tests passing
+- **Build:** Passing (`npm run build` succeeds)
+- **Dev server:** Running on port 3001 (when active)
+- **Convex:** Schema deployed with all tables (core + experiments + benchmark + agent testing)
+
+## Features Now in Main
+
+| Route | Description | Status |
+|-------|-------------|--------|
+| `/studies` | Study management | V1 complete |
+| `/interview/[sessionId]` | Live interview runtime | V1 complete |
+| `/dashboard/[sessionId]` | Findings dashboard | V1 complete |
+| `/experiments` | Experiments console | NEW - merged from PR #3 |
+| `/benchmark` | Voice provider benchmarking | NEW - merged from PR #5 |
+| `/test-runner` | E2E agent testing | NEW - merged from PR #4 |
 
 ## Issues / Watch Out For
 - `scripts/update-docs.py` uses Anthropic API and will no-op when `ANTHROPIC_API_KEY` is missing
-- MiniMax and Fireworks model names should still be re-verified against provider docs before production deploy
-- A/B mode policy assignment currently uses local runtime alternation in `hooks/useDecideEngine.ts`
-- **Benchmark still needs live E2E test with real API providers**
-- The OpenAI Realtime token proxy (`/api/benchmark/openai-proxy`) passes the API key to the client for WebSocket auth — acceptable for dev/benchmark but should use ephemeral session tokens in production
-- `recharts` dependency was planned for charts but not yet added to package.json (current charts use CSS-based bars)
+- MiniMax and Fireworks model names should be verified against provider docs before production deploy
+- A/B mode policy assignment uses local runtime alternation in `hooks/useDecideEngine.ts`
+- The OpenAI Realtime token proxy passes API key to client — should use ephemeral session tokens in production
+- Speechmatics provider is transcription-only (doesn't support `sendText` for benchmark runner)
 
-## Where We Left Off
-- Voice benchmark build errors are fixed and pushed
-- **NEXT: Run live E2E benchmark test using browser automation**
-- Core V1 interview implementation is unchanged (Speechmatics + ElevenLabs locked)
-- Unit test suite: 18 files, 110 tests passing
-
-## How to Continue: Live E2E Benchmark Test
-
-### Environment Variables Required
-The Factory Cloud Workspace must have these env vars configured:
+## Environment Variables Required
 ```
-NEXT_PUBLIC_CONVEX_URL=https://whimsical-badger-116.convex.cloud
-CONVEX_DEPLOYMENT=dev:whimsical-badger-116
-SPEECHMATICS_API_KEY=***
-ELEVENLABS_API_KEY=***
-ELEVENLABS_VOICE_ID=***
-FIREWORKS_API_KEY=***
-MINIMAX_API_KEY=***
-OPENAI_API_KEY=***        # NEW - for Whisper + GPT-4 + TTS + Realtime
-ASSEMBLYAI_API_KEY=***    # NEW - for AssemblyAI Universal-Streaming
-VAPI_API_KEY=***          # NEW - for Vapi voice platform
+NEXT_PUBLIC_CONVEX_URL
+CONVEX_DEPLOYMENT
+SPEECHMATICS_API_KEY
+ELEVENLABS_API_KEY
+ELEVENLABS_VOICE_ID
+FIREWORKS_API_KEY
+MINIMAX_API_KEY
+OPENAI_API_KEY          # For Whisper + GPT-4 + TTS + Realtime
+ASSEMBLYAI_API_KEY      # For AssemblyAI Universal-Streaming
+VAPI_API_KEY            # For Vapi voice platform
+LIVEKIT_URL             # For E2E agent testing
+LIVEKIT_API_KEY         # For E2E agent testing
+LIVEKIT_API_SECRET      # For E2E agent testing
+POSTHOG_PROJECT_API_KEY # Optional - for analytics
 ```
 
-### Quick Start Instructions
-1. **Verify env vars loaded**: Run `printenv | grep -E "^(OPENAI|ASSEMBLYAI|VAPI)_" | sed 's/=.*/=***/'`
-2. **Sync Convex schema**: Run `npx convex dev --once` (requires interactive auth - may need to handle differently)
-3. **Start dev server**: `npm run dev` (or verify it's already running)
-4. **Run E2E test using browser automation**:
-   - Navigate to `http://localhost:3000/benchmark`
-   - Configure benchmark: Select 1-2 providers (Speechmatics + OpenAI Whisper+TTS recommended), select "session_intro" scenario, set repetitions=1
-   - Click "Start Benchmark"
-   - Verify results stored in Convex
-   - Check `/benchmark/results/[runId]` for metrics
+## How to Continue
+1. **Deploy Convex schema:** `CONVEX_DEPLOY_KEY=<key> npx convex deploy`
+2. **Start dev server:** `npm run dev`
+3. **Run interviews:** Use `/studies` to create study, then `/interview/[sessionId]`
+4. **Run benchmarks:** Use `/benchmark` to test voice providers
+5. **Run experiments:** Use `/experiments` for A/B testing with telemetry
 
-### What to Verify During Live Test
-- [ ] Speechmatics provider connects and transcribes user text
-- [ ] OpenAI Whisper+TTS pipeline: transcription -> GPT-4 response -> TTS audio
-- [ ] Results are stored in Convex and visible on results page
-- [ ] Latency and WER numbers look reasonable
-
-### Other Unmerged Branches (for reference)
-| Branch | Description |
-|--------|-------------|
-| `codex/pr1-experiments-telemetry` | Experiments infra, PostHog, telemetry |
-| `codex/pr2-decide-dashboard` | PR1 + dashboard/interview improvements |
-| `feature/e2e-agent-testing` | LiveKit + automated E2E test runner |
-
-### Known Limitations
-- Audio stimuli generation not yet wired into runner — sends text via `sendText()` rather than audio via `sendAudio()`
-- To test real STT latency: generate audio via `/api/tts`, feed to `sendAudio()`
+## Known Limitations
+- Audio stimuli generation not wired into benchmark runner — uses `sendText()` rather than `sendAudio()`
+- E2E agent testing requires separate `interviewee-agent` service (not in this repo)
 - CSS-based charts (recharts not added yet)

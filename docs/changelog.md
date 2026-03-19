@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-03-19 — Git cleanup + branch consolidation + live E2E benchmark
+**Commit:** 49777bc
+- Closed redundant PRs #1 and #2 (superseded by PR #3)
+- Merged PR #5: Voice provider benchmarking framework (Speechmatics, OpenAI, AssemblyAI, Vapi)
+- Merged PR #3: Experiments console, latency telemetry, dashboard improvements, turn-taking, PostHog integration
+- Merged PR #4: E2E Automated Testing with Interviewee Voice Agent (LiveKit + Playwright)
+- Resolved merge conflicts in `convex/schema.ts` and `tsconfig.json`
+- Cleaned up local branches: deleted `merge-pr3`, `merge-pr4`, `test-pr3`, `test-pr4`, `feature/voice-benchmark`
+- Pruned remote tracking refs for closed PRs
+- Completed live E2E benchmark test with OpenAI Whisper+TTS provider (8/8 sessions passed)
+- Test suite expanded to 36 files, 171 tests passing
+- Updated documentation to reflect merged features
+
 ## 2026-02-23 — Decide-engine turn-taking + dashboard transcript verification UX
 **Commit:** uncommitted
 - Added deterministic fast-path routing and richer transcript heuristics for confusion, positive feedback, and "no more to add" cues

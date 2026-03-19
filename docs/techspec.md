@@ -1,7 +1,7 @@
 # Unfiltered — Technical Spec
 
-**Last updated:** 2026-03-18
-**Status:** V1 implementation in progress + Agent testing infrastructure added
+**Last updated:** 2026-03-19
+**Status:** V1 complete + Experiments + Benchmark + Agent testing merged to main
 
 ---
 
@@ -33,17 +33,27 @@
 │   ├── join/[studyId]/page.tsx            # participant consent/start
 │   ├── interview/[sessionId]/page.tsx     # interview runtime orchestrator
 │   ├── dashboard/[sessionId]/page.tsx     # findings dashboard
+│   ├── experiments/page.tsx               # experiments console (NEW)
+│   ├── benchmark/page.tsx                 # voice benchmark UI (NEW)
+│   ├── benchmark/results/[runId]/page.tsx # benchmark results (NEW)
+│   ├── benchmark/eval/[runId]/page.tsx    # benchmark evaluation (NEW)
+│   ├── test-runner/page.tsx               # agent test configuration (NEW)
+│   ├── test-runner/[runId]/page.tsx       # test run details (NEW)
 │   ├── api/
 │   │   ├── speechmatics-token/route.ts    # Speechmatics JWT exchange
-│   │   └── livekit-token/route.ts         # LiveKit token generation (new)
-│   ├── test-runner/page.tsx              # agent test configuration (new)
-│   └── test-runner/[runId]/page.tsx       # test run details (new)
+│   │   ├── livekit-token/route.ts        # LiveKit token generation (NEW)
+│   │   └── benchmark/
+│   │       ├── openai-proxy/route.ts      # OpenAI API proxy (NEW)
+│   │       ├── assemblyai-token/route.ts # AssemblyAI token (NEW)
+│   │       └── vapi-proxy/route.ts        # Vapi API proxy (NEW)
 ├── components/
 │   ├── interview/                         # interview room UI
 │   ├── dashboard/
 │   │   ├── ...                            # findings cards, summary, export, heatmap
-│   │   └── AgentTraceViewer.tsx          # agent trace visualization (new)
-│   ├── test-runner/                       # test runner UI components (new)
+│   │   ├── TranscriptReviewSidebar.tsx   # transcript verification (NEW)
+│   │   └── AgentTraceViewer.tsx          # agent trace visualization (NEW)
+│   ├── benchmark/                         # benchmark UI components (NEW)
+│   ├── test-runner/                       # test runner UI components (NEW)
 │   └── ui/                                # shadcn primitives
 ├── hooks/
 │   ├── useSpeechmatics.ts
@@ -53,11 +63,26 @@
 │   └── useDecideEngine.ts
 ├── lib/
 │   ├── signals/{extractor.ts,scorer.ts}
-│   ├── decide/{types.ts,policyA.ts}
+│   ├── decide/{types.ts,policyA.ts,fastPath.ts,runtimeConfig.ts,turnTaking.ts,transcriptHeuristics.ts}
 │   ├── mouse/tracker.ts
-│   ├── friction/detector.ts
+│   ├── friction/{detector.ts,snippets.ts}
 │   ├── export/report.ts
-│   └── tts.ts
+│   ├── tts.ts
+│   ├── voice/                             # voice provider abstraction (NEW)
+│   │   ├── types.ts
+│   │   ├── provider-registry.ts
+│   │   ├── speechmatics.ts
+│   │   ├── openai-whisper.ts
+│   │   ├── openai-realtime.ts
+│   │   ├── assemblyai.ts
+│   │   └── vapi.ts
+│   ├── benchmark/                         # benchmark runner (NEW)
+│   │   ├── runner.ts
+│   │   ├── analysis.ts
+│   │   └── scenarios/
+│   ├── experiments/                       # experiment orchestration (NEW)
+│   ├── telemetry/                         # latency telemetry (NEW)
+│   └── posthog/                           # PostHog analytics (NEW)
 ├── convex/
 │   ├── schema.ts
 │   ├── studies.ts
@@ -69,14 +94,18 @@
 │   ├── classifyEngagement.ts
 │   ├── decide.ts
 │   ├── friction.ts
-│   └── findings.ts
+│   ├── findings.ts
+│   ├── telemetry.ts                       # (NEW)
+│   ├── experimentRuns.ts                  # (NEW)
+│   ├── posthog.ts                         # (NEW)
+│   ├── benchmarkRuns.ts                   # (NEW)
+│   ├── benchmarkSessions.ts               # (NEW)
+│   ├── benchmarkEvaluations.ts            # (NEW)
+│   ├── personas.ts                        # (NEW)
+│   ├── agentTraces.ts                     # (NEW)
+│   └── testRuns.ts                        # (NEW)
 └── tests/
-    ├── setup.test.ts
-    ├── signals/{extractor,scorer}.test.ts
-    ├── decide/policyA.test.ts
-    ├── mouse/tracker.test.ts
-    ├── friction/detector.test.ts
-    └── export/report.test.ts
+    └── ... (36 files, 171 tests)
 ```
 
 ---
@@ -122,7 +151,9 @@
 
 ## 4. Current Convex Data Model (Implemented)
 
-### `studies`
+### Core Tables
+
+#### `studies`
 ```ts
 {
   title: string,
@@ -273,6 +304,155 @@
 }
 ```
 
+### Experiments/Telemetry Tables (NEW)
+
+#### `telemetryExperiments`
+```ts
+{
+  name: string,
+  scriptId?: string,
+  hypothesis?: string,
+  methodology?: string,
+  notes?: string,
+  createdAt: number,
+}
+```
+
+#### `experimentRuns`
+```ts
+{
+  experimentId: Id<"telemetryExperiments">,
+  status: "running" | "paused" | "complete" | "aborted",
+  currentVariationIndex: number,
+  totalVariations: number,
+  startedAt: number,
+  endedAt?: number,
+  notes?: string,
+}
+```
+
+#### `experimentVariations`
+```ts
+{
+  runId: Id<"experimentRuns">,
+  index: number,
+  studyId: Id<"studies">,
+  decisionEngineIdTarget: string,
+  decisionEngineIdAssigned: string,
+  repeatIndex: number,
+  status: "pending" | "in_progress" | "complete" | "aborted",
+  sessionId?: Id<"sessions">,
+  startedAt?: number,
+  endedAt?: number,
+  checklistCompletedAt?: number,
+  posthogExposureSentAt?: number,
+}
+```
+
+#### `latencyEvents`
+```ts
+{
+  sessionId: Id<"sessions">,
+  runId?: Id<"telemetryRuns">,
+  turnId?: string,
+  stage: "participant_last_word_end" | "decide_trigger" | "policy_start" | "policy_end" | "prompt_selected" | "tts_request_start" | "tts_first_audio_byte" | "audio_play_start" | "timing_config_resolved",
+  t: number,
+  meta?: string,
+}
+```
+
+### Benchmark Tables (NEW)
+
+#### `benchmarkRuns`
+```ts
+{
+  name: string,
+  startedAt: number,
+  endedAt?: number,
+  status: "running" | "complete" | "failed",
+  providers: string[],
+  scenarios: string[],
+  repetitions: number,
+  config: string,
+}
+```
+
+#### `benchmarkSessions`
+```ts
+{
+  runId: Id<"benchmarkRuns">,
+  provider: string,
+  scenario: string,
+  repetition: number,
+  startedAt: number,
+  endedAt?: number,
+  success: boolean,
+  avgTtftMs?: number,
+  avgTranscriptionLatencyMs?: number,
+  avgTotalLatencyMs?: number,
+  overallWer?: number,
+  estimatedCostUsd?: number,
+  turns: string,
+  errors?: string,
+}
+```
+
+#### `benchmarkEvaluations`
+```ts
+{
+  sessionId: Id<"benchmarkSessions">,
+  evaluatorId: string,
+  transcriptionAccuracy: number,
+  responseRelevance: number,
+  voiceNaturalness: number,
+  conversationFlow: number,
+  professionalism: number,
+  overallQuality: number,
+  notes?: string,
+  evaluatedAt: number,
+}
+```
+
+### Agent Testing Tables (NEW)
+
+#### `personas`
+```ts
+{
+  name: string,
+  demographics: {
+    age: string,
+    occupation: string,
+    techSavviness: string,
+  },
+  traits: string[],
+  background: string,
+}
+```
+
+#### `agentActionTraces`
+```ts
+{
+  sessionId: Id<"sessions">,
+  actionType: "click" | "type" | "navigate" | "scroll" | "wait",
+  selector?: string,
+  value?: string,
+  timestamp: number,
+  reasoning?: string,
+}
+```
+
+#### `testRuns`
+```ts
+{
+  status: "pending" | "running" | "complete" | "failed",
+  personaId: Id<"personas">,
+  studyId: Id<"studies">,
+  startedAt: number,
+  endedAt?: number,
+  resultSummary?: string,
+}
+```
+
 ---
 
 ## 5. Model + Provider Assignments
@@ -283,6 +463,10 @@
 | Friction-moment labeler | FireworksAI `accounts/fireworks/models/glm-5` |
 | Themes generation | FireworksAI `accounts/fireworks/models/glm-5` |
 | Camera engagement | MiniMax Vision (via MiniMax API) |
+| Voice benchmark STT | Speechmatics Realtime / OpenAI Whisper / AssemblyAI |
+| Voice benchmark LLM | OpenAI GPT-4 |
+| Voice benchmark TTS | OpenAI TTS / ElevenLabs |
+| E2E agent voice | LiveKit Agents + Silero VAD |
 
 All LLM calls must parse JSON defensively with safe fallback defaults.
 
@@ -293,20 +477,45 @@ All LLM calls must parse JSON defensively with safe fallback defaults.
 Set in `.env.local`:
 
 ```bash
+# Core
 NEXT_PUBLIC_CONVEX_URL
+CONVEX_DEPLOYMENT
+
+# Interview runtime
 SPEECHMATICS_API_KEY
 FIREWORKS_API_KEY
 MINIMAX_API_KEY
+ELEVENLABS_API_KEY
+ELEVENLABS_VOICE_ID
+
+# Voice benchmark (NEW)
+OPENAI_API_KEY
+ASSEMBLYAI_API_KEY
+VAPI_API_KEY
+
+# E2E agent testing (NEW)
+LIVEKIT_URL
+LIVEKIT_API_KEY
+LIVEKIT_API_SECRET
+
+# Analytics (optional)
+POSTHOG_PROJECT_API_KEY
+POSTHOG_HOST
 ```
 
 ---
 
 ## 7. Current Verification Snapshot
 
-- Unit tests passing: 7 files / 38 tests (`npm test`)
-- Dashboard route in code: `/dashboard/[sessionId]`
+- Unit tests passing: 36 files / 171 tests (`npm test`)
+- Build: Passing (`npm run build`)
+- Dashboard route: `/dashboard/[sessionId]`
 - End-session pipeline wiring present in interview page (detect -> label -> theme -> redirect)
-- Remaining confidence work is primarily integration hardening and manual E2E validation
+- **New routes verified:**
+  - `/experiments` - Experiments console
+  - `/benchmark` - Voice provider benchmarking (E2E tested with OpenAI Whisper+TTS)
+  - `/test-runner` - E2E agent testing configuration
+- All PRs merged to main, branches cleaned up
 
 ---
 
