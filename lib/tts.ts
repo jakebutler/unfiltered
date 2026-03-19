@@ -1,9 +1,11 @@
 import type { VoiceStyleProfile } from "@/lib/elevenlabs";
+import type { LatencyStage } from "@/lib/telemetry/latency";
 
 type VoiceCandidate = Pick<SpeechSynthesisVoice, "name" | "lang" | "localService" | "default">;
 export type TtsProvider = "auto" | "elevenlabs" | "browser";
 export interface SpeakOptions {
   styleProfile?: VoiceStyleProfile;
+  onTelemetry?: (event: { stage: LatencyStage; t?: number; meta?: Record<string, unknown> }) => void;
 }
 
 const NATURAL_VOICE_MARKERS = [
@@ -202,12 +204,14 @@ async function speakWithElevenLabs(
   const normalizedText = normalizeTextForSpeech(text);
   if (!normalizedText) return false;
   const styleProfile = options?.styleProfile ?? "default";
+  const emit = options?.onTelemetry;
   const chunkLength = readNumericEnv("NEXT_PUBLIC_INTERVIEWER_ELEVENLABS_CHUNK_LENGTH", 110, 60, 220);
   const basePauseMs = readNumericEnv("NEXT_PUBLIC_INTERVIEWER_ELEVENLABS_PAUSE_MS", 130, 0, 500);
   const pauseMs = clamp(basePauseMs + STYLE_TWEAKS[styleProfile].pauseDeltaMs, 0, 600);
   const chunks = splitSpeechIntoChunks(normalizedText, chunkLength);
   if (!chunks.length) return false;
 
+  let didEmitFirstByte = false;
   const blobs = await runSequentially(chunks, async (chunk) => {
     const maxAttempts = 3;
     let attempt = 0;
@@ -216,6 +220,7 @@ async function speakWithElevenLabs(
 
       let response: Response;
       try {
+        emit?.({ stage: "tts_request_start" });
         response = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -229,6 +234,10 @@ async function speakWithElevenLabs(
       }
 
       if (response.ok) {
+        if (!didEmitFirstByte) {
+          didEmitFirstByte = true;
+          emit?.({ stage: "tts_first_audio_byte" });
+        }
         try {
           const blob = await response.blob();
           return blob.size ? blob : null;
@@ -293,6 +302,7 @@ async function speakWithElevenLabs(
       audio.onplay = () => {
         if (speechToken !== activeSpeechToken || started) return;
         started = true;
+        emit?.({ stage: "audio_play_start" });
         onStart?.();
       };
 
@@ -341,6 +351,8 @@ function speakWithBrowserVoices(
   const basePitch = readNumericEnv("NEXT_PUBLIC_INTERVIEWER_VOICE_PITCH", 1.0, 0.85, 1.15);
   const basePauseMs = readNumericEnv("NEXT_PUBLIC_INTERVIEWER_VOICE_PAUSE_MS", 70, 0, 300);
   const styleProfile = options?.styleProfile ?? "default";
+  const emit = options?.onTelemetry;
+  emit?.({ stage: "tts_request_start", meta: { provider: "browser" } });
 
   const tweak = STYLE_TWEAKS[styleProfile];
   const rate = clamp(baseRate + tweak.rateDelta, 0.75, 1.1);
@@ -367,6 +379,8 @@ function speakWithBrowserVoices(
       utterance.onstart = () => {
         if (started) return;
         started = true;
+        emit?.({ stage: "tts_first_audio_byte", meta: { provider: "browser" } });
+        emit?.({ stage: "audio_play_start" });
         onStart?.();
       };
 

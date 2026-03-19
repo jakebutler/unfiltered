@@ -18,6 +18,13 @@ export function useSpeechmatics(onTranscript: (event: TranscriptEvent) => void) 
     onTranscriptRef.current = onTranscript;
   }, [onTranscript]);
 
+  const readMaxDelaySec = (): number => {
+    const raw = process.env.NEXT_PUBLIC_SPEECHMATICS_MAX_DELAY_SEC;
+    const parsed = raw ? Number(raw) : Number.NaN;
+    if (!Number.isFinite(parsed)) return 0.7;
+    return Math.min(Math.max(parsed, 0.3), 2.0);
+  };
+
   const startAudio = useCallback(async (ws: WebSocket) => {
     if (contextRef.current && contextRef.current.state !== "closed") return;
     try {
@@ -62,7 +69,7 @@ export function useSpeechmatics(onTranscript: (event: TranscriptEvent) => void) 
             language: "en",
             operating_point: "enhanced",
             enable_partials: false,
-            max_delay: 2.0,
+            max_delay: readMaxDelaySec(),
           },
           audio_format: {
             type: "raw",

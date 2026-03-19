@@ -20,6 +20,10 @@ Unfiltered is an AI UX researcher that runs live moderated user interviews and s
 
 ```bash
 npm install
+# terminal 1
+npx convex dev
+
+# terminal 2
 npm run dev
 ```
 
@@ -32,7 +36,10 @@ Create `.env.local` with required keys:
 - `SPEECHMATICS_API_KEY`
 - `FIREWORKS_API_KEY`
 - `MINIMAX_API_KEY`
+- `MINIMAX_MODEL` (optional, defaults to `MiniMax-Text-01`)
 - `ELEVENLABS_API_KEY` (optional for narrated output)
+- `POSTHOG_PROJECT_API_KEY` (optional, enables server-side experiment analytics events)
+- `POSTHOG_HOST` (optional, defaults to `https://us.i.posthog.com`)
 
 ## Scripts
 

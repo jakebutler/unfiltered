@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { action, mutation, query } from "./_generated/server";
 import { api } from "./_generated/api";
 import { clusterFrictionWindows } from "../lib/friction/detector";
+import { pickTranscriptSnippetsForMoment } from "../lib/friction/snippets";
 import { requireAuthIfConfigured } from "./lib/security";
 
 export const detectAndStore = action({
@@ -18,16 +19,29 @@ export const detectAndStore = action({
     const clusters = clusterFrictionWindows(windows, 40);
 
     for (const cluster of clusters) {
-      // Extract transcript snippets that fall within this cluster
-      const relevantSegments = transcripts
-        .filter((s: { speakerId: string; startTime: number }) => s.speakerId === "participant" && s.startTime >= cluster.tStart && s.startTime <= cluster.tEnd)
-        .map((s: { text: string }) => s.text)
-        .slice(0, 3);
+      const participantSegments = transcripts.filter(
+        (s: { speakerId: string; taskId?: string }) =>
+          s.speakerId === "participant" &&
+          (!cluster.taskId || cluster.taskId === "unknown" || !s.taskId || s.taskId === cluster.taskId),
+      );
+
+      // Pick snippets from the actual moment window (task-aware, overlap-aware).
+      const relevantSegments = pickTranscriptSnippetsForMoment(
+        { tStart: cluster.tStart, tEnd: cluster.tEnd, taskId: cluster.taskId },
+        participantSegments,
+      );
 
       // Extract pause spans from words
-      const allWords = transcripts
-        .filter((s: { speakerId: string; startTime: number }) => s.speakerId === "participant" && s.startTime >= cluster.tStart && s.startTime <= cluster.tEnd)
-        .flatMap((s: { words: { startTime: number; duration: number }[] }) => s.words);
+      const allWords = participantSegments
+        .filter((s: { startTime: number; endTime?: number; words?: { startTime: number; duration: number }[] }) => {
+          const start = Number.isFinite(s.startTime) ? s.startTime : (s.words?.[0]?.startTime ?? 0);
+          const end = Number.isFinite(s.endTime)
+            ? (s.endTime as number)
+            : (s.words?.[s.words.length - 1]?.startTime ?? start) + (s.words?.[s.words.length - 1]?.duration ?? 0.25);
+          return end > cluster.tStart && start < cluster.tEnd;
+        })
+        .flatMap((s: { words: { startTime: number; duration: number }[] }) => s.words)
+        .sort((a: { startTime: number }, b: { startTime: number }) => a.startTime - b.startTime);
       const pauseSpans: { start: number; end: number }[] = [];
       for (let i = 1; i < allWords.length; i++) {
         const prevEnd = allWords[i - 1].startTime + allWords[i - 1].duration;
@@ -110,6 +124,28 @@ export const patchLabel = mutation({
     await requireAuthIfConfigured(ctx);
     const { momentId, ...fields } = args;
     await ctx.db.patch(momentId, fields);
+    return null;
+  },
+});
+
+export const setVerification = mutation({
+  args: {
+    momentId: v.id("frictionMoments"),
+    status: v.union(v.literal("confirmed"), v.literal("incorrect")),
+    feedback: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAuthIfConfigured(ctx);
+    const feedback = (args.feedback ?? "").trim();
+    if (args.status === "incorrect" && feedback.length === 0) {
+      throw new Error("Feedback is required when marking an analysis as incorrect.");
+    }
+    await ctx.db.patch(args.momentId, {
+      verificationStatus: args.status,
+      verificationFeedback: args.status === "incorrect" ? feedback : "",
+      verifiedAt: Date.now(),
+    });
     return null;
   },
 });

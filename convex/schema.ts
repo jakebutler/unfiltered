@@ -18,6 +18,8 @@ export default defineSchema({
     currentTaskIndex: v.number(),
     status: v.union(v.literal("pending"), v.literal("active"), v.literal("complete")),
     decideMode: v.optional(v.union(v.literal("A"), v.literal("B"))),
+    experimentRunId: v.optional(v.id("experimentRuns")),
+    experimentVariationId: v.optional(v.id("experimentVariations")),
     outputs: v.optional(v.object({
       themes: v.optional(v.array(v.string())),
       summary: v.optional(v.string()),
@@ -135,6 +137,141 @@ export default defineSchema({
     confidence: v.number(),
   }).index("by_session", ["sessionId"]),
 
+// ── Experiments/Telemetry tables ───────────────────────────────────
+
+  telemetryExperiments: defineTable({
+    name: v.string(),
+    scriptId: v.optional(v.string()),
+    hypothesis: v.optional(v.string()),
+    methodology: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_name", ["name"]),
+
+  experimentRuns: defineTable({
+    experimentId: v.id("telemetryExperiments"),
+    status: v.union(v.literal("running"), v.literal("paused"), v.literal("complete"), v.literal("aborted")),
+    currentVariationIndex: v.number(),
+    totalVariations: v.number(),
+    startedAt: v.number(),
+    endedAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+  })
+    .index("by_experiment", ["experimentId"])
+    .index("by_status", ["status"]),
+
+  experimentVariations: defineTable({
+    runId: v.id("experimentRuns"),
+    index: v.number(),
+    studyId: v.id("studies"),
+    decisionEngineIdTarget: v.string(),
+    decisionEngineIdAssigned: v.string(),
+    repeatIndex: v.number(),
+    status: v.union(v.literal("pending"), v.literal("in_progress"), v.literal("complete"), v.literal("aborted")),
+    sessionId: v.optional(v.id("sessions")),
+    startedAt: v.optional(v.number()),
+    endedAt: v.optional(v.number()),
+    checklistCompletedAt: v.optional(v.number()),
+    posthogExposureSentAt: v.optional(v.number()),
+    posthogExposureLastErrorAt: v.optional(v.number()),
+    posthogExposureLastError: v.optional(v.string()),
+  })
+    .index("by_run", ["runId"])
+    .index("by_run_index", ["runId", "index"])
+    .index("by_session", ["sessionId"]),
+
+  experimentGlobalState: defineTable({
+    activeRunId: v.optional(v.id("experimentRuns")),
+    updatedAt: v.number(),
+  }).index("by_updated", ["updatedAt"]),
+
+  telemetryRuns: defineTable({
+    experimentId: v.id("telemetryExperiments"),
+    sessionId: v.optional(v.id("sessions")),
+    studyId: v.optional(v.id("studies")),
+    variant: v.string(),
+    prototypeId: v.optional(v.string()),
+    operator: v.optional(v.string()),
+    environment: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    configSnapshot: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    status: v.union(v.literal("running"), v.literal("complete"), v.literal("aborted")),
+    startedAt: v.number(),
+    endedAt: v.optional(v.number()),
+  })
+    .index("by_experiment", ["experimentId"])
+    .index("by_session", ["sessionId"])
+    .index("by_status", ["status"]),
+
+  latencyEvents: defineTable({
+    sessionId: v.id("sessions"),
+    runId: v.optional(v.id("telemetryRuns")),
+    turnId: v.optional(v.string()),
+    stage: v.union(
+      v.literal("participant_last_word_end"),
+      v.literal("decide_trigger"),
+      v.literal("policy_start"),
+      v.literal("policy_end"),
+      v.literal("prompt_selected"),
+      v.literal("tts_request_start"),
+      v.literal("tts_first_audio_byte"),
+      v.literal("audio_play_start"),
+      v.literal("timing_config_resolved"),
+    ),
+    t: v.number(),
+    meta: v.optional(v.string()),
+  })
+    .index("by_session", ["sessionId"])
+    .index("by_run", ["runId"])
+    .index("by_session_stage", ["sessionId", "stage"]),
+
+  // ── Benchmark tables ──────────────────────────────────────────────
+
+  benchmarkRuns: defineTable({
+    name: v.string(),
+    startedAt: v.number(),
+    endedAt: v.optional(v.number()),
+    status: v.union(v.literal("running"), v.literal("complete"), v.literal("failed")),
+    providers: v.array(v.string()),
+    scenarios: v.array(v.string()),
+    repetitions: v.number(),
+    config: v.string(),
+  }).index("by_status", ["status"]),
+
+  benchmarkSessions: defineTable({
+    runId: v.id("benchmarkRuns"),
+    provider: v.string(),
+    scenario: v.string(),
+    repetition: v.number(),
+    startedAt: v.number(),
+    endedAt: v.optional(v.number()),
+    success: v.boolean(),
+    avgTtftMs: v.optional(v.number()),
+    avgTranscriptionLatencyMs: v.optional(v.number()),
+    avgTotalLatencyMs: v.optional(v.number()),
+    overallWer: v.optional(v.number()),
+    estimatedCostUsd: v.optional(v.number()),
+    turns: v.string(),
+    errors: v.optional(v.string()),
+  }).index("by_run", ["runId"])
+    .index("by_provider", ["provider"]),
+
+  benchmarkEvaluations: defineTable({
+    sessionId: v.id("benchmarkSessions"),
+    evaluatorId: v.string(),
+    transcriptionAccuracy: v.number(),
+    responseRelevance: v.number(),
+    voiceNaturalness: v.number(),
+    conversationFlow: v.number(),
+    professionalism: v.number(),
+    overallQuality: v.number(),
+    notes: v.optional(v.string()),
+    evaluatedAt: v.number(),
+  }).index("by_session", ["sessionId"]),
+
+  // ── Friction/Findings tables ─────────────────────────────────────
+
   frictionMoments: defineTable({
     sessionId: v.id("sessions"),
     taskId: v.string(),
@@ -172,6 +309,9 @@ export default defineSchema({
     recommendations: v.optional(v.array(v.string())),
     verificationQuestion: v.optional(v.string()),
     labelConfidence: v.optional(v.number()),
+    verificationStatus: v.optional(v.union(v.literal("confirmed"), v.literal("incorrect"))),
+    verificationFeedback: v.optional(v.string()),
+    verifiedAt: v.optional(v.number()),
   }).index("by_session", ["sessionId"]),
 
   // Agent testing tables

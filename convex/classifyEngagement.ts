@@ -3,6 +3,7 @@ import { action } from "./_generated/server";
 import { api } from "./_generated/api";
 import OpenAI from "openai";
 import { requireAuthIfConfigured } from "./lib/security";
+import { extractFirstJsonObject, normalizeConfidence } from "./lib/classifierOutput";
 
 const SYSTEM_PROMPT = `You are an assistant that classifies user engagement state from a low-resolution webcam frame during a UX test.
 You must be conservative: if unsure, output low confidence.
@@ -23,6 +24,19 @@ JSON_SCHEMA:
   "notes": string
 }`;
 
+function truncateNote(note: string): string {
+  return note.slice(0, 160);
+}
+
+function parseClassifierErrorNote(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/invalid api key/i.test(message)) return "MiniMax auth failed: invalid API key";
+  if (/401/.test(message)) return "MiniMax auth failed (401)";
+  if (/unknown model/i.test(message)) return "MiniMax model misconfigured";
+  if (/429/.test(message)) return "MiniMax rate limited (429)";
+  return `Classification failed: ${message}`.slice(0, 160);
+}
+
 export const classifyEngagement = action({
   args: {
     sessionId: v.id("sessions"),
@@ -36,15 +50,29 @@ export const classifyEngagement = action({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireAuthIfConfigured(ctx);
-    const minimaxApiKey = process.env.MINIMAX_API_KEY;
+    const minimaxApiKey = (process.env.MINIMAX_API_KEY ?? "").trim().replace(/^['"]+|['"]+$/g, "");
+    const minimaxModel = (process.env.MINIMAX_MODEL ?? "MiniMax-VL-01").trim().replace(/^['"]+|['"]+$/g, "") || "MiniMax-VL-01";
     if (!minimaxApiKey) {
-      // Camera analysis is optional in dev/manual test flows.
-      // Skip cleanly if deployment env is missing.
+      await ctx.runMutation(api.engagements.addEvent, {
+        sessionId: args.sessionId,
+        taskId: args.taskId,
+        t: args.sessionTimeSec ?? 0,
+        state: "uncertain_low_confidence",
+        confidence: 0,
+        signals: {
+          facePresent: false,
+          gazeTowardScreenLikely: false,
+          attentionStableLikely: false,
+          visibleFrustrationCuesLikely: false,
+        },
+        notes: "MINIMAX_API_KEY missing",
+      });
       return null;
     }
 
     const client = new OpenAI({
-      baseURL: "https://api.minimax.chat/v1",
+      // OpenAI-compatible MiniMax endpoint (global).
+      baseURL: "https://api.minimax.io/v1",
       apiKey: minimaxApiKey,
     });
 
@@ -70,23 +98,34 @@ export const classifyEngagement = action({
 
     try {
       const response = await client.chat.completions.create({
-        // Verify model name at https://api.minimax.chat — check available vision models
-        model: "MiniMax-VL-01",
+        // MiniMax model is configurable; default uses a vision-capable model.
+        model: minimaxModel,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userContent },
         ],
-        response_format: { type: "json_object" },
         max_tokens: 256,
       });
-      parsed = JSON.parse(response.choices[0].message.content ?? "{}");
-    } catch {
+      const raw = response.choices[0].message.content ?? "";
+      const asObject = extractFirstJsonObject(raw) ?? {};
+      parsed = {
+        state: typeof asObject.state === "string" ? asObject.state : "uncertain_low_confidence",
+        confidence: normalizeConfidence(asObject.confidence),
+        signals: {
+          face_present: Boolean((asObject.signals as { face_present?: unknown } | undefined)?.face_present),
+          gaze_toward_screen_likely: Boolean((asObject.signals as { gaze_toward_screen_likely?: unknown } | undefined)?.gaze_toward_screen_likely),
+          attention_stable_likely: Boolean((asObject.signals as { attention_stable_likely?: unknown } | undefined)?.attention_stable_likely),
+          visible_frustration_cues_likely: Boolean((asObject.signals as { visible_frustration_cues_likely?: unknown } | undefined)?.visible_frustration_cues_likely),
+        },
+        notes: typeof asObject.notes === "string" ? asObject.notes : "",
+      };
+    } catch (error) {
       // On any API or parse failure, store uncertain result rather than crashing session
       parsed = {
         state: "uncertain_low_confidence",
         confidence: 0,
         signals: { face_present: false, gaze_toward_screen_likely: false, attention_stable_likely: false, visible_frustration_cues_likely: false },
-        notes: "Classification failed",
+        notes: parseClassifierErrorNote(error),
       };
     }
 
@@ -105,7 +144,7 @@ export const classifyEngagement = action({
         attentionStableLikely: parsed.signals?.attention_stable_likely ?? false,
         visibleFrustrationCuesLikely: parsed.signals?.visible_frustration_cues_likely ?? false,
       },
-      notes: (parsed.notes ?? "").slice(0, 160),
+      notes: truncateNote(parsed.notes ?? ""),
     });
     return null;
   },
