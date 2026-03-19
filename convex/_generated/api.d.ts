@@ -8,6 +8,9 @@
  * @module
  */
 
+import type * as benchmarkEvaluations from "../benchmarkEvaluations.js";
+import type * as benchmarkRuns from "../benchmarkRuns.js";
+import type * as benchmarkSessions from "../benchmarkSessions.js";
 import type * as classifyEngagement from "../classifyEngagement.js";
 import type * as decide from "../decide.js";
 import type * as engagements from "../engagements.js";
@@ -31,6 +34,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  benchmarkEvaluations: typeof benchmarkEvaluations;
+  benchmarkRuns: typeof benchmarkRuns;
+  benchmarkSessions: typeof benchmarkSessions;
   classifyEngagement: typeof classifyEngagement;
   decide: typeof decide;
   engagements: typeof engagements;

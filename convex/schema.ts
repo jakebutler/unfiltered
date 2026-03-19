@@ -137,6 +137,8 @@ export default defineSchema({
     confidence: v.number(),
   }).index("by_session", ["sessionId"]),
 
+// ── Experiments/Telemetry tables ───────────────────────────────────
+
   telemetryExperiments: defineTable({
     name: v.string(),
     scriptId: v.optional(v.string()),
@@ -223,6 +225,52 @@ export default defineSchema({
     .index("by_session", ["sessionId"])
     .index("by_run", ["runId"])
     .index("by_session_stage", ["sessionId", "stage"]),
+
+  // ── Benchmark tables ──────────────────────────────────────────────
+
+  benchmarkRuns: defineTable({
+    name: v.string(),
+    startedAt: v.number(),
+    endedAt: v.optional(v.number()),
+    status: v.union(v.literal("running"), v.literal("complete"), v.literal("failed")),
+    providers: v.array(v.string()),
+    scenarios: v.array(v.string()),
+    repetitions: v.number(),
+    config: v.string(),
+  }).index("by_status", ["status"]),
+
+  benchmarkSessions: defineTable({
+    runId: v.id("benchmarkRuns"),
+    provider: v.string(),
+    scenario: v.string(),
+    repetition: v.number(),
+    startedAt: v.number(),
+    endedAt: v.optional(v.number()),
+    success: v.boolean(),
+    avgTtftMs: v.optional(v.number()),
+    avgTranscriptionLatencyMs: v.optional(v.number()),
+    avgTotalLatencyMs: v.optional(v.number()),
+    overallWer: v.optional(v.number()),
+    estimatedCostUsd: v.optional(v.number()),
+    turns: v.string(),
+    errors: v.optional(v.string()),
+  }).index("by_run", ["runId"])
+    .index("by_provider", ["provider"]),
+
+  benchmarkEvaluations: defineTable({
+    sessionId: v.id("benchmarkSessions"),
+    evaluatorId: v.string(),
+    transcriptionAccuracy: v.number(),
+    responseRelevance: v.number(),
+    voiceNaturalness: v.number(),
+    conversationFlow: v.number(),
+    professionalism: v.number(),
+    overallQuality: v.number(),
+    notes: v.optional(v.string()),
+    evaluatedAt: v.number(),
+  }).index("by_session", ["sessionId"]),
+
+  // ── Friction/Findings tables ─────────────────────────────────────
 
   frictionMoments: defineTable({
     sessionId: v.id("sessions"),
