@@ -1,55 +1,42 @@
 # Unfiltered
 
-Unfiltered is an AI UX researcher that runs live moderated user interviews and surfaces friction moments automatically.
+Always-on AI voice interviewer for honest, multimodal user research.
 
-## What It Does
+- **Synthetic users** to pre-flight your interview guide before burning real-participant goodwill
+- **Real interviews** by an AI bot, on demand, any time of day — no scheduling
+- **Evidence-grounded findings** with clip links, quotes, and frames for every claim
 
-- Runs interview sessions against a prototype URL
-- Streams participant transcription in real time
-- Detects friction signals from speech and behavior
-- Uses configurable decide policies (A, B, and A/B)
-- Produces a findings dashboard with moment cards and exports
+## Status
+
+**Phase 0 — Foundation.** The repo was just rebuilt from scratch on a Cloudflare-native stack. Active scaffolding; not yet deployable.
+
+See [`docs/v2-architecture-spec.md`](docs/v2-architecture-spec.md) for the full plan, decisions, and phased build schedule.
 
 ## Tech Stack
 
-- Next.js 15 + React 19 + TypeScript
-- Convex backend functions and schema
-- Vitest for unit tests
+- Next.js 15 on Cloudflare Workers (`@opennextjs/cloudflare`)
+- Cloudflare D1 + Drizzle ORM
+- Cloudflare Durable Objects (per-session state + WS fanout)
+- Cloudflare Workflows (analyzer, synthetic, guide creator)
+- Cloudflare R2 (recordings)
+- Cloudflare AI Gateway → Gemini, GLM, Claude, OpenAI
+- WorkOS (auth)
+- Resend (email)
+- Vapi (voice runtime)
 
-## Quick Start
+## Getting Started
 
 ```bash
 npm install
-# terminal 1
-npx convex dev
-
-# terminal 2
-npm run dev
+cp .env.example .env.local       # fill in development values
+wrangler d1 create unfiltered-db # paste id into wrangler.toml
+npm run db:generate              # generate migrations from schema
+npm run db:migrate:local         # apply to local D1
+npm run dev                      # http://localhost:3000
 ```
 
-Open `http://localhost:3000`.
+## Documentation
 
-## Environment
-
-Create `.env.local` with required keys:
-
-- `SPEECHMATICS_API_KEY`
-- `FIREWORKS_API_KEY`
-- `MINIMAX_API_KEY`
-- `MINIMAX_MODEL` (optional, defaults to `MiniMax-Text-01`)
-- `ELEVENLABS_API_KEY` (optional for narrated output)
-- `POSTHOG_PROJECT_API_KEY` (optional, enables server-side experiment analytics events)
-- `POSTHOG_HOST` (optional, defaults to `https://us.i.posthog.com`)
-
-## Scripts
-
-```bash
-npm run dev      # local development
-npm run test     # run unit tests
-npm run lint     # lint codebase
-npm run build    # production build
-```
-
-## Repo Status
-
-Current implementation is V1/hackathon scope with study setup, interview runtime, signal processing, decide engine, and findings dashboard.
+- **Canonical spec:** [`docs/v2-architecture-spec.md`](docs/v2-architecture-spec.md)
+- **Legacy V1 reference (prompts, research notes, old docs):** [`legacy-prompt-specs/`](legacy-prompt-specs/)
+- **Codex/agent context:** [`CLAUDE.md`](CLAUDE.md)

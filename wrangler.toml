@@ -1,0 +1,66 @@
+name = "unfiltered"
+main = ".open-next/worker.js"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets served by the Worker (Next.js build output)
+[assets]
+binding = "ASSETS"
+directory = ".open-next/assets"
+
+# ─────────────────────────────────────────────────────────────────────
+# D1 (Drizzle-backed primary database)
+# Provision once with: wrangler d1 create unfiltered-db
+# Then paste the returned id into database_id below.
+# ─────────────────────────────────────────────────────────────────────
+[[d1_databases]]
+binding = "DB"
+database_name = "unfiltered-db"
+database_id = "PLACEHOLDER_REPLACE_WITH_WRANGLER_OUTPUT"
+migrations_dir = "db/migrations"
+
+# ─────────────────────────────────────────────────────────────────────
+# R2 buckets for recordings + analyzer stage outputs
+# Provision: wrangler r2 bucket create unfiltered-recordings
+#            wrangler r2 bucket create unfiltered-analysis
+# ─────────────────────────────────────────────────────────────────────
+[[r2_buckets]]
+binding = "RECORDINGS"
+bucket_name = "unfiltered-recordings"
+
+[[r2_buckets]]
+binding = "ANALYSIS"
+bucket_name = "unfiltered-analysis"
+
+# ─────────────────────────────────────────────────────────────────────
+# Durable Objects — one instance per active session
+# ─────────────────────────────────────────────────────────────────────
+[[durable_objects.bindings]]
+name = "SESSION_DO"
+class_name = "SessionDurableObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SessionDurableObject"]
+
+# ─────────────────────────────────────────────────────────────────────
+# AI Gateway proxies LLM calls (Gemini, GLM, Claude, OpenAI)
+# Configure gateway "unfiltered-gateway" in Cloudflare dashboard.
+# ─────────────────────────────────────────────────────────────────────
+[ai]
+binding = "AI"
+
+# ─────────────────────────────────────────────────────────────────────
+# Cron triggers (retention sweep, reminder emails)
+# Wired in Phase 3.
+# ─────────────────────────────────────────────────────────────────────
+# [triggers]
+# crons = ["0 3 * * *"]   # nightly retention sweep at 03:00 UTC
+
+# ─────────────────────────────────────────────────────────────────────
+# Vars (non-secret). Secrets via `wrangler secret put`.
+# ─────────────────────────────────────────────────────────────────────
+[vars]
+ENVIRONMENT = "development"
+PUBLIC_APP_URL = "http://localhost:3000"
+AI_GATEWAY_NAME = "unfiltered-gateway"
