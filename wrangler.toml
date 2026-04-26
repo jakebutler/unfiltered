@@ -16,7 +16,7 @@ directory = ".open-next/assets"
 [[d1_databases]]
 binding = "DB"
 database_name = "unfiltered-db"
-database_id = "PLACEHOLDER_REPLACE_WITH_WRANGLER_OUTPUT"
+database_id = "c11a4304-303d-40f5-8682-f9e5b76a8b13"
 migrations_dir = "db/migrations"
 
 # ─────────────────────────────────────────────────────────────────────
