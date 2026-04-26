@@ -5,6 +5,25 @@ and `npm test` all pass without any remote services. Before the app is
 deployable end-to-end, the following one-time provisioning is required.
 Each step calls out what to paste back into the repo when done.
 
+## What you need now vs later
+
+For the first round of internal testing (Phase 0–1, synthetic loop only),
+you only need steps **1–4**. Everything below that is deferrable:
+
+| Step | Service | When you need it |
+|---|---|---|
+| 1 | Cloudflare + D1 + R2 | **Phase 0 — now** |
+| 2 | AI Gateway + Custom Provider | **Phase 0 — now** |
+| 3 | WorkOS AuthKit | **Phase 0 — now** |
+| 4 | LLM provider keys | **Phase 0 — now** |
+| 5 | Vapi (voice runtime) | Phase 2 — defer |
+| 6 | Resend (email) | Phase 2 — defer |
+| 7 | Invitation HMAC secret | Phase 2 — defer |
+| 8 | Stripe (billing) | Phase 3 — defer |
+
+Skip 5–8 entirely until you start the relevant phase. None of the
+synthetic-loop functionality depends on them.
+
 ## 1. Cloudflare account + Wrangler
 
 ```bash
@@ -37,7 +56,11 @@ In the Cloudflare dashboard:
 
 1. AI → AI Gateway → Create Gateway
 2. Name: `unfiltered-gateway`
-3. Enable caching (default 0s, set per-call via `cf-aig-cache-ttl` header)
+3. **Cache Responses: turn OFF** at the gateway level. We set
+   `cf-aig-cache-ttl` per call in code, only for calls that are safe
+   to cache (e.g. vision frame classification, cold-start guide
+   template generation). The bot brain, theme synthesis, and findings
+   are context-dependent and must never be cached at the gateway.
 4. Note your account id (Workers & Pages → Account ID)
 
 Set as a Worker secret:
@@ -112,18 +135,38 @@ wrangler secret put OPENAI_API_KEY
 
 For local dev, paste the same values into `.env.local`.
 
-## 5. Vapi (Phase 2)
+## 5. Vapi (Phase 2 — DEFER)
+
+> Skip this step until you start Phase 2 (Week 6). The synthetic loop
+> doesn't use Vapi; Phase 1 only renders text-based interviews.
+
+When you're ready:
 
 1. Create account at https://vapi.ai
 2. Copy public + private keys from dashboard
-3. Set webhook URL (Phase 2): `https://<your-deployment>/api/webhooks/vapi`
+3. Set the webhook URL. You need a publicly reachable HTTPS URL —
+   pick one of:
+   - **Preview deploy** (recommended): `npm run cf:deploy` once
+     to ship to `https://unfiltered.<your-subdomain>.workers.dev`,
+     then paste `<that-url>/api/webhooks/vapi`.
+   - **Custom domain** if you've wired one in Cloudflare → use that.
+   - **Tunnel for local testing**:
+     ```bash
+     cloudflared tunnel --url http://localhost:3000
+     # or:  ngrok http 3000
+     ```
+     Paste the tunnel URL + `/api/webhooks/vapi`. Note: tunnels are
+     ephemeral; reconfigure Vapi each time the URL changes.
 
 ```bash
 wrangler secret put VAPI_PUBLIC_KEY
 wrangler secret put VAPI_PRIVATE_KEY
 ```
 
-## 6. Resend (Phase 2)
+## 6. Resend (Phase 2 — DEFER)
+
+> Skip until Phase 2. Used to send participant invitations and
+> deletion confirmations.
 
 1. Create account at https://resend.com
 2. Verify a sending domain (or use the default test domain for dev)
@@ -133,21 +176,29 @@ wrangler secret put VAPI_PRIVATE_KEY
 wrangler secret put RESEND_API_KEY
 ```
 
-## 7. Invitation HMAC secret
+## 7. Invitation HMAC secret (Phase 2 — DEFER)
 
-Used to sign participant URLs (Phase 2 invitations + Phase 2 deletion links):
+> Skip until Phase 2. Used to sign participant URLs (Phase 2
+> invitations + GDPR deletion links).
 
 ```bash
 wrangler secret put INVITATION_HMAC_SECRET
 # Use: openssl rand -hex 32
 ```
 
-## 8. Stripe (Phase 3, defer until ready)
+## 8. Stripe (Phase 3 — DEFER)
+
+> Skip entirely for internal testing. Stripe is Phase 3 (Week 10),
+> after the synthetic loop and real-interview wedge are validated
+> and pricing is finalized.
+
+When you're ready:
 
 1. Create Stripe account, set up products + prices for "Founder" and "Team"
    tiers
 2. Create meters for `realSessionsConsumed` and `syntheticSessionsConsumed`
 3. Configure webhook endpoint `https://<your-deployment>/api/webhooks/stripe`
+   (same URL options as Vapi above).
 
 ```bash
 wrangler secret put STRIPE_SECRET_KEY
