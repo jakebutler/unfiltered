@@ -1,11 +1,29 @@
 /**
- * GLM (Z.ai / Fireworks) — OpenAI-compatible chat completions.
+ * GLM (Z.ai / Fireworks) — OpenAI-compatible chat completions, routed
+ * through Cloudflare AI Gateway as a Custom Provider.
  *
  * GLM is the bot's brain (voice + text mode), the guide creator's chat
  * agent, the synthetic persona LLM, and the analyzer's reasoning model
  * for friction extraction, quote extraction, theme synthesis, and
- * session-level findings. Free for us via subscription, so it's the
+ * session-level findings. Free for us via Z.ai subscription, so it's the
  * default choice unless quality demands otherwise.
+ *
+ * AI Gateway integration uses the Unified API (`/compat/chat/completions`)
+ * with the Custom Provider slug prefixed onto the model name. Set up:
+ *
+ *   1. Dashboard → AI Gateway → Custom Providers → Add
+ *      slug:     z-ai
+ *      base_url: https://api.z.ai
+ *      enabled:  true
+ *
+ *   2. Pass the Z.ai API key as the `Authorization: Bearer ...` header
+ *      and set `model: "custom-z-ai/glm-5"` (or whichever GLM model).
+ *
+ *   3. AI Gateway forwards to:
+ *      https://api.z.ai/api/coding/paas/v4/chat/completions
+ *
+ * Same pattern works for Fireworks AI by configuring a `fireworks`
+ * custom provider with `base_url: https://api.fireworks.ai`.
  */
 
 import { GatewayClient } from "./gateway";
@@ -47,21 +65,37 @@ export interface GlmChatResponse {
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 }
 
-export const GLM_DEFAULT_MODEL = "glm-4-air"; // overridable when GLM-5 is available
+/** Default custom-provider slug for GLM. Override per workspace if needed. */
+export const GLM_DEFAULT_PROVIDER_SLUG = "z-ai";
+
+/** Default GLM model name. Bump to "glm-5" once Z.ai sub is on GLM-5. */
+export const GLM_DEFAULT_MODEL = "glm-5";
+
+export interface GlmChatOptions {
+  /** Custom Provider slug configured in AI Gateway. Default: "z-ai". */
+  providerSlug?: string;
+  /** Optional Cloudflare AI Gateway BYOK / authenticated-gateway token. */
+  cfAigAuthorization?: string;
+}
 
 export async function glmChat(
   gateway: GatewayClient,
   apiKey: string,
   req: GlmChatRequest,
+  opts: GlmChatOptions = {},
 ): Promise<GlmChatResponse> {
+  const slug = opts.providerSlug ?? GLM_DEFAULT_PROVIDER_SLUG;
+  // Unified API requires the model to be prefixed with `custom-{slug}/`.
+  const prefixedModel = req.model.startsWith("custom-")
+    ? req.model
+    : `custom-${slug}/${req.model}`;
   return gateway.post<GlmChatResponse>({
     provider: "compat",
-    path: "/chat/completions",
+    path: "chat/completions",
     authHeader: `Bearer ${apiKey}`,
-    body: req,
-    extraHeaders: {
-      // Cloudflare AI Gateway compat needs upstream URL when provider is "compat".
-      "cf-aig-metadata": JSON.stringify({ upstream: "z.ai" }),
-    },
+    body: { ...req, model: prefixedModel },
+    extraHeaders: opts.cfAigAuthorization
+      ? { "cf-aig-authorization": `Bearer ${opts.cfAigAuthorization}` }
+      : undefined,
   });
 }

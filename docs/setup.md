@@ -47,6 +47,31 @@ wrangler secret put CLOUDFLARE_ACCOUNT_ID
 # (paste your account id when prompted)
 ```
 
+### 2a. Custom Provider for GLM (Z.ai)
+
+Cloudflare AI Gateway doesn't have a native integration for Z.ai, so we
+register it as a Custom Provider. This keeps GLM calls flowing through
+the gateway with caching, observability, and rate limiting intact.
+
+In the Cloudflare dashboard:
+
+1. Compute & AI → AI Gateway → Custom Providers → Add Custom Provider
+2. Provider Name: `Z.ai (GLM)`
+3. Provider Slug: `z-ai`  *(must match `GLM_DEFAULT_PROVIDER_SLUG` in
+   `lib/ai/glm.ts`)*
+4. Base URL: `https://api.z.ai`
+5. Save and toggle **Enabled**
+
+Once enabled, GLM calls hit
+`https://gateway.ai.cloudflare.com/v1/{accountId}/unfiltered-gateway/compat/chat/completions`
+with `model: "custom-z-ai/glm-5"` (the provider client adds the prefix
+automatically). The `Authorization: Bearer ${GLM_API_KEY}` header
+carries your Z.ai API key.
+
+If you later switch GLM hosting to Fireworks AI, repeat the steps with
+slug `fireworks` and base URL `https://api.fireworks.ai`, then update
+`GLM_DEFAULT_PROVIDER_SLUG` accordingly.
+
 ## 3. WorkOS AuthKit
 
 1. Create a WorkOS account at https://workos.com
@@ -74,7 +99,8 @@ wrangler secret put CLOUDFLARE_ACCOUNT_ID
 # Gemini (Google AI Studio): https://aistudio.google.com/apikey
 wrangler secret put GEMINI_API_KEY
 
-# GLM (Z.ai or Fireworks)
+# GLM (Z.ai default; see step 2a for Custom Provider setup)
+# Get key at: https://docs.z.ai → Account → API Keys
 wrangler secret put GLM_API_KEY
 
 # Anthropic (Claude): https://console.anthropic.com
