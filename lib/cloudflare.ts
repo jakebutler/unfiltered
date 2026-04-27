@@ -15,9 +15,11 @@ export interface AppEnv {
   ANALYSIS: R2Bucket;
   AI: Ai;
   SESSION_DO: DurableObjectNamespace;
+  EMAIL: SendEmail;
   ENVIRONMENT: string;
   PUBLIC_APP_URL: string;
   AI_GATEWAY_NAME: string;
+  EMAIL_FROM_ADDRESS?: string;
 }
 
 export function getEnv(): AppEnv {

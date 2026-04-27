@@ -14,10 +14,9 @@
  */
 
 export type GatewayProvider =
-  | "google-ai-studio"   // Gemini
-  | "anthropic"          // Claude
+  | "openrouter"         // Anthropic + Gemini routed via OpenRouter
   | "openai"             // OpenAI (chat + tts)
-  | "compat";            // OpenAI-compatible (used for GLM via Z.ai/Fireworks)
+  | "compat";            // OpenAI-compatible Custom Providers (e.g. GLM via Z.ai)
 
 export interface GatewayCallOptions {
   provider: GatewayProvider;

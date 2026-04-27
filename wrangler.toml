@@ -44,11 +44,19 @@ tag = "v1"
 new_sqlite_classes = ["SessionDurableObject"]
 
 # ─────────────────────────────────────────────────────────────────────
-# AI Gateway proxies LLM calls (Gemini, GLM, Claude, OpenAI)
+# AI Gateway proxies LLM calls (OpenRouter, GLM via Z.ai, OpenAI)
 # Configure gateway "unfiltered-gateway" in Cloudflare dashboard.
 # ─────────────────────────────────────────────────────────────────────
 [ai]
 binding = "AI"
+
+# ─────────────────────────────────────────────────────────────────────
+# Cloudflare Email Service (public beta as of Apr 2026)
+# Sends transactional emails via env.EMAIL.send(). Requires Workers
+# Paid plan and a verified sending domain in Cloudflare → Email Service.
+# ─────────────────────────────────────────────────────────────────────
+[[send_email]]
+name = "EMAIL"
 
 # ─────────────────────────────────────────────────────────────────────
 # Cron triggers (retention sweep, reminder emails)

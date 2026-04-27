@@ -13,11 +13,11 @@ you only need steps **1–4**. Everything below that is deferrable:
 | Step | Service | When you need it |
 |---|---|---|
 | 1 | Cloudflare + D1 + R2 | **Phase 0 — now** |
-| 2 | AI Gateway + Custom Provider | **Phase 0 — now** |
+| 2 | AI Gateway + Custom Provider (Z.ai) | **Phase 0 — now** |
 | 3 | WorkOS AuthKit | **Phase 0 — now** |
-| 4 | LLM provider keys | **Phase 0 — now** |
+| 4 | LLM provider keys (OpenRouter, Z.ai, OpenAI) | **Phase 0 — now** |
 | 5 | Vapi (voice runtime) | Phase 2 — defer |
-| 6 | Resend (email) | Phase 2 — defer |
+| 6 | Cloudflare Email Service | Phase 2 — defer |
 | 7 | Invitation HMAC secret | Phase 2 — defer |
 | 8 | Stripe (billing) | Phase 3 — defer |
 
@@ -118,22 +118,30 @@ slug `fireworks` and base URL `https://api.fireworks.ai`, then update
 
 ## 4. LLM provider keys
 
-```bash
-# Gemini (Google AI Studio): https://aistudio.google.com/apikey
-wrangler secret put GEMINI_API_KEY
+We consolidated Anthropic and Gemini calls through OpenRouter, which is
+natively supported by Cloudflare AI Gateway. So you only need three
+provider keys:
 
-# GLM (Z.ai default; see step 2a for Custom Provider setup)
+```bash
+# OpenRouter (handles Anthropic + Gemini calls): https://openrouter.ai/keys
+wrangler secret put OPENROUTER_API_KEY
+
+# GLM (Z.ai; see step 2a for Custom Provider setup)
 # Get key at: https://docs.z.ai → Account → API Keys
 wrangler secret put GLM_API_KEY
-
-# Anthropic (Claude): https://console.anthropic.com
-wrangler secret put ANTHROPIC_API_KEY
 
 # OpenAI (TTS during validation): https://platform.openai.com/api-keys
 wrangler secret put OPENAI_API_KEY
 ```
 
 For local dev, paste the same values into `.env.local`.
+
+OpenRouter routes Claude (`anthropic/claude-sonnet-4-5`,
+`anthropic/claude-opus-4-5`) and Gemini (`google/gemini-2.5-flash`,
+`google/gemini-2.5-flash-lite`, `google/gemini-2.5-pro`) using an
+OpenAI-compatible chat-completion shape, including multimodal vision
+inputs. All calls flow through the `openrouter` provider on AI Gateway,
+so caching/observability/rate-limiting still apply.
 
 ## 5. Vapi (Phase 2 — DEFER)
 
@@ -163,17 +171,42 @@ wrangler secret put VAPI_PUBLIC_KEY
 wrangler secret put VAPI_PRIVATE_KEY
 ```
 
-## 6. Resend (Phase 2 — DEFER)
+## 6. Cloudflare Email Service (Phase 2 — DEFER)
 
-> Skip until Phase 2. Used to send participant invitations and
-> deletion confirmations.
+> Skip until Phase 2. Used to send participant invitations, GDPR
+> deletion confirmations, and (Phase 3) findings-ready notifications.
 
-1. Create account at https://resend.com
-2. Verify a sending domain (or use the default test domain for dev)
-3. Copy API key
+We use Cloudflare Email Service (public beta, April 2026) instead of a
+third-party transactional email provider. No API keys: the `EMAIL`
+binding declared in `wrangler.toml` authenticates via your Cloudflare
+account.
 
-```bash
-wrangler secret put RESEND_API_KEY
+When you're ready:
+
+1. Cloudflare dashboard → Email → Email Service → enable
+2. Add and verify your sending domain (DNS-based, follows DKIM/SPF
+   prompts in dashboard)
+3. Pick a from-address on that domain (e.g. `research@yourdomain.com`)
+4. Set it as the default:
+   ```bash
+   wrangler secret put EMAIL_FROM_ADDRESS
+   # paste:  research@yourdomain.com
+   ```
+5. Make sure your account is on the **Workers Paid plan**
+   ($5/mo minimum) — Email Service requires it.
+
+The `[[send_email]] name = "EMAIL"` binding in `wrangler.toml` is
+already wired; usage in code:
+
+```ts
+import { sendEmail } from "@/lib/email/cloudflare-email";
+import { getEnv } from "@/lib/cloudflare";
+
+const env = getEnv();
+await sendEmail(
+  { binding: env.EMAIL, defaultFrom: env.EMAIL_FROM_ADDRESS! },
+  { to: "user@example.com", subject: "Hi", html: "<p>Hello!</p>" },
+);
 ```
 
 ## 7. Invitation HMAC secret (Phase 2 — DEFER)

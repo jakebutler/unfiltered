@@ -51,7 +51,8 @@ unfiltered/
 │   ├── index.ts                  # getDb(d1) helper
 │   └── migrations/
 ├── lib/
-│   ├── ai/                       # AI Gateway clients (Gemini, GLM, Claude, OpenAI)
+│   ├── ai/                       # AI Gateway clients (OpenRouter, GLM, OpenAI)
+│   ├── email/                    # Cloudflare Email Service helpers
 │   ├── prompts/                  # system prompts
 │   ├── auth/                     # WorkOS helpers
 │   ├── r2/                       # signed-URL upload helpers
@@ -69,25 +70,28 @@ unfiltered/
 - Real-time session state: Durable Objects (per-session)
 - Long-running jobs: Cloudflare Workflows (analyzer, synthetic, guide creator)
 - Object storage: Cloudflare R2 (recordings + analyzer stage outputs)
-- AI: Cloudflare AI Gateway → Gemini, GLM, Claude, OpenAI
+- AI: Cloudflare AI Gateway →
+  - `openrouter` (Anthropic Claude + Google Gemini)
+  - `compat` Custom Provider for GLM via Z.ai
+  - `openai` for TTS validation
 - Auth: WorkOS AuthKit
-- Email: Resend
+- Email: Cloudflare Email Service (`env.EMAIL.send`)
 - Voice runtime: Vapi (orchestrator) + GLM (brain) + OpenAI tts-1 (validation)
 - Unit tests: Vitest
 
 ## LLM Model Assignments (Canonical)
-| Use Case | Model |
-|---|---|
-| Bot brain (voice + text) | GLM-5 via subscription (free) |
-| Guide creator chat agent | GLM-5 |
-| Synthetic persona LLM | GLM-5 |
-| Camera frame classifier | Gemini 2.5 Flash |
-| Screen frame analyzer | Gemini 2.5 Flash |
-| Whole-video friction confirmation | Gemini 2.5 Pro |
-| Quote extraction, theme synthesis, session findings | GLM-5 |
-| Cross-session synthesis (study-wide) | Claude Sonnet 4.5 |
-| TTS (validation) | OpenAI tts-1 |
-| TTS (production / marketing) | ElevenLabs (reserved) |
+| Use Case | Model | Provider |
+|---|---|---|
+| Bot brain (voice + text) | `glm-5` | Z.ai (Custom Provider) |
+| Guide creator chat agent | `glm-5` | Z.ai |
+| Synthetic persona LLM | `glm-5` | Z.ai |
+| Quote extraction, theme synthesis, session findings | `glm-5` | Z.ai |
+| Camera frame classifier | `google/gemini-2.5-flash` | OpenRouter |
+| Screen frame analyzer | `google/gemini-2.5-flash` | OpenRouter |
+| Whole-video friction confirmation | `google/gemini-2.5-pro` | OpenRouter |
+| Cross-session synthesis (study-wide) | `anthropic/claude-sonnet-4-5` | OpenRouter |
+| TTS (validation) | `tts-1` | OpenAI direct |
+| TTS (production / marketing) | ElevenLabs (reserved) | — |
 
 ## Code Conventions
 - `lib/`: pure TS only, no Cloudflare bindings or browser globals
@@ -155,14 +159,14 @@ Public (in `wrangler.toml [vars]`):
 
 Secrets (via `wrangler secret put`):
 - `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_REDIRECT_URI`, `WORKOS_COOKIE_PASSWORD`
-- `RESEND_API_KEY`
+- `EMAIL_FROM_ADDRESS` (sending address on a domain verified in
+  Cloudflare Email Service; the binding itself needs no API key)
 - `OPENAI_API_KEY` (TTS + occasional LLM)
-- `GLM_API_KEY` (Z.ai / Fireworks)
-- `GEMINI_API_KEY` (Google)
-- `ANTHROPIC_API_KEY` (Claude)
-- `VAPI_PRIVATE_KEY`, `VAPI_PUBLIC_KEY`
+- `OPENROUTER_API_KEY` (Anthropic + Gemini, via OpenRouter)
+- `GLM_API_KEY` (Z.ai, via Custom Provider on AI Gateway)
+- `VAPI_PRIVATE_KEY`, `VAPI_PUBLIC_KEY` (Phase 2)
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (Phase 3)
-- `INVITATION_HMAC_SECRET` (signing participant URLs)
+- `INVITATION_HMAC_SECRET` (signing participant URLs, Phase 2)
 
 For local dev: `.env.local` mirrors public vars; secrets via
 `wrangler dev --local` and a `.dev.vars` file (gitignored).

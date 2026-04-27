@@ -1,72 +1,46 @@
 /**
  * Claude (Anthropic) — used for cross-session synthesis (study-wide
  * findings) where reasoning quality matters most and volume is lowest.
+ *
+ * Routed through OpenRouter via Cloudflare AI Gateway. See
+ * `./openrouter.ts` for the underlying client.
  */
 
 import { GatewayClient } from "./gateway";
+import {
+  openrouterChat,
+  openrouterText,
+  type OpenRouterChatOptions,
+  type OpenRouterChatRequest,
+  type OpenRouterChatResponse,
+  type OpenRouterMessage,
+} from "./openrouter";
 
 export type ClaudeModel =
-  | "claude-sonnet-4-5-20250929"
-  | "claude-opus-4-5-20250929";
+  | "anthropic/claude-sonnet-4-5"
+  | "anthropic/claude-opus-4-5";
 
-export interface ClaudeMessage {
-  role: "user" | "assistant";
-  content:
-    | string
-    | Array<
-        | { type: "text"; text: string }
-        | {
-            type: "image";
-            source: {
-              type: "base64";
-              media_type: string;
-              data: string;
-            };
-          }
-      >;
+export const CLAUDE_DEFAULT_MODEL: ClaudeModel = "anthropic/claude-sonnet-4-5";
+
+export interface ClaudeChatRequest extends Omit<OpenRouterChatRequest, "model"> {
+  model?: ClaudeModel;
 }
 
-export interface ClaudeRequest {
-  model: ClaudeModel;
-  max_tokens: number;
-  system?: string;
-  messages: ClaudeMessage[];
-  temperature?: number;
-  top_p?: number;
-  tools?: unknown[];
-  tool_choice?: unknown;
-}
+export type ClaudeChatResponse = OpenRouterChatResponse;
+export type ClaudeMessage = OpenRouterMessage;
 
-export interface ClaudeResponse {
-  id: string;
-  content: Array<
-    | { type: "text"; text: string }
-    | { type: "tool_use"; id: string; name: string; input: unknown }
-  >;
-  stop_reason: string;
-  usage: { input_tokens: number; output_tokens: number };
-}
-
-export async function claudeMessage(
+export async function claudeChat(
   gateway: GatewayClient,
-  apiKey: string,
-  req: ClaudeRequest,
-): Promise<ClaudeResponse> {
-  return gateway.post<ClaudeResponse>({
-    provider: "anthropic",
-    path: "v1/messages",
-    body: req,
-    extraHeaders: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-  });
+  openrouterApiKey: string,
+  req: ClaudeChatRequest,
+  opts: OpenRouterChatOptions = {},
+): Promise<ClaudeChatResponse> {
+  return openrouterChat(
+    gateway,
+    openrouterApiKey,
+    { ...req, model: req.model ?? CLAUDE_DEFAULT_MODEL },
+    opts,
+  );
 }
 
-/** Best-effort first text block. */
-export function claudeText(res: ClaudeResponse): string {
-  for (const part of res.content) {
-    if (part.type === "text") return part.text;
-  }
-  return "";
-}
+export const claudeText = openrouterText;
