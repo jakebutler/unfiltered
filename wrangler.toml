@@ -1,5 +1,5 @@
 name = "unfiltered"
-main = ".open-next/worker.js"
+main = "workers/entry.ts"
 compatibility_date = "2026-04-01"
 compatibility_flags = ["nodejs_compat"]
 

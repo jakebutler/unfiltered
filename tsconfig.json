@@ -29,5 +29,5 @@
     "**/*.tsx",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "legacy-prompt-specs", ".open-next"]
+  "exclude": ["node_modules", "legacy-prompt-specs", ".open-next", "workers", "durable-objects"]
 }
