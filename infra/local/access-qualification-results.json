@@ -1,0 +1,407 @@
+{
+  "qualifiedScope": "Local named-user direct-FHIR resource access only",
+  "applicationAuthorizationQualified": false,
+  "nativeStorageImmediateRevocationQualified": false,
+  "timestamp": "2026-10-09T23:48:31.057Z",
+  "runId": "6a1792c0-6ba4-43c9-80ae-ff3bec4e4f0f",
+  "medplumVersion": "5.2.3",
+  "baseUrl": "http://127.0.0.1:8103",
+  "projectId": "69f20f00-7363-4e8d-9bc5-77a045b3938f",
+  "otherProjectId": "c39f4031-a5ca-4240-9153-2aa3302e9b1c",
+  "runtimeAllowedTypes": [
+    "Patient",
+    "CareTeam",
+    "QuestionnaireResponse",
+    "DocumentReference",
+    "Binary",
+    "Task",
+    "Provenance"
+  ],
+  "runtimeInteractions": [
+    "create",
+    "read",
+    "search",
+    "update",
+    "history",
+    "vread"
+  ],
+  "observations": [
+    {
+      "name": "Native presigned source URL after role downgrade",
+      "status": 200,
+      "stillReadableWithoutAuthentication": true,
+      "risk": "An already issued native storage URL does not reevaluate membership; do not expose these URLs through the application. Use an authenticated proxy of canonical FHIR Binary with a fresh access check."
+    }
+  ],
+  "limitations": [
+    "Local synthetic Medplum 5.2.3 only; hosted Free entitlements and production authorization are unqualified.",
+    "Care-team memberships are compiled into explicit patient-scoped policies by setup; automatic CareTeam enrollment/revocation synchronization remains application work.",
+    "Clinical direct FHIR tokens are read-only; role-attributed staff transitions through the narrow application API remain unqualified.",
+    "Binary permission relies on mandatory securityContext pointing at an access-controlled resource; uncontextualized Binary creation is not prevented by this runtime policy. Source admission must enforce context and patient association.",
+    "The shared runtime is project-scoped and deliberately spans patients; the application must enforce patient capability and staff action scope on every request.",
+    "The application must keep staff tokens server-side and must not expose native signed storage URLs if immediate source revocation is required.",
+    "Runtime credentials are exported only with --write-runtime-env and an existing file is never overwritten. A plain rerun uses separate fresh fixtures."
+  ],
+  "sources": [
+    "https://www.medplum.com/docs/access/access-policies",
+    "https://www.medplum.com/docs/access/binary-security-context",
+    "https://www.medplum.com/docs/api/project-admin/invite",
+    "https://www.medplum.com/docs/api/project-admin/client",
+    "https://github.com/medplum/medplum/blob/v5.2.3/packages/server/src/auth/login.ts",
+    "https://github.com/medplum/medplum/blob/v5.2.3/packages/server/src/oauth/token.ts",
+    "https://github.com/medplum/medplum/blob/v5.2.3/packages/server/src/storage/routes.ts",
+    "https://github.com/medplum/medplum/blob/v5.2.3/packages/server/src/storage/presign.ts"
+  ],
+  "passed": 68,
+  "failed": 0,
+  "results": [
+    {
+      "name": "assigned-md: full assigned intake and source content",
+      "passed": true,
+      "status": 200,
+      "profile": "Practitioner/ff4f9c72-eb66-4bc9-8309-9ae21b52bd9b",
+      "clinicalFields": 6
+    },
+    {
+      "name": "assigned-md: unfiltered search includes only assigned intake",
+      "passed": true,
+      "status": 200,
+      "matches": 1
+    },
+    {
+      "name": "assigned-md: deny other patient patient",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-md: deny other patient response",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-md: deny other patient document",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-md: deny other patient binary",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-md: deny other patient task",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-md: deny other project patient",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-md: deny other project response",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-md: deny other project document",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-md: deny other project binary",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-md: deny other project task",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-md: deny direct intake mutation",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "assigned-md: deny direct task disposition",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "assigned-rd: full assigned intake and source content",
+      "passed": true,
+      "status": 200,
+      "profile": "Practitioner/10d7e54f-949f-4150-866c-c9e5996c42ee",
+      "clinicalFields": 6
+    },
+    {
+      "name": "assigned-rd: unfiltered search includes only assigned intake",
+      "passed": true,
+      "status": 200,
+      "matches": 1
+    },
+    {
+      "name": "assigned-rd: deny other patient patient",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-rd: deny other patient response",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-rd: deny other patient document",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-rd: deny other patient binary",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-rd: deny other patient task",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-rd: deny other project patient",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-rd: deny other project response",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-rd: deny other project document",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-rd: deny other project binary",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-rd: deny other project task",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "assigned-rd: deny direct intake mutation",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "assigned-rd: deny direct task disposition",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "unassigned clinician: positive control on own assigned patient",
+      "passed": true,
+      "status": 200
+    },
+    {
+      "name": "other-client clinician: positive control in own project",
+      "passed": true,
+      "status": 200
+    },
+    {
+      "name": "unassigned-md: deny target clinical patient",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "unassigned-md: deny target clinical response",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "unassigned-md: deny target clinical document",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "unassigned-md: deny target clinical binary",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "unassigned-md: deny target clinical task",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "other-client-md: deny target clinical patient",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "other-client-md: deny target clinical response",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "other-client-md: deny target clinical document",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "other-client-md: deny target clinical binary",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "other-client-md: deny target clinical task",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "administrative-staff: deny target clinical patient",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "administrative-staff: deny target clinical response",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "administrative-staff: deny target clinical document",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "administrative-staff: deny target clinical binary",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "administrative-staff: deny target clinical task",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "administrative staff: sanitized logistics positive control",
+      "passed": true,
+      "status": 200,
+      "matches": 1
+    },
+    {
+      "name": "assigned-md: deny policy modification",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "assigned-md: deny project administration",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "assigned-rd: deny policy modification",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "assigned-rd: deny project administration",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "unassigned-md: deny policy modification",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "unassigned-md: deny project administration",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "administrative-staff: deny policy modification",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "administrative-staff: deny project administration",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "other-client-md: deny policy modification",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "other-client-md: deny project administration",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "anonymous: deny clinical source",
+      "passed": true,
+      "status": 401
+    },
+    {
+      "name": "runtime: clinical persistence positive control and service authorship",
+      "passed": true,
+      "status": 201,
+      "author": "ClientApplication/a8c87a6a-596a-415f-9756-6b4b3caf2df8"
+    },
+    {
+      "name": "runtime: deny AccessPolicy search",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "runtime: deny ProjectMembership search",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "runtime: deny ClientApplication search",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "runtime: deny project administration",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "runtime: deny other-project intake",
+      "passed": true,
+      "status": 404
+    },
+    {
+      "name": "runtime: deny destructive delete",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "role downgrade: existing RD token loses clinical access",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "source storage: unsigned guessed URL denied",
+      "passed": true,
+      "status": 401
+    },
+    {
+      "name": "disable disposable setup client b785e8a7-6ab2-4e79-827a-579839c98601",
+      "passed": true,
+      "status": 200
+    },
+    {
+      "name": "disable disposable setup client 39e65f15-4b5e-42b6-8777-2caeaebf2a2c",
+      "passed": true,
+      "status": 200
+    }
+  ]
+}

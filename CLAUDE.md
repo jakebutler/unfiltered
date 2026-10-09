@@ -1,4 +1,15 @@
 <coding_guidelines>
+# Current rebuild authority — October 9, 2026
+
+Jake approved the Corvo Labs research + independently deployable Corvo Clinic rebuild, with seven clinical intake revisions. `PRODUCT.md` and `DESIGN.md` summarize the accepted direction in this implementation worktree. The full proposal, approval and clinical register currently remain in the primary discovery checkout at `/Volumes/rexy/GitHub/unfiltered/docs/rebuild/design/`; read `APPROVAL.md`, `ARCHITECTURE.md`, `PRODUCT-CONTRACT.md`, `EXPERIENCE.md`, and `CLINICAL-CONTENT.md` (CC-0.2) before changing their boundaries.
+
+Medplum owns clinical data; Convex is preferred for research. Reasoning and vision must use DigitalOcean with explicit models, excluding OpenAI, Anthropic and Arcee even in fallbacks. Existing speech providers are allowed. All seven clinic scenarios plus research remain required. Clinical and research deployment/authority boundaries are separate. Existing credits come first; extra cash up to $25 is a project-wide last resort. No real PHI is authorized.
+
+Work in this isolated implementation checkout. Preserve concurrent clinical-intelligence service work in the primary checkout. Do not load the legacy provider code into rebuilt paths. Local Medplum uses `infra/local/README.md`; never expose its private env files or use bootstrap admin as runtime identity. Qualification results must distinguish local from hosted and deterministic tests from live inference.
+
+The remaining text describes the superseded Cloudflare-first attempt. Its conflicting providers, product scope, architecture and no-resume/no-mobile rules are historical, not current instructions.
+
+---
 # Unfiltered v2 — Codex Context
 
 ## What This Project Is
