@@ -17,7 +17,11 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply unfiltered-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply unfiltered-db --remote",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "foundation:build": "tsc -p tsconfig.foundation.json",
+    "foundation:typecheck": "tsc -p tsconfig.foundation.json --noEmit",
+    "foundation:test": "vitest run --config vitest.foundation.config.mts",
+    "qualify": "npm run foundation:build --silent && node .qualification-build/scripts/qualification/cli.js"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.4",

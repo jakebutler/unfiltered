@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "NodeNext", "moduleResolution": "NodeNext", "strict": true,
+    "esModuleInterop": true, "skipLibCheck": true, "types": ["node"],
+    "rootDir": ".", "outDir": ".qualification-build"
+  },
+  "include": ["packages/clinical-core/src/**/*.ts", "scripts/qualification/**/*.ts"]
+}

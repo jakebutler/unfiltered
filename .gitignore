@@ -51,3 +51,6 @@ worker-configuration.d.ts
 # local agent tooling
 .claude/
 .factory/
+
+# Local clinical boundary qualification build
+.qualification-build/
