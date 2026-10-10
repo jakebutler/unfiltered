@@ -25,7 +25,11 @@
     "clinic:dev": "vite apps/clinic --config apps/clinic/vite.config.ts --host 127.0.0.1",
     "clinic:build": "vite build apps/clinic --config apps/clinic/vite.config.ts",
     "clinic:typecheck": "tsc -p tsconfig.clinic.json",
-    "clinic:api": "npm run foundation:build --silent && node .qualification-build/apps/clinic-server/src/index.js"
+    "clinic:api": "npm run foundation:build --silent && node .qualification-build/apps/clinic-server/src/index.js",
+    "research:dev": "vite apps/research --config apps/research/vite.config.ts --host 127.0.0.1",
+    "research:build": "vite build apps/research --config apps/research/vite.config.ts",
+    "research:typecheck": "tsc -p tsconfig.research.json",
+    "research:test": "vitest run --config apps/research/vitest.config.mts"
   },
   "dependencies": {
     "@convex-dev/auth": "0.0.96",
