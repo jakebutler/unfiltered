@@ -16,7 +16,7 @@ const sourceSchema = z.object({
 const answerSchema = z.object({
   questionId: id,
   state: z.enum(['answered', 'negative', 'unknown', 'declined', 'uncertain', 'not-asked', 'conflicting']),
-  text: text.optional(), sourceIds: z.array(id).max(100),
+  text: text.optional(), sourceIds: z.array(id).max(600),
 }).strict();
 export const submissionSchema = z.object({
   submissionId: id, version: z.number().int().min(1), patient: reference('Patient'),
@@ -24,7 +24,7 @@ export const submissionSchema = z.object({
   questionnaire: z.string().url().max(1000), confirmedAt: z.string().datetime(),
   previous: z.object({ submissionId: id, version: z.number().int().min(1), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional(),
   completeness: z.enum(['complete', 'partial']),
-  sources: z.array(sourceSchema).min(1).max(200), answers: z.array(answerSchema).min(1).max(150),
+  sources: z.array(sourceSchema).min(1).max(600), answers: z.array(answerSchema).min(1).max(150),
   work: z.array(z.object({ id, kind: z.enum(['clinical', 'administrative']), responsibility: z.enum(['nutrition', 'medical', 'administrative']), owner: reference('CareTeam') }).strict()).min(1).max(8),
 }).strict();
 export type Submission = z.infer<typeof submissionSchema>;

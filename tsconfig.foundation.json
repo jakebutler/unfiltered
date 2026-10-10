@@ -5,5 +5,5 @@
     "esModuleInterop": true, "skipLibCheck": true, "types": ["node"],
     "rootDir": ".", "outDir": ".qualification-build"
   },
-  "include": ["packages/clinical-core/src/**/*.ts", "scripts/qualification/**/*.ts"]
+  "include": ["packages/clinical-core/src/**/*.ts", "packages/clinic-content/src/**/*.ts", "packages/clinic-contract/src/**/*.ts", "packages/clinic-api/src/**/*.ts", "packages/speech/src/**/*.ts", "apps/clinic-server/src/**/*.ts", "scripts/qualification/**/*.ts"]
 }

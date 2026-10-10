@@ -54,3 +54,4 @@ worker-configuration.d.ts
 
 # Local clinical boundary qualification build
 .qualification-build/
+/apps/clinic/dist/

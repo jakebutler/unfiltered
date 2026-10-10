@@ -1,0 +1,31 @@
+{
+  "at": "2026-10-10T01:29:59.695Z",
+  "scope": "actual local synthetic Medplum with deliberate bounded transport failure injection",
+  "passed": true,
+  "results": [
+    {
+      "name": "actual Medplum save accepted then response lost reconciles exactly one patient source",
+      "passed": true
+    },
+    {
+      "name": "concurrent real conditional saves allow one turn and reject stale competitor",
+      "passed": true
+    },
+    {
+      "name": "definitively absent prewrite attempt exposes explicit retry of same immutable version",
+      "passed": true,
+      "reference": "a32f6685-209c-4133-82ce-76a09aa00679.v1"
+    },
+    {
+      "name": "accepted native handoff with lost response stays unknown until read recovery without a second write",
+      "passed": true,
+      "reference": "3ac28330-869e-41bb-98e7-7ac90cd2592d.v1",
+      "transactionWrites": 1
+    },
+    {
+      "name": "clinical crisis text in billing pauses collection and administrative source access stays empty",
+      "passed": true,
+      "reference": "021a1223-9c73-4b0f-9e8b-aa2ee4704e3e.v1"
+    }
+  ]
+}

@@ -3,4 +3,6 @@
 .clinic.env
 .clinic-config.json
 .clinic-users.json
+.clinic-api.log
+.clinic-api.pid
 *.receipt.json

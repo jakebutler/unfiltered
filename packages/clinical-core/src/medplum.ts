@@ -4,7 +4,7 @@ import { requestJson, TransportError, type Fetch } from './transport.js';
 
 export interface MedplumConfig { baseUrl: string; accessToken: string; timeoutMs: number; mode: 'local' | 'live'; }
 export type Receipt =
-  | { state: 'received'; digest: string; resources: Record<string, string>; review: 'not-established' }
+  | { state: 'received'; digest: string; resources: Record<string, string>; receivedAt?: string; review: 'not-established' }
   | { state: 'absent' | 'incomplete' | 'unknown' | 'conflict'; digest: string; present: number };
 export interface DeliveryAttempt { receipt: Receipt; write: 'not-attempted' | 'acknowledged' | 'outcome-unknown' | 'rejected'; response?: unknown; }
 export interface AtomicQualification { baseUrl: string; mode: 'local' | 'live'; credentialFingerprint: string; atomicRollback: true; conditionalCreate: true; versionConflict: true; qualifiedAt: string; }
@@ -57,7 +57,12 @@ export class MedplumClient {
       for (const c of plan.components) if (found.has(c.key) && !verifyComponent(c.resource, found.get(c.key)!, refs)) return { state: 'conflict', digest, present: found.size };
       if (!found.size) return { state: 'absent', digest, present: 0 };
       if (found.size !== plan.components.length) return { state: 'incomplete', digest, present: found.size };
-      return { state: 'received', digest, resources: Object.fromEntries(plan.components.map(c => [c.key, `${c.resource.resourceType}/${found.get(c.key)!.id}`])), review: 'not-established' };
+      const responseComponent = plan.components.find(c => c.resource.resourceType === 'QuestionnaireResponse');
+      const meta = responseComponent ? found.get(responseComponent.key)?.meta : undefined;
+      // The immutable response was created with the native handoff. Task updates,
+      // preview creation and later status reads must not move its receipt time.
+      const receivedAt = object(meta) && typeof meta.lastUpdated === 'string' && Number.isFinite(Date.parse(meta.lastUpdated)) ? meta.lastUpdated : undefined;
+      return { state: 'received', digest, resources: Object.fromEntries(plan.components.map(c => [c.key, `${c.resource.resourceType}/${found.get(c.key)!.id}`])), ...(receivedAt ? { receivedAt } : {}), review: 'not-established' };
     } catch (error) {
       return { state: error instanceof ClinicalError && error.code === 'duplicate-conditional-identifier' ? 'conflict' : 'unknown', digest, present: found.size };
     }

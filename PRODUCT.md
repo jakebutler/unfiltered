@@ -31,7 +31,7 @@ Research supports project goals/scripts, prototype context, actual browser recor
 - DigitalOcean hosts reasoning and vision; OpenAI, Anthropic and Arcee models are excluded. Existing speech providers are allowed. Credits come first; at most $25 extra project spend is a last resort after reasonable credit options are exhausted.
 - Free hosting is the synthetic-demo target. A reproducible AWS package is locally validated; this delivery does not authorize real PHI or claim HIPAA compliance.
 - The approved architecture uses separate static React clinic and research apps with a shared fetch-based API boundary. Convex is preferred for research, Medplum for clinical data, and protected object storage for research media.
-- The depression/anxiety instrument choice is pending: sourced PHQ-4 with human review is recommended. Do not silently mark new clinical detail SME-approved.
+- Jake explicitly selected the sourced PHQ-4 configuration with clinician review on October 9: exact items/options, complete-only scoring, and human follow-up. Other newly authored clinical details retain their recorded review status.
 
 ## Brand Commitments
 

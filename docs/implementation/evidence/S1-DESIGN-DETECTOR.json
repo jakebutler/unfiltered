@@ -1,0 +1,93 @@
+[
+  {
+    "antipattern": "overused-font",
+    "name": "Overused font",
+    "description": "Inter, Roboto, Fraunces, Geist, Plus Jakarta Sans, and Space Grotesk are used on so many sites they no longer feel distinctive. Each new wave of AI-generated UIs converges on the same handful of faces. Choose a face that gives your interface personality.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered/apps/clinic/src/styles.css",
+    "line": 1,
+    "snippet": "font-family:Inter",
+    "importedBy": [
+      "main.tsx"
+    ]
+  },
+  {
+    "antipattern": "overused-font",
+    "name": "Overused font",
+    "description": "Inter, Roboto, Fraunces, Geist, Plus Jakarta Sans, and Space Grotesk are used on so many sites they no longer feel distinctive. Each new wave of AI-generated UIs converges on the same handful of faces. Choose a face that gives your interface personality.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered/apps/clinic/src/styles.css",
+    "line": 2,
+    "snippet": "font-family:'Space Grotesk",
+    "importedBy": [
+      "main.tsx"
+    ]
+  },
+  {
+    "antipattern": "overused-font",
+    "name": "Overused font",
+    "description": "Inter, Roboto, Fraunces, Geist, Plus Jakarta Sans, and Space Grotesk are used on so many sites they no longer feel distinctive. Each new wave of AI-generated UIs converges on the same handful of faces. Choose a face that gives your interface personality.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered/apps/clinic/src/styles.css",
+    "line": 17,
+    "snippet": "font-family:'Space Grotesk",
+    "importedBy": [
+      "main.tsx"
+    ]
+  },
+  {
+    "antipattern": "overused-font",
+    "name": "Overused font",
+    "description": "Inter, Roboto, Fraunces, Geist, Plus Jakarta Sans, and Space Grotesk are used on so many sites they no longer feel distinctive. Each new wave of AI-generated UIs converges on the same handful of faces. Choose a face that gives your interface personality.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered/apps/clinic/src/styles.css",
+    "line": 45,
+    "snippet": "font-family:'Space Grotesk",
+    "importedBy": [
+      "main.tsx"
+    ]
+  },
+  {
+    "antipattern": "overused-font",
+    "name": "Overused font",
+    "description": "Inter, Roboto, Fraunces, Geist, Plus Jakarta Sans, and Space Grotesk are used on so many sites they no longer feel distinctive. Each new wave of AI-generated UIs converges on the same handful of faces. Choose a face that gives your interface personality.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered/apps/clinic/src/styles.css",
+    "line": 92,
+    "snippet": "font-family:Inter",
+    "importedBy": [
+      "main.tsx"
+    ]
+  },
+  {
+    "antipattern": "overused-font",
+    "name": "Overused font",
+    "description": "Inter, Roboto, Fraunces, Geist, Plus Jakarta Sans, and Space Grotesk are used on so many sites they no longer feel distinctive. Each new wave of AI-generated UIs converges on the same handful of faces. Choose a face that gives your interface personality.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered/apps/clinic/src/styles.css",
+    "line": 122,
+    "snippet": "font-family:Inter",
+    "importedBy": [
+      "main.tsx"
+    ]
+  },
+  {
+    "antipattern": "overused-font",
+    "name": "Overused font",
+    "description": "Inter, Roboto, Fraunces, Geist, Plus Jakarta Sans, and Space Grotesk are used on so many sites they no longer feel distinctive. Each new wave of AI-generated UIs converges on the same handful of faces. Choose a face that gives your interface personality.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered/apps/clinic/src/styles.css",
+    "line": 172,
+    "snippet": "font-family:Inter",
+    "importedBy": [
+      "main.tsx"
+    ]
+  }
+]

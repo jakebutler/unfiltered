@@ -48,6 +48,19 @@ describe('confirmed clinical domain', () => {
     expect(() => validateSubmission(s, scope(s), { ...changed, version: 'new-content' })).toThrow('content-version-mismatch');
     expect(() => validateSubmission(s, scope(s), { ...changed, approval: { approvedBy: '', approvedAt: '' } })).toThrow('content-not-approved');
   });
+  it('supports a detailed multi-section intake while retaining source-count and total-byte bounds', async () => {
+    const { submission: s } = await fixture();
+    s.completeness = 'partial';
+    const source = s.sources[0];
+    s.sources = Array.from({ length: 600 }, (_, index) => ({ ...source, id: `detail-${index}`, text: 'A short explicit patient detail.' }));
+    s.answers = [{ ...s.answers[0], sourceIds: s.sources.map(item => item.id) }];
+    expect(validateSubmission(s, scope(s), fixtureContent).sources).toHaveLength(600);
+    s.sources.push({ ...source, id: 'overflow' });
+    expect(() => validateSubmission(s, scope(s), fixtureContent)).toThrow('invalid-submission');
+    s.sources.pop();
+    s.sources = s.sources.map(item => ({ ...item, text: 'x'.repeat(1000) }));
+    expect(() => validateSubmission(s, scope(s), fixtureContent)).toThrow('submission-too-large');
+  });
   it('requires trusted per-target sufficiency, not merely a sparse answered string', async () => {
     const f = await fixture();
     expect(() => validateSubmission(f.submission, scope(f.submission), fixtureContent)).toThrow('missing-trusted-sufficiency');

@@ -1,0 +1,78 @@
+{
+  "at": "2026-10-10T01:33:51.427Z",
+  "scope": "actual local synthetic clinic API; not rendered UI or clinical protocol acceptance",
+  "passed": false,
+  "results": [
+    {
+      "name": "identity gate, cookie tampering, origin and unconfirmed access fail closed",
+      "passed": true,
+      "draft": "ad6c5d20-75f7-414d-9e0c-0fe97bf0f7df"
+    },
+    {
+      "name": "durable accepted turn, duplicate ID, changed ID payload, stale revision and reload",
+      "passed": true,
+      "draft": "4ec5c8dd-190f-4a1a-ac8e-857f6e18d176"
+    },
+    {
+      "name": "missing measurements preserve partial handoff and wrong digest cannot confirm",
+      "passed": true,
+      "handoff": "4ec5c8dd-190f-4a1a-ac8e-857f6e18d176.v1",
+      "completeness": "partial"
+    },
+    {
+      "name": "all seven scenarios receive native FHIR handoffs with truthful ownership",
+      "passed": true,
+      "scenarios": 7,
+      "handoffs": [
+        "03014c89-1c4c-41e5-8808-ddd14b49bb3b.v1",
+        "64a00116-fc25-4593-9da5-ddbe30bc7fb7.v1",
+        "8831d399-9d86-40b7-b08d-7bf91635d8bf.v1",
+        "2daf395e-d870-4684-b371-acb15c836964.v1",
+        "300c44bb-1f62-49b6-8cf7-788413f51523.v1",
+        "e6fec89c-cc3a-4c1e-8ffc-8cea5b2dbd0c.v1"
+      ]
+    },
+    {
+      "name": "Dr. Morgan Lee",
+      "passed": true,
+      "queue": 35
+    },
+    {
+      "name": "Sam Patel, RD",
+      "passed": true,
+      "queue": 21
+    },
+    {
+      "name": "named administrative PKCE login and queue",
+      "passed": false,
+      "error": "/api/staff/login: {\"error\":{\"code\":\"try-again-later\",\"message\":\"This action could not be completed. Your saved answers have not been discarded.\",\"retryable\":true}}\n\n429 !== 200\n"
+    },
+    {
+      "name": "RD reads full intake and sources; selecting does not review; medical action denied",
+      "passed": true
+    },
+    {
+      "name": "attributed RD outcome persists to patient; stale work update denied",
+      "passed": true
+    },
+    {
+      "name": "administrative view is logistics-only; closure does not close medical",
+      "passed": false,
+      "error": "Cannot read properties of undefined (reading 'request')"
+    },
+    {
+      "name": "all seven scenarios expose a concrete attributed staff outcome to the patient",
+      "passed": false,
+      "error": "Cannot read properties of undefined (reading 'request')"
+    },
+    {
+      "name": "correction changes digest, keeps prior source and produces versioned amendment",
+      "passed": true,
+      "amendment": "4ec5c8dd-190f-4a1a-ac8e-857f6e18d176.v2"
+    },
+    {
+      "name": "unassigned clinician cannot access target handoff",
+      "passed": true
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "at": "2026-10-10T01:47:08.832Z",
+  "scope": "actual local synthetic clinic API; not rendered UI or clinical protocol acceptance",
+  "passed": false,
+  "results": [
+    {
+      "name": "identity gate, cookie tampering, origin and unconfirmed access fail closed",
+      "passed": true,
+      "draft": "245a95ff-198f-4a24-9d3e-4c278a7ff1f5"
+    },
+    {
+      "name": "durable accepted turn, duplicate ID, changed ID payload, stale revision and reload",
+      "passed": true,
+      "draft": "974d2879-4f35-4a95-99d2-422d7ff93ced"
+    },
+    {
+      "name": "missing measurements preserve partial handoff and wrong digest cannot confirm",
+      "passed": true,
+      "handoff": "974d2879-4f35-4a95-99d2-422d7ff93ced.v1",
+      "completeness": "partial"
+    },
+    {
+      "name": "all seven scenarios receive native FHIR handoffs with truthful ownership",
+      "passed": true,
+      "scenarios": 7,
+      "handoffs": [
+        "5b3335e8-d9d7-435f-9f72-30ecbb607bf8.v1",
+        "453ad7bf-d475-41e9-96dc-8908731dc574.v1",
+        "d2a786f2-dee9-47d0-bc14-0aa82766b36b.v1",
+        "c1cd7bac-8aa6-4ee6-a14c-aeaa678d7ea8.v1",
+        "9b1eb9b8-af02-4753-b638-6647f4baa982.v1",
+        "3eeb7dde-75c0-427d-8c2f-b1ed875e679c.v1"
+      ]
+    },
+    {
+      "name": "Dr. Morgan Lee",
+      "passed": true,
+      "queue": 57
+    },
+    {
+      "name": "Sam Patel, RD",
+      "passed": true,
+      "queue": 35
+    },
+    {
+      "name": "Taylor Brooks",
+      "passed": true,
+      "queue": 34
+    },
+    {
+      "name": "RD reads full intake and sources; selecting does not review; medical action denied",
+      "passed": true
+    },
+    {
+      "name": "attributed RD outcome persists to patient; stale work update denied",
+      "passed": true
+    },
+    {
+      "name": "administrative view is logistics-only; closure does not close medical",
+      "passed": true
+    },
+    {
+      "name": "all seven scenarios expose a concrete attributed staff outcome to the patient",
+      "passed": true,
+      "scenarios": 7
+    },
+    {
+      "name": "correction changes digest, keeps prior source and produces versioned amendment",
+      "passed": false,
+      "error": "/api/clinic/review: {\"error\":{\"code\":\"save-outcome-unknown\",\"message\":\"The save result is not known yet. Check the saved session before retrying.\",\"retryable\":true}}\n\n503 !== 200\n"
+    },
+    {
+      "name": "unassigned clinician cannot access target handoff",
+      "passed": false,
+      "error": "/api/staff/queue: {\"error\":{\"code\":\"service-unavailable\",\"message\":\"This action could not be completed. Your saved answers have not been discarded.\",\"retryable\":true}}\n\n503 !== 200\n"
+    }
+  ]
+}

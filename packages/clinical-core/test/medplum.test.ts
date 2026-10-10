@@ -10,6 +10,19 @@ const config: MedplumConfig = { baseUrl: 'http://127.0.0.1:8103/fhir/R4/', acces
 const qualification = async (): Promise<AtomicQualification> => ({ baseUrl: config.baseUrl, mode: 'local', credentialFingerprint: await digest(config.accessToken), atomicRollback: true, conditionalCreate: true, versionConflict: true, qualifiedAt: '2026-10-09T00:00:00Z' });
 
 describe('Medplum conditional handoff', () => {
+  it('uses only the verified immutable response storage time for receipt time', async () => {
+    const server = mockFhir(); const client = new MedplumClient(config, server.fetcher); const f = await fixture();
+    await client.deliver(f, await qualification());
+    const response = [...server.resources.values()].find(r => r.resourceType === 'QuestionnaireResponse')!;
+    const task = [...server.resources.values()].find(r => r.resourceType === 'Task')!;
+    response.meta = { ...(response.meta as object), lastUpdated: '2026-10-09T10:05:12.345Z' };
+    task.meta = { ...(task.meta as object), lastUpdated: '2026-10-09T12:00:00.000Z' };
+    expect(await client.check(f)).toMatchObject({ state: 'received', receivedAt: '2026-10-09T10:05:12.345Z' });
+    task.meta = { ...(task.meta as object), lastUpdated: '2026-10-10T12:00:00.000Z' };
+    expect(await client.check(f)).toMatchObject({ state: 'received', receivedAt: '2026-10-09T10:05:12.345Z' });
+    response.meta = { versionId: '1' };
+    expect(await client.check(f)).not.toHaveProperty('receivedAt');
+  });
   it('writes one linked immutable handoff and a duplicate call performs no write', async () => {
     const server = mockFhir(); const client = new MedplumClient(config, server.fetcher); const f = await fixture(); const q = await qualification();
     const first = await client.deliver(f, q);

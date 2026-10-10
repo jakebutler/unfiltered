@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-10T01:36:10.449Z",
+  "passed": true,
+  "scope": "actual local synthetic amendment preserves and reconciles original unknown receipt without replacing the pending draft",
+  "original": "174f95b3-422d-4d34-bf14-3fc16faecd63.v1",
+  "amendment": "174f95b3-422d-4d34-bf14-3fc16faecd63.v2",
+  "nativeWrites": 2,
+  "priorReconciliationPreservesRevision": true
+}
