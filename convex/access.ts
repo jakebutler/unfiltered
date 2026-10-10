@@ -1,7 +1,7 @@
 import { getAuthSessionId, getAuthUserId } from '@convex-dev/auth/server';
 import { customCtx, customMutation, customQuery } from 'convex-helpers/server/customFunctions';
 import { mutation, query, type QueryCtx } from './_generated/server';
-import type { Id } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
 import { ConvexError } from 'convex/values';
 
 export function denied(): never { throw new ConvexError('Access unavailable'); }
@@ -37,11 +37,11 @@ export async function hashCapability(token: string) {
 export async function participant(ctx: QueryCtx, token: string) {
   const hash = await hashCapability(token);
   const invite = await ctx.db.query('researchInvitations').withIndex('by_tokenHash', q => q.eq('tokenHash', hash)).unique();
-  if (!invite || invite.revokedAt !== null || invite.expiresAt <= Date.now()) return denied();
+  if (!invite || invite.revokedAt !== null || invite.expiredAt !== undefined || invite.expiresAt <= Date.now()) return denied();
   const { client, project } = await projectFor(ctx, invite.ownerId, invite.clientId, invite.projectId);
   const session = await ctx.db.get(invite.sessionId);
   const study = await ctx.db.get(invite.studyId);
-  if (client.state !== 'active' || project.state !== 'active' || !session || !study || session.studyId !== study._id || session.projectId !== project._id || session.clientId !== client._id || session.retainUntil <= Date.now()) return denied();
+  if (client.state !== 'active' || project.state !== 'active' || !session || !study || session.studyId !== study._id || session.projectId !== project._id || session.clientId !== client._id || !retainsSources(session)) return denied();
   return { invite, session, study, project };
 }
 export function revision(actual: number, expected: number) {
@@ -52,4 +52,9 @@ export function pageSize(size: number) {
 }
 export function pageResult<T>(result: { page: T[]; isDone: boolean; continueCursor: string }) {
   return { page: result.page, isDone: result.isDone, continueCursor: result.continueCursor };
+}
+
+/** Both persisted lifecycle and wall clock deny access while a scheduled job is delayed. */
+export function retainsSources(session: Doc<'researchSessions'>): boolean {
+  return session.retainUntil > Date.now() && (session.retentionState === undefined || session.retentionState === 'retained');
 }

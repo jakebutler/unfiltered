@@ -1,0 +1,50 @@
+{
+  "id": "b2dd6b9e-158a-4532-813e-e9cb4040bcc0",
+  "startedAt": "2026-10-10T03:07:21.453Z",
+  "scope": "isolated-self-hosted-convex",
+  "url": "http://127.0.0.1:3210",
+  "checks": [
+    {
+      "name": "internal fixture is unavailable to participant capability and normal operator",
+      "passed": true
+    },
+    {
+      "name": "live WebSocket subscriptions initially read the scoped session and four immutable sources",
+      "passed": true
+    }
+  ],
+  "subscriptionEvents": [
+    {
+      "query": "participant:resume",
+      "at": 1791601657042,
+      "hadInitialResult": true,
+      "expectedDenial": true
+    }
+  ],
+  "cloudMutations": 0,
+  "providerCalls": 0,
+  "cash": 0,
+  "clientId": "jx7cryas2jz7dye2se9x4s9q1h8g1bzf",
+  "projectId": "k974d7xem0s6rynmtwna91m7ws8g1m1f",
+  "sessionId": "kd719rwavg62ent41f1rmsehnh8g17sc",
+  "invitationId": "k171x6awkkz3aazpe49n4j0yz18g0vmf",
+  "deadlines": {
+    "expiresAt": 1791601657063,
+    "retainUntil": 1791601677063,
+    "sourceCount": 4
+  },
+  "state": "failed",
+  "failure": {
+    "phase": "quiet participant subscription invalidates at scheduled invitation expiry without a client request",
+    "name": "AssertionError"
+  },
+  "postFailureLifecycleState": {
+    "hasConsent": true,
+    "physicalSourceCount": 4,
+    "purgedAt": null,
+    "retentionState": "retained",
+    "sourceCount": 4
+  },
+  "fixtureDisabledAfterRun": true,
+  "finishedAt": "2026-10-10T03:07:37.079Z"
+}

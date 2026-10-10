@@ -1,0 +1,46 @@
+{
+  "id": "fd388aa4-ee34-4a87-ad8a-0ffadfb5ac3a",
+  "startedAt": "2026-10-10T03:05:39.914Z",
+  "scope": "isolated-self-hosted-convex",
+  "url": "http://127.0.0.1:3210",
+  "checks": [
+    {
+      "name": "internal fixture is unavailable to participant capability and normal operator",
+      "passed": true
+    },
+    {
+      "name": "live WebSocket subscriptions initially read the scoped session and four immutable sources",
+      "passed": true
+    },
+    {
+      "name": "quiet participant subscription invalidates at scheduled invitation expiry without a client request",
+      "passed": true,
+      "deniedAt": 1791601555488,
+      "delayAfterDeadlineMs": 75
+    },
+    {
+      "name": "retention schedule survives isolated research backend restart",
+      "passed": true,
+      "isolatedBackendRestarted": true
+    }
+  ],
+  "cloudMutations": 0,
+  "providerCalls": 0,
+  "cash": 0,
+  "clientId": "jx749pk678yzah9we1dtghyya58g1476",
+  "projectId": "k97284p6cgvxf44df8z9557f918g1pd6",
+  "sessionId": "kd70g3avb2j3bh9w2kvn7pd4658g1t73",
+  "invitationId": "k173ymcn3zt5jbbkzjfnw7nba18g0ymq",
+  "deadlines": {
+    "expiresAt": 1791601555413,
+    "retainUntil": 1791601575413,
+    "sourceCount": 4
+  },
+  "state": "failed",
+  "failure": {
+    "phase": "operator source subscription invalidates at retention deadline after reconnect",
+    "name": "AssertionError"
+  },
+  "fixtureDisabledAfterRun": true,
+  "finishedAt": "2026-10-10T03:06:15.429Z"
+}

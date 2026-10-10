@@ -4,6 +4,7 @@ import { v, ConvexError } from 'convex/values';
 import { hashCapability, operator, operatorMutation, operatorQuery, pageResult, pageSize, projectFor } from './access';
 import { paginationOptsValidator } from 'convex/server';
 import { requestId } from '../packages/research-core/src/limits';
+import { scheduleInvitation, scheduleRetention } from './lifecycle';
 import type { Id } from './_generated/dataModel';
 
 const issueArgs = { clientId: v.id('researchClients'), projectId: v.id('researchProjects'), studyVersion: v.number(), requestId: v.string() };
@@ -31,8 +32,10 @@ export const issue = internalMutation({ args: { ...issueArgs, tokenHash: v.strin
   const study = await ctx.db.query('researchStudies').withIndex('by_projectId_and_version', q => q.eq('projectId', project._id).eq('version', args.studyVersion)).unique();
   if (!study) throw new ConvexError('Save the study before inviting');
   const now = Date.now(), expiresAt = now + 7 * 86400000;
-  const sessionId = await ctx.db.insert('researchSessions', { ownerId: member.userId, clientId: client._id, projectId: project._id, studyId: study._id, state: 'invited', revision: 0, nextQuestion: 0, sourceCount: 0, consent: null, consentAt: null, createdAt: now, savedAt: now, retainUntil: now + 30 * 86400000 });
-  const invitationId = await ctx.db.insert('researchInvitations', { ownerId: member.userId, clientId: client._id, projectId: project._id, studyId: study._id, tokenHash: args.tokenHash, sessionId, expiresAt, revokedAt: null, requestId: args.requestId });
+  const sessionId = await ctx.db.insert('researchSessions', { ownerId: member.userId, clientId: client._id, projectId: project._id, studyId: study._id, state: 'invited', revision: 0, nextQuestion: 0, sourceCount: 0, consent: null, consentAt: null, createdAt: now, savedAt: now, retainUntil: now + 30 * 86400000, retentionState: 'retained' });
+  const invitationId = await ctx.db.insert('researchInvitations', { ownerId: member.userId, clientId: client._id, projectId: project._id, studyId: study._id, tokenHash: args.tokenHash, sessionId, expiresAt, revokedAt: null, requestId: args.requestId, lifecycleVersion: 1 });
+  await scheduleInvitation(ctx, (await ctx.db.get(invitationId))!);
+  await scheduleRetention(ctx, (await ctx.db.get(sessionId))!);
   return { invitationId, sessionId, expiresAt, inserted: true };
 } });
 export const revoke = operatorMutation({ args: { clientId: v.id('researchClients'), projectId: v.id('researchProjects'), invitationId: v.id('researchInvitations') }, returns: v.null(), handler: async (ctx, args) => {

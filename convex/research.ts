@@ -1,6 +1,6 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v, ConvexError } from 'convex/values';
-import { clientFor, operatorMutation, operatorQuery, pageResult, pageSize, projectFor, revision } from './access';
+import { clientFor, operatorMutation, operatorQuery, pageResult, pageSize, projectFor, retainsSources, revision } from './access';
 import { clientView, lifecycle, projectView, sessionState, sourcePage, study } from './validators';
 import { assertContextSafe, boundedText, RESEARCH_LIMITS as LIMITS, safeReference } from '../packages/research-core/src/limits';
 
@@ -65,7 +65,7 @@ export const readStudy = operatorQuery({ args: { clientId: v.id('researchClients
 export const sessionSources = operatorQuery({ args: { clientId: v.id('researchClients'), projectId: v.id('researchProjects'), sessionId: v.id('researchSessions'), paginationOpts: paginationOptsValidator }, returns: sourcePage, handler: async (ctx, args) => {
   await projectFor(ctx, ctx.operator.userId, args.clientId, args.projectId); pageSize(args.paginationOpts.numItems);
   const session = await ctx.db.get(args.sessionId);
-  if (!session || session.projectId !== args.projectId || session.clientId !== args.clientId || session.ownerId !== ctx.operator.userId || session.retainUntil <= Date.now()) throw new ConvexError('Access unavailable');
+  if (!session || session.projectId !== args.projectId || session.clientId !== args.clientId || session.ownerId !== ctx.operator.userId || !retainsSources(session)) throw new ConvexError('Access unavailable');
   return pageResult(await ctx.db.query('researchSources').withIndex('by_sessionId_and_sequence', q => q.eq('sessionId', session._id)).paginate(args.paginationOpts));
 } });
 export const sessions = operatorQuery({ args: { clientId: v.id('researchClients'), projectId: v.id('researchProjects'), paginationOpts: paginationOptsValidator }, returns: v.object({ page: v.array(v.object({ sessionId: v.id('researchSessions'), studyId: v.id('researchStudies'), state: sessionState, revision: v.number(), sourceCount: v.number(), savedAt: v.number(), retainUntil: v.number() })), isDone: v.boolean(), continueCursor: v.string() }), handler: async (ctx, args) => {

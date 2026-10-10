@@ -1,10 +1,13 @@
 import { convexTest } from 'convex-test';
-import { describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import schema from '../../../convex/schema';
 import { api, internal } from '../../../convex/_generated/api';
 import { signInProfile } from '../../../convex/auth';
 import { hashCapability } from '../../../convex/access';
 
+// Convex schedules thirty-day retention; fake timers avoid Node's 32-bit timer overflow.
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
 const modules = import.meta.glob('../../../convex/**/*.ts');
 const paginationOpts = { numItems: 10, cursor: null };
 const definition = { title: 'Checkout research', introduction: 'A fictional study.', goals: ['Understand checkout'], script: [{ id: 'q1', question: 'What do you expect here?' }, { id: 'q2', question: 'What was confusing?' }], prototypeUrl: null, repository: null };

@@ -1,9 +1,12 @@
 import { convexTest } from 'convex-test';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import schema from '../../../convex/schema';
 import { api, internal } from '../../../convex/_generated/api';
 import { hashCapability } from '../../../convex/access';
 
+// Convex schedules thirty-day retention; fake timers avoid Node's 32-bit timer overflow.
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
 const modules = import.meta.glob('../../../convex/**/*.ts');
 const paginationOpts = { numItems: 25, cursor: null };
 const consent = { version: 'research-consent-1' as const, storage: true, analysis: true, microphone: false, camera: false, screen: false, shareTranscript: false, shareAudio: false, shareCamera: false, shareScreen: false, retainApprovedExcerpts: false };
