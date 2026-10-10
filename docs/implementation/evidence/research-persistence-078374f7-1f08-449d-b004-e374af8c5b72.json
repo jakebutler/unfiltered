@@ -1,0 +1,13 @@
+{
+  "state": "passed",
+  "qualificationId": "078374f7-1f08-449d-b004-e374af8c5b72",
+  "checkedAt": "2026-10-10T02:39:17.441Z",
+  "isolatedBackendRestarted": true,
+  "sourceCount": 5,
+  "sourceId": "kd795gn94f4m27najh3pkd83658g0pe5:1",
+  "revocationPreserved": true,
+  "operatorLoginPreserved": true,
+  "cloudMutations": 0,
+  "providerCalls": 0,
+  "cash": 0
+}

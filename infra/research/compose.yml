@@ -1,0 +1,28 @@
+name: unfiltered-research-s4
+services:
+  backend:
+    image: ghcr.io/get-convex/convex-backend@sha256:d715e9ec088784407ca4ba2d3db592702cd328d02c76cdca3852c0018f2a76b4
+    stop_signal: SIGINT
+    stop_grace_period: 10s
+    ports:
+      - "127.0.0.1:3210:3210"
+      - "127.0.0.1:3211:3211"
+    volumes:
+      - research-data:/convex/data
+    environment:
+      CONVEX_CLOUD_ORIGIN: http://127.0.0.1:3210
+      CONVEX_SITE_ORIGIN: http://127.0.0.1:3211
+      DISABLE_BEACON: "true"
+      DISABLE_METRICS_ENDPOINT: "true"
+      REDACT_LOGS_TO_CLIENT: "true"
+      RUST_LOG: warn
+      APPLICATION_MAX_CONCURRENT_MUTATIONS: "8"
+      APPLICATION_MAX_CONCURRENT_QUERIES: "8"
+      APPLICATION_MAX_CONCURRENT_V8_ACTIONS: "8"
+      APPLICATION_MAX_CONCURRENT_NODE_ACTIONS: "4"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3210/version"]
+      interval: 5s
+      start_period: 10s
+volumes:
+  research-data:

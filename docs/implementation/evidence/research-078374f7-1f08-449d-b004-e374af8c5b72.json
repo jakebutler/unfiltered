@@ -1,0 +1,93 @@
+{
+  "id": "078374f7-1f08-449d-b004-e374af8c5b72",
+  "startedAt": "2026-10-10T02:38:17.657Z",
+  "scope": "isolated-self-hosted-convex",
+  "url": "http://127.0.0.1:3210",
+  "checks": [
+    {
+      "name": "anonymous operator access denied",
+      "passed": true
+    },
+    {
+      "name": "closed public enrollment",
+      "passed": true
+    },
+    {
+      "name": "wrong password denied",
+      "passed": true
+    },
+    {
+      "name": "native password token resolves named operator",
+      "passed": true
+    },
+    {
+      "name": "cross-client study identifiers denied",
+      "passed": true
+    },
+    {
+      "name": "duplicate invite cannot create another session or recover plaintext",
+      "passed": true
+    },
+    {
+      "name": "issued session retains original immutable study",
+      "passed": true
+    },
+    {
+      "name": "consent is required before accepting answers",
+      "passed": true
+    },
+    {
+      "name": "lost acknowledgement replay preserves one immutable source",
+      "passed": true
+    },
+    {
+      "name": "reused request cannot overwrite prior source",
+      "passed": true
+    },
+    {
+      "name": "stale revision cannot advance interview",
+      "passed": true
+    },
+    {
+      "name": "source pages are bounded and correction retains original text",
+      "passed": true
+    },
+    {
+      "name": "new client resumes durable paused session and next question",
+      "passed": true
+    },
+    {
+      "name": "completed session has readable operator sources",
+      "passed": true
+    },
+    {
+      "name": "wrong client cannot read a completed source",
+      "passed": true
+    },
+    {
+      "name": "revocation terminates capability read and mutation",
+      "passed": true
+    },
+    {
+      "name": "concurrent different answers admit exactly one revision",
+      "passed": true
+    },
+    {
+      "name": "concurrent exact replay returns the same receipt",
+      "passed": true
+    },
+    {
+      "name": "sign out immediately revokes old access token at domain boundary",
+      "passed": true
+    }
+  ],
+  "cloudMutations": 0,
+  "providerCalls": 0,
+  "cash": 0,
+  "state": "passed",
+  "clientId": "jx736t1wsbg8kkkb078jzb5wmd8g11c0",
+  "projectId": "k977zxmnkq1dsynyxbg54fpz118g0xt1",
+  "sessionId": "kd795gn94f4m27najh3pkd83658g0pe5",
+  "sourceId": "kd795gn94f4m27najh3pkd83658g0pe5:1",
+  "finishedAt": "2026-10-10T02:38:18.705Z"
+}
