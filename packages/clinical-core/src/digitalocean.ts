@@ -7,6 +7,7 @@ export const DO_MODELS = ['glm-5.3-flash', 'qwen3.8-max'] as const;
 const configSchema = z.object({
   endpoint: z.literal(DO_ENDPOINT), apiKey: z.string().min(1).max(4096), model: z.enum(DO_MODELS),
   timeoutMs: z.number().int().min(100).max(60000), maxOutputTokens: z.number().int().min(1).max(4096),
+  responseFormat: z.enum(['text', 'json']).optional(),
 }).strict();
 export type DigitalOceanConfig = z.infer<typeof configSchema>;
 const messageSchema = z.object({ role: z.enum(['system', 'user', 'assistant']), content: z.union([
@@ -28,7 +29,7 @@ export function digitalOcean(config: DigitalOceanConfig, fetcher: Fetch = fetch)
     async generate(messages: InferenceMessage[]) {
       const parsedMessages = inputSchema.safeParse(messages);
       if (!parsedMessages.success) throw new ClinicalError('invalid-inference-input');
-      const body = JSON.stringify({ model: c.model, messages: parsedMessages.data, max_tokens: c.maxOutputTokens, stream: false });
+      const body = JSON.stringify({ model: c.model, messages: parsedMessages.data, max_tokens: c.maxOutputTokens, stream: false, ...(c.responseFormat === 'json' ? { response_format: { type: 'json_object' } } : {}) });
       if (new TextEncoder().encode(body).byteLength > 1_000_000) throw new ClinicalError('inference-input-too-large');
       const result = await requestJson(fetcher, `${c.endpoint}/v1/chat/completions`, { method: 'POST', headers: { Authorization: `Bearer ${c.apiKey}`, 'Content-Type': 'application/json' }, body }, c.timeoutMs, 256000);
       const data = responseSchema.safeParse(result.body);

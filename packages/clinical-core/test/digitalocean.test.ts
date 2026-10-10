@@ -23,6 +23,12 @@ describe('DigitalOcean strict route', () => {
     expect(() => digitalOcean({ ...config, apiKey: '' })).toThrow('invalid-inference-configuration');
     expect(() => digitalOcean({ ...config, fallback: 'gpt-5' } as DigitalOceanConfig)).toThrow('invalid-inference-configuration');
   });
+  it('requests native JSON output only when configured and rejects unsupported formats', async () => {
+    const fetcher = vi.fn<Fetch>().mockResolvedValue(response());
+    await digitalOcean({ ...config, responseFormat: 'json' }, fetcher).generate([{ role: 'user', content: 'Return JSON' }]);
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).response_format).toEqual({ type: 'json_object' });
+    expect(() => digitalOcean({ ...config, responseFormat: 'auto' } as unknown as DigitalOceanConfig)).toThrow('invalid-inference-configuration');
+  });
   it('rejects a substituted response model or truncated generation', async () => {
     await expect(digitalOcean(config, async () => response('qwen3.8-max')).generate([{ role: 'user', content: 'x' }])).rejects.toThrow('inference-model-mismatch');
     await expect(digitalOcean(config, async () => response(config.model, 'length')).generate([{ role: 'user', content: 'x' }])).rejects.toThrow('inference-incomplete-output');
