@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useConvex } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import {
@@ -10,6 +10,7 @@ import {
   SourceList,
 } from "./components";
 import { usePages, useRead } from "./data";
+import { ResearchCapture, type CaptureControls } from "./ResearchCapture";
 import {
   CAPABILITY_KEY,
   clearSessionItem,
@@ -146,6 +147,7 @@ function Interview({
   forget: () => void;
 }) {
   const convex = useConvex();
+  const captureControls = useRef<CaptureControls | null>(null);
   const sources = usePages(api.participant.sources, { token });
   const [draft, setDraft] = useState("");
   const [draftQuestion, setDraftQuestion] = useState(session.question?.id);
@@ -221,6 +223,7 @@ function Interview({
     setError("");
     setSaved("");
     try {
+      if (state !== "active") await captureControls.current?.stop();
       await convex.mutation(api.participant.transition, {
         token,
         expectedRevision: session.revision,
@@ -326,6 +329,7 @@ function Interview({
         <Consent session={session} pending={blocked} agree={agree} />
       ) : (
         <>
+          <ResearchCapture token={token} session={session} controls={captureControls} refresh={refresh} />
           {leave && (
             <section className="confirmation">
               <h2>Pause and leave this interview?</h2>
@@ -397,7 +401,7 @@ function Interview({
           ) : (
             <>
               <div className="interview-toolbar">
-                <span>Text interview · no device recording</span>
+                <span>Text interview · recording is optional</span>
                 <button
                   className="text-button"
                   disabled={busy}
@@ -416,8 +420,8 @@ function Interview({
                     Open the study prototype
                   </a>
                   <span>
-                    Opens in a separate tab. No screen or page activity is
-                    captured.
+                    Opens in a separate tab. Choose optional screen sharing
+                    or controlled page activity below to record it.
                   </span>
                 </p>
               )}
@@ -681,8 +685,8 @@ function Consent({
       >
         <h2>Before we begin</h2>
         <p>
-          This is a text interview. Your browser will not be asked for
-          microphone, camera or screen access.
+          Begin with text. Optional microphone, camera, screen sharing and
+          controlled page activity each need a separate choice during the interview.
         </p>
         <fieldset disabled={pending}>
           <legend>Required to take part</legend>
@@ -737,7 +741,7 @@ function Consent({
         </fieldset>
         <p className="muted">
           These choices permit storage, analysis or future sharing; they do not
-          publish anything. Device recording is not part of this interview.
+          publish anything. You can complete the interview without device recording.
         </p>
         <button disabled={pending || !storage || !analysis}>
           {pending ? "Saving your choices…" : "Agree and start interview"}
@@ -762,7 +766,7 @@ function ConsentSummary({ session }: { session: Participant }) {
         <DateTime value={session.expiresAt} />
       </dd>
       <dt>Device capture</dt>
-      <dd>No microphone, camera or screen recording</dd>
+      <dd>{(["microphone", "camera", "screen", "dom"] as const).filter(mode => session.consent?.[mode]).join(", ") || "No device or page activity recording permitted"}</dd>
       <dt>Transcript sharing with the client</dt>
       <dd>
         {session.consent?.shareTranscript

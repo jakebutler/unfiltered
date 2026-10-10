@@ -11,6 +11,10 @@
 import type * as access from "../access.js";
 import type * as auth from "../auth.js";
 import type * as bootstrap from "../bootstrap.js";
+import type * as capture from "../capture.js";
+import type * as captureGateway from "../captureGateway.js";
+import type * as captureLifecycle from "../captureLifecycle.js";
+import type * as captureValidators from "../captureValidators.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as invitations from "../invitations.js";
@@ -30,6 +34,10 @@ declare const fullApi: ApiFromModules<{
   access: typeof access;
   auth: typeof auth;
   bootstrap: typeof bootstrap;
+  capture: typeof capture;
+  captureGateway: typeof captureGateway;
+  captureLifecycle: typeof captureLifecycle;
+  captureValidators: typeof captureValidators;
   crons: typeof crons;
   http: typeof http;
   invitations: typeof invitations;

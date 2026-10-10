@@ -5,6 +5,7 @@ import { pageResult, pageSize, participant, revision } from './access';
 import { consent, sessionState, sourcePage } from './validators';
 import { boundedText, requestId, RESEARCH_LIMITS as LIMITS } from '../packages/research-core/src/limits';
 import type { Doc } from './_generated/dataModel';
+import { conversationCaptureTransition } from './capture';
 
 const tokenArg = { token: v.string() };
 const changeArgs = { ...tokenArg, expectedRevision: v.number() };
@@ -69,5 +70,6 @@ export const transition = mutation({ args: { ...changeArgs, state: v.union(v.lit
   const { session, study } = await participant(ctx, args.token); revision(session.revision, args.expectedRevision);
   if (!session.consent || !['active', 'paused'].includes(session.state)) throw new ConvexError('Session is closed for changes');
   if (args.state === 'completed' && session.nextQuestion !== study.definition.script.length) throw new ConvexError('Choose partial completion when questions remain');
+  await conversationCaptureTransition(ctx, session, args.state);
   await ctx.db.patch(session._id, { state: args.state, savedAt: Date.now(), revision: session.revision + 1 }); return session.revision + 1;
 } });

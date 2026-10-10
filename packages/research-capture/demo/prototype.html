@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Northstar demo checkout</title>
+<style>body{font:18px system-ui;max-width:640px;margin:64px auto;padding:24px;background:#f7f6f2;color:#183e35}button,input{font:inherit;padding:12px;border:1px solid #46665d;border-radius:6px}button{background:#183e35;color:white;cursor:pointer}label{display:block;margin:24px 0}aside{font-size:14px;color:#456258;margin-bottom:32px}</style>
+<aside>Fictional research prototype · no purchases or personal information</aside><h1>Your everyday carry</h1><p>Canvas day bag · $48</p><label>Delivery <select id="delivery"><option>Standard · 3–5 business days · free</option><option>Express · 1–2 business days · $8</option></select></label><button id="review">Review order</button><p id="result" aria-live="polite"></p>
+<script type="module">
+import { instrumentPrototype } from '../src/dom.ts';
+document.querySelector('#review').onclick = () => document.querySelector('#result').textContent = 'Your demo order is ready to review. No purchase will be made.';
+let stop;
+addEventListener('message', event => {
+  // Demo receiver is fixed to the local research app; deployment must replace this
+  // exact origin. Never accept a caller-provided origin or wildcard target.
+  if (event.origin !== 'http://127.0.0.1:5174' || event.source !== opener) return;
+  if (event.data?.type === 'corvo-dom-stop') { stop?.(); stop = undefined; return; }
+  if (event.data?.type !== 'corvo-dom-connect' || stop) return;
+  stop = instrumentPrototype({ receiver: opener, receiverOrigin: event.origin, challenge: event.data.challenge, offsetMs: event.data.offsetMs, startSequence: event.data.startSequence, components: new Map([[document.querySelector('#delivery'), 'c1'], [document.querySelector('#review'), 'c2']]) });
+});
+</script></html>

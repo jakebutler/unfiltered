@@ -4,6 +4,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { usePages, useRead } from "./data";
+import { CaptureSources, PrototypeAuthorization } from "./CaptureSources";
 import { useNavigationGuard, useStudyDraftProtection } from "./navigation";
 import { DateTime, Field, Notice, Pages, SourceList } from "./components";
 import {
@@ -244,6 +245,7 @@ function StudyWorkspace({
           onSaved={setVersion}
         />
       )}
+      {study.data?.definition.prototypeUrl && <PrototypeAuthorization key={study.data.studyId} scope={scope} studyId={study.data.studyId} prototypeUrl={study.data.definition.prototypeUrl} active={active} />}
     </>
   );
 }
@@ -934,6 +936,7 @@ function Sessions({ scope }: { scope: Scope }) {
               ) : (
                 <>
                   <SourceList sources={sources.rows} />
+                  <CaptureSources key={session.sessionId} scope={{ ...scope, sessionId: session.sessionId }} />
                   <Pages {...sources} />
                   {!sources.loading &&
                     !sources.rows.length &&

@@ -5,6 +5,7 @@ export const sessionState = v.union(v.literal('invited'), v.literal('active'), v
 export const consent = v.object({
   version: v.literal('research-consent-1'), storage: v.boolean(), analysis: v.boolean(),
   microphone: v.boolean(), camera: v.boolean(), screen: v.boolean(),
+  dom: v.optional(v.boolean()),
   shareTranscript: v.boolean(), shareAudio: v.boolean(), shareCamera: v.boolean(), shareScreen: v.boolean(),
   retainApprovedExcerpts: v.boolean(),
 });

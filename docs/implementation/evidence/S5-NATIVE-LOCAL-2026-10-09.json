@@ -1,0 +1,83 @@
+{
+  "id": "c9a17f32-75ab-4b86-8843-7f48d0af6d26",
+  "state": "passed",
+  "startedAt": "2026-10-10T04:45:55.817Z",
+  "scope": "isolated-local-research-capture",
+  "syntheticBytes": true,
+  "realBrowserMedia": false,
+  "deployment": "http://127.0.0.1:3210",
+  "bindOrigin": "http://127.0.0.1:8789",
+  "checks": [
+    {
+      "name": "native operator login and synthetic participant consent",
+      "passed": true
+    },
+    {
+      "name": "native reserve and incorrect checksum retain one recoverable logical segment",
+      "passed": true,
+      "mediaId": "mh72ydmmwq8f1cc0r0zh779fkd8g12ve",
+      "attempt": 0,
+      "nativePutStatus": 409
+    },
+    {
+      "name": "failed attempt survives gateway crash and rotates only after lease and old-key fence",
+      "passed": true,
+      "gatewayCrashed": true,
+      "successorAttempt": 1,
+      "sourceIdentityPreserved": true,
+      "reservedBytesPreserved": true,
+      "staleFinalizeDenied": true
+    },
+    {
+      "name": "authenticated native read, byte range and isolation boundaries",
+      "passed": true,
+      "authenticatedDigestMatches": true,
+      "rangeBytes": 20,
+      "anonymousDenied": true,
+      "otherClientDenied": true,
+      "wrongOriginDenied": true,
+      "missingOriginMetadataFacadeRead": true,
+      "normalizedWrongBearerDenied": true,
+      "reconciliationWithoutReupload": true
+    },
+    {
+      "name": "available bytes and authenticated read survive owned gateway restart",
+      "passed": true
+    },
+    {
+      "name": "withdrawal during actual HTTP body consumption ends the next protected chunks",
+      "passed": true,
+      "receivedBytes": 256000,
+      "reservedBytes": 4000000,
+      "bodyTerminated": true,
+      "subsequentReadDenied": true,
+      "stillConsentedCameraReadable": true
+    },
+    {
+      "name": "persisted withdrawal while gateway is offline is retired by startup cleanup",
+      "passed": true,
+      "persistedIntentSeenWhileOffline": true,
+      "startupWorkerRetirementConfirmed": true,
+      "currentAndPriorAttemptMarkersPreserved": true,
+      "lateConditionalWritesDenied": true
+    },
+    {
+      "name": "retirement remains permanent after another gateway restart",
+      "passed": true,
+      "persistedFilesystemRetirement": true,
+      "withdrawnNativeReadDenied": true
+    }
+  ],
+  "cloudMutations": 0,
+  "providerCalls": 0,
+  "cash": 0,
+  "fixture": {
+    "clientId": "jx74wmphq3ty9a2bysghrs1fgd8g1d4n",
+    "projectId": "k97b5sb89my2csz5j45cr2warn8g1x4h",
+    "sessionId": "kd7e2wpw0m1hh76k6fs1m746ps8g13r4",
+    "invitationId": "k17d8jedbz94z0xmbenv27d4jh8g1s27"
+  },
+  "ownedGatewayStopped": true,
+  "operatorSignedOut": true,
+  "finishedAt": "2026-10-10T04:47:06.600Z"
+}

@@ -17,7 +17,7 @@ export async function scheduleInvitation(ctx: MutationCtx, row: Doc<'researchInv
   await ctx.scheduler.runAt(row.expiresAt, internal.lifecycle.expireInvitation, { ...scopeOf(row), invitationId: row._id, sessionId: row.sessionId, expiresAt: row.expiresAt });
 }
 export async function scheduleRetention(ctx: MutationCtx, row: Doc<'researchSessions'>): Promise<void> {
-  await ctx.scheduler.runAt(row.retainUntil, internal.lifecycle.purgeSources, { ...scopeOf(row), sessionId: row._id, retainUntil: row.retainUntil });
+  await ctx.scheduler.runAt(row.withdrawnAt !== undefined ? Date.now() : row.retainUntil, internal.lifecycle.purgeSources, { ...scopeOf(row), sessionId: row._id, retainUntil: row.retainUntil });
 }
 
 /** A persisted change invalidates quiet subscriptions that already read this invitation. */
@@ -36,7 +36,7 @@ export const purgeSources = internalMutation({
   args: retentionArgs, returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.sessionId);
-    if (!row || !matchesScope(row, args) || row.retainUntil !== args.retainUntil || row.retentionState === 'purged' || row.retainUntil > Date.now()) return null;
+    if (!row || !matchesScope(row, args) || row.retainUntil !== args.retainUntil || row.retentionState === 'purged' || row.retainUntil > Date.now() && row.withdrawnAt === undefined) return null;
     const sources = await ctx.db.query('researchSources').withIndex('by_sessionId_and_sequence', q => q.eq('sessionId', row._id)).take(BATCH);
     for (const source of sources) await ctx.db.delete(source._id);
     const complete = sources.length < BATCH;
@@ -90,7 +90,7 @@ export const sweepRetention = internalMutation({
   handler: async ctx => {
     const due = await ctx.db.query('researchSessions').withIndex('by_retentionState_and_retainUntil', q => q.eq('retentionState', 'retained').lte('retainUntil', Date.now())).take(BATCH / 2);
     // Read before changing due rows, so one sweep does not enqueue the same session twice.
-    const interrupted = await ctx.db.query('researchSessions').withIndex('by_retentionState_and_retainUntil', q => q.eq('retentionState', 'purging').lte('retainUntil', Date.now())).take(BATCH / 2);
+    const interrupted = await ctx.db.query('researchSessions').withIndex('by_retentionState_and_retainUntil', q => q.eq('retentionState', 'purging')).take(BATCH / 2);
     for (const row of due) {
       await ctx.db.patch(row._id, { retentionState: 'purging', revision: row.revision + 1 });
       await scheduleRetention(ctx, row);
