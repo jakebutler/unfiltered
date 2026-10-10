@@ -1,0 +1,56 @@
+{
+  "id": "SP-Q1",
+  "startedAt": "2026-10-10T01:36:19.181Z",
+  "state": "round-trip-received-needs-human-review",
+  "reservation": {
+    "elevenlabsCharacters": 250,
+    "deepgramCreditsUsd": 0.05,
+    "cashUsd": 0
+  },
+  "syntheticText": "This is a fictional patient for testing. My last measured weight was two hundred thirty pounds in August. I estimate two hundred thirty five now. I want my care team to review this before making any treatment decision.",
+  "noRetries": true,
+  "operations": [
+    {
+      "provider": "elevenlabs",
+      "operation": "tts",
+      "model": "eleven_flash_v2_5",
+      "voice": {
+        "id": "JBFqnCBsd6RMkjVDRZzb",
+        "name": "George - Warm, Captivating Storyteller"
+      },
+      "characters": 218,
+      "state": "received",
+      "startedAt": "2026-10-10T01:36:20.078Z",
+      "status": 200,
+      "providerRequestId": "aBfIoJtCcltTBDhZ46zr",
+      "durationMs": 829,
+      "bytes": 51009,
+      "sha256": "1bbc60dae9de011a0ead4be828d828c0515fb60dd94f63dd6c20c915ffbe2455"
+    },
+    {
+      "provider": "deepgram",
+      "operation": "stt",
+      "model": "nova-3",
+      "state": "received",
+      "startedAt": "2026-10-10T01:36:20.909Z",
+      "status": 200,
+      "providerRequestId": "01a12374-366d-7822-b0a5-b44c4b7b4af9",
+      "durationMs": 548,
+      "audioDurationSeconds": 12.6955,
+      "transcript": "This is a fictional patient for testing. My last measured weight was two hundred thirty pounds in August. I estimate two hundred thirty five now. I want my care team to review this before making any treatment decision.",
+      "confidence": 1
+    }
+  ],
+  "elevenlabsBefore": {
+    "tier": "free",
+    "used": 0,
+    "limit": 10000,
+    "canExtend": false
+  },
+  "elevenlabsAfter": {
+    "used": 0,
+    "limit": 10000,
+    "canExtend": false
+  },
+  "finishedAt": "2026-10-10T01:36:21.962Z"
+}
