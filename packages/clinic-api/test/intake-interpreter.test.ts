@@ -454,3 +454,38 @@ describe('intake-interpreter-v1 grounded replies and clarification pointers', ()
     expect(answers(outcome, 'Q01').reason).toMatchObject({ state: 'known', value: 'more energy; to sleep better' });
   });
 });
+
+describe('intake-interpreter-v1 list identity and cycle guard', () => {
+  it('a restated list item updates the existing item instead of adding a duplicate; mother never matches grandmother', () => {
+    const first = context('I tried WW.', ['Q05', 'Q10']);
+    const saved = { ...first.responses,
+      Q05: { presented: true, answers: { approaches: { state: 'known' as const, sourceIds: [first.source.id], items: [{ id: 'aold_0', sourceIds: [first.source.id], answers: { approach: { state: 'known' as const, value: 'WW', sourceIds: [first.source.id] } } }] } } },
+      Q10: { presented: true, answers: { familyHistory: { state: 'known' as const, sourceIds: [first.source.id], items: [{ id: 'aold_1', sourceIds: [first.source.id], answers: { condition: { state: 'known' as const, value: 'diabetes', sourceIds: [first.source.id] }, relationship: { state: 'known' as const, value: 'grandmother', sourceIds: [first.source.id] } } }] } } } };
+    const ctx = nextTurn({ ...first, responses: saved }, { responses: saved } as unknown as AdaptiveOutcome, 'The WW program was in 2022. My mother has diabetes too.');
+    const outcome = interpretIntakeResponse({ ...empty, items: [
+      { topic: 'Q05', list: 'approaches', existing: null, fields: [{ field: 'approach', state: 'known', value: 'the WW program', quote: 'The WW program' }, { field: 'period', state: 'known', value: 'in 2022', quote: 'in 2022' }] },
+      { topic: 'Q10', list: 'familyHistory', existing: null, fields: [{ field: 'relationship', state: 'known', value: 'mother', quote: 'My mother' }, { field: 'condition', state: 'known', value: 'diabetes', quote: 'has diabetes' }] },
+    ] }, ctx);
+    expect(itemsOf(outcome, 'Q05', 'approaches')).toHaveLength(1);
+    expect(itemsOf(outcome, 'Q05', 'approaches')[0].answers.period).toMatchObject({ state: 'known', value: 'in 2022' });
+    expect(itemsOf(outcome, 'Q10', 'familyHistory')).toHaveLength(2);
+  });
+
+  it('never shows the same question a third time within six prompts, even when every turn is unresolved', async () => {
+    const f = handlerFixture({ interpret: async ctx => ({ outcome: { responses: ctx.responses, updates: [], provenance: [], acts: [], sourceId: ctx.source.id, hasUnresolvedInterpretation: true,
+      clarifications: [{ topicId: 'Q01', path: 'reason', reason: 'conflict' as const, evidence: [] }] } as AdaptiveOutcome, receipt: { requestId: 'p', model: 'qwen3.8-max', evidenceProtocol: 'intake-interpreter-v1' as const } }) });
+    await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
+    let session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
+    const shown: string[] = [session.currentPrompt!.text];
+    for (let turn = 0; turn < 7; turn++) {
+      const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text: `Answer number ${turn}.`, channel: 'text' });
+      const applied = await f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+      session = applied.body.session;
+      if (session.currentPrompt) shown.push(session.currentPrompt.text);
+    }
+    for (let start = 0; start + 6 <= shown.length; start++) {
+      const window = shown.slice(start, start + 6);
+      for (const text of window) expect(window.filter(entry => entry === text).length, text).toBeLessThanOrEqual(2);
+    }
+  });
+});

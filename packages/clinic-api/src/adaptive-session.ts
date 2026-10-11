@@ -355,7 +355,20 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             Object.assign(result, { updates: outcome.updates, provenance: outcome.provenance, clarifications: outcome.clarifications, ...(outcome.coveredCandidates ? { coveredCandidates: outcome.coveredCandidates } : {}), ...(outcome.unresolvedQuestions ? { unresolvedQuestions: outcome.unresolvedQuestions } : {}), ...(outcome.unmapped ? { unmapped: outcome.unmapped } : {}), ...(outcome.rejectedCandidates ? { rejectedCandidates: outcome.rejectedCandidates } : {}), hasUnresolvedInterpretation: outcome.hasUnresolvedInterpretation, resultDigest: await digest(outcome) });
             content.synchronize(n);
             outcome = { ...outcome, responses: n.topics };
-            n.adaptive!.exchange = selectAdaptiveDialogue({ ...context, nativeRouting: content.nativeNavigation(n) }, outcome);
+            const dialogueContext = { ...context, nativeRouting: content.nativeNavigation(n) };
+            n.adaptive!.exchange = selectAdaptiveDialogue(dialogueContext, outcome);
+            // Interpreter path: never show the same question a third time in a short window (including A/B cycles).
+            // Park that topic for now and continue with others; its gaps stay visible in review.
+            const recentPrompts = n.turns.filter(turn => turn.role === 'assistant').slice(-6).map(turn => turn.text);
+            const parked = new Set<string>();
+            for (let guard = 0; interpreter && guard < 5; guard++) {
+                const cycling = n.adaptive!.exchange.prompt;
+                if (!cycling || cycling.kind === 'instrument' || recentPrompts.filter(text => text === cycling.text).length < 2) break;
+                parked.add(cycling.topicId);
+                const remaining = outcome.clarifications.filter(item => !parked.has(item.topicId));
+                n.adaptive!.exchange = selectAdaptiveDialogue({ ...dialogueContext, topics: dialogueContext.topics.filter(topic => !parked.has(topic.id)), dialogue: { ...dialogueContext.dialogue, activeTopicId: undefined, suspended: undefined, lastUnsuccessful: undefined } },
+                    { ...outcome, clarifications: remaining, hasUnresolvedInterpretation: remaining.length > 0 });
+            }
             // A guarded acknowledgement precedes the next AUTHORED question; approved replies always win.
             if (outcome.acknowledgement && !n.adaptive!.exchange.reply && n.adaptive!.exchange.prompt && n.adaptive!.exchange.status === 'question')
                 n.adaptive!.exchange.reply = { id: `ack-${outcome.sourceId}`, text: outcome.acknowledgement };

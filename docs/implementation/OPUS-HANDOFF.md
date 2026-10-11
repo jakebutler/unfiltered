@@ -2,7 +2,7 @@
 
 > **Later the same day:**
 > - All work is committed on `codex/unfiltered-foundation` and open as draft PR #7.
-> - Hosted now runs deployment `dpl_JnT84ru5vqugxD9YCiueBr96SfEY`.
+> - Hosted now runs deployment `dpl_2F9eveSeA6PSk2GDw6ew53DQbCXs`.
 > - **Topic avoidance is recorded explicitly.** The displayed detail is declined, with the patient's words, and the topic stops as `patient-declines`. Staff see "Patient preferred not to discuss this topic. Consider a gentle follow-up." A plain skip is `patient-moves-on`. Facts in the same message are kept.
 > - **Conflict loop fixed.** A compound answer no longer becomes a conflict, and any answer to a conflicting field resolves it.
 > - **"Move on or come back" can no longer loop.**

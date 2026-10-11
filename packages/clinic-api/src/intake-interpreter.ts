@@ -292,6 +292,13 @@ function ackGrounded(ack: string, source: string): boolean {
   return (norm(ack).toLowerCase().match(/[a-z0-9']+/g) ?? []).every(word => ackFrame.has(word) || said.has(word) || said.has(word.replace(/'s$/, '')) || said.has(word.replace(/s$/, '')));
 }
 const pointerAnswer = /\b(?:(?:the )?(?:first|second|last|earlier|previous|original|other) (?:thing|one|answer|statement|version)|keep (?:it|that|the (?:first|second|earlier|original|last))|what i said (?:first|before|earlier))\b/i;
+/** Restating an item ("WW" then "the WW program") must not create a duplicate; names match case-insensitively or by containment. */
+function sameItemName(saved: string, proposed: string): boolean {
+  const a = saved.toLowerCase(), b = proposed.toLowerCase();
+  // Whole words only, so "mother" never matches "grandmother".
+  const within = (outer: string, inner: string) => inner.length >= 2 && new RegExp(`(?:^|[^a-z0-9])${inner.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[^a-z0-9])`).test(outer);
+  return a === b || within(a, b) || within(b, a);
+}
 const avoidanceWords = /\b(?:rather not|prefer not|(?:don't|do not|dont) (?:want|wish|like) to|not comfortable|uncomfortable|not ready|too personal|private|off limits)\b/i;
 const moveOnWords = /\b(?:skip|move on|next question|rather not|prefer not|(?:don't|do not) want to|not comfortable|pass)\b/i;
 const ackForbidden = /\b(?:dose|dosing|diagnos\w*|prescri\w*|eligib\w*|should take|should stop|recommend\w*|stop taking|normal|healthy|risk|safe|unsafe|treat\w*|cure)\b|\?/i;
@@ -654,7 +661,7 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     if (!itemId) {
       const keys = keyField[listPath] ?? [definition.fields?.[0]?.id ?? ''];
       const proposed = (key: string) => { const field = usable.find(entry => entry.field.field === key && entry.field.state === 'known'); return typeof field?.field.value === 'string' ? norm(field.field.value) : undefined; };
-      if (keys.every(key => proposed(key))) itemId = existingItems.find(item => keys.every(key => { const answer = item.answers[key]; return answer?.state === 'known' && typeof answer.value === 'string' && norm(answer.value) === proposed(key); }))?.id;
+      if (keys.every(key => proposed(key))) itemId = existingItems.find(item => keys.every(key => { const answer = item.answers[key]; return answer?.state === 'known' && typeof answer.value === 'string' && sameItemName(norm(answer.value), proposed(key)!); }))?.id;
     }
     const created = !itemId;
     if (!itemId) {
