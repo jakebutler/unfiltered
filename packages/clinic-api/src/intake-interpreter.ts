@@ -693,6 +693,13 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     outcome.updates.push({ topicId: t.id, path: listPath, answer: response(t.id).answers[listPath]! });
     outcome.provenance.push({ topicId: t.id, path: listPath, evidence: spans, transform: 'explicit-list-completion', sourceText: quoteOf(spans) });
   }
+  // "Would you rather move on or come back to this?" must never loop: a reply that adds nothing moves on,
+  // exactly like the guided Skip control. The patient can still add answers from review.
+  const engagement = context.displayed?.promptId === '__engagement-choice' ? context.displayed.topicId : undefined;
+  if (engagement && !stopTopics.size && !outcome.updates.some(update => update.topicId === engagement)) {
+    const spans = locateQuote(context, sourceText.trim());
+    if (spans) { stopTopics.add(engagement); moveOnSpans = spans; outcome.acts.push({ kind: 'move-on', targetTopicId: engagement, evidence: spans }); }
+  }
   // Avoidance is clinically meaningful: record the displayed detail as declined with the patient's words, as guided
   // "I'd rather not say" does, and stop the topic as patient-declines. A plain skip only moves on.
   for (const id of stopTopics) {

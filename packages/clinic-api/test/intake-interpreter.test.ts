@@ -407,3 +407,22 @@ describe('intake-interpreter-v1 conflicts', () => {
     expect(outcome.clarifications).toEqual([]);
   });
 });
+
+describe('intake-interpreter-v1 engagement choice', () => {
+  it('moves on when the reply to "move on or come back" adds nothing, so the prompt cannot loop', () => {
+    const base = context("Let's come back to it later.", ['Q02', 'Q03']);
+    const ctx = { ...base, displayed: { topicId: 'Q02', promptId: '__engagement-choice', targetPaths: ['onset'] } };
+    const outcome = interpretIntakeResponse({ ...empty }, ctx);
+    expect(outcome.responses.Q02).toMatchObject({ stopped: 'patient-moves-on' });
+    expect(outcome.acts).toEqual([expect.objectContaining({ kind: 'move-on', targetTopicId: 'Q02' })]);
+  });
+
+  it('keeps a real answer given at the engagement choice instead of moving on', () => {
+    const base = context('It started about two months ago.', ['Q02']);
+    const ctx = { ...base, displayed: { topicId: 'Q02', promptId: '__engagement-choice', targetPaths: ['onset'] },
+      responses: { Q02: { presented: true, answers: { concern: { state: 'known' as const, value: 'tired all the time', sourceIds: [base.source.id] } } } } };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q02', field: 'onset', state: 'known', value: 'about two months ago', quote: 'about two months ago' }] }, ctx);
+    expect(outcome.responses.Q02?.stopped).toBeUndefined();
+    expect(answers(outcome, 'Q02').onset).toMatchObject({ state: 'known', value: 'about two months ago' });
+  });
+});
