@@ -129,7 +129,8 @@ it.each(scenarios)('%s projects sufficient self-report into one frozen review/ha
 it.each(scenarios)('%s preserves partial unknown source and allows explicit Stop/review recovery without retry', async scenario => {
   const f = fixture(scenario);
   const result = await f.send("I don't know, and I'd rather move on.", (context, manifest) => {
-    const draft = blank(manifest), target = manifest.targets.find(target => target.kind === 'text')!, ev = address(context, context.source.text);
+    // A new-item target requires its own item key; this partial-unknown probe uses a scalar text target.
+    const draft = blank(manifest), target = manifest.targets.find(target => target.kind === 'text' && !target.newItem)!, ev = address(context, context.source.text);
     draft.claims = [{ targetId: target.id, itemKey: null, state: 'unknown', value: null, valueEvidence: null, evidence: [ev], scope: { subject: 'patient', entity: null, period: null, predicate: ev }, correctsSourceIds: [] }];
     draft.acts = [{ kind: 'move-on', targetTopicId: target.topicId, replyId: null, evidence: [ev] }]; return draft;
   });
@@ -301,5 +302,8 @@ it('scenario-wide catalog is measured, excludes instruments, and refuses excessi
   }
   // Exact measured baseline is pinned after the first run, below the declared
   // upper budget; exceeding it is a failed context, never target truncation.
-  expect(counts).toEqual({ 'first-intake': 115, 'pre-visit': 22, 'non-visit': 54, 'post-visit': 20, billing: 9, scheduling: 16, refill: 18 });
+  // Re-pinned 2026-10-11: the scenario catalog legitimately grew. The first-intake
+  // delta (+16) matches the growth of the G7 domain catalog measured in
+  // DO-AF37-PREFLIGHT.json (66+38 -> 79+41 fields), so this is content growth, not truncation.
+  expect(counts).toEqual({ 'first-intake': 131, 'pre-visit': 24, 'non-visit': 57, 'post-visit': 22, billing: 9, scheduling: 16, refill: 20 });
 });

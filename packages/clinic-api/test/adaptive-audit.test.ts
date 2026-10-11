@@ -8,9 +8,10 @@ import type { ClinicApiConfig, Draft, StoredDraft } from '../src/types.js';
 import { fact, proposal } from './fixtures/adaptive.js';
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 const receipt: AdaptiveProposalReceipt = { requestId: 'audit-provider-receipt', model: 'offline-test', evidenceProtocol: 'contextual-handles-v4', manifest: { id: 'bound', sha256: 'manifest-hash' } };
+const patient = { reference: 'Patient/audit', displayName: 'Synthetic Patient', description: 'Synthetic only', careTeams: { medical: 'CareTeam/md', nutrition: 'CareTeam/rd', administrative: 'CareTeam/admin' } };
 
 function fixture(proposer: AdaptiveProposer, timeoutMs = 1000) {
-  const content = conversation({ mentalHealth: 'phq4' } as ClinicApiConfig), service = adaptiveSession(content, proposer, { timeoutMs });
+  const content = conversation({ mentalHealth: 'phq4', patients: { 'first-intake': patient } } as ClinicApiConfig), service = adaptiveSession(content, proposer, { timeoutMs });
   const draft: Draft = service.initialize({ schema: 1, id: 'audit-session', patient: 'Patient/audit', scenario: 'first-intake', revision: 0, savedAt: '2026-10-09T12:00:00Z', createdAt: '2026-10-09T12:00:00Z', phase: 'conversation', turns: [], topics: {}, requests: {}, version: 1 });
   let saved: StoredDraft = { resource: { resourceType: 'DocumentReference', id: 'draft', meta: { versionId: '0' } }, draft };
   const store: AdaptiveDraftStore = {

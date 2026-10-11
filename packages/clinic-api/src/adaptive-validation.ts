@@ -616,7 +616,7 @@ function validateValueAdaptiveProposal(raw: unknown, context: AdaptiveContext): 
   };
   const facts = proposal.facts.map(field => semantic(field, field.topicId, field.path));
   const newItems = proposal.newItems.map((item, index) => ({ ...item, fields: item.fields.map(field => {
-    const path = `${item.collection}[a${Array.from(context.source.id).map(char => char.codePointAt(0)!.toString(16)).join('_')}_${index}].${field.path}`;
+    const path = `${item.collection}[a${context.source.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 40)}_${index}].${field.path}`;
     const fact = semantic(field, item.topicId, path);
     const { topicId: _topicId, ...child } = fact;
     return { ...child, path: field.path };
@@ -754,8 +754,8 @@ export function validateAdaptiveProposal(raw: unknown, context: AdaptiveContext)
     if (current.stopped || stopTopics.has(t.id) || t.presentation === 'C' && current.applicability !== 'applicable') {
       outcome.clarifications.push({ topicId: t.id, path: item.collection, reason: current.stopped || stopTopics.has(t.id) ? 'stopped-topic' : 'condition-unresolved', evidence: item.fields.flatMap(field => field.evidence) }); return;
     }
-    // Codepoints avoid lossy sanitization collisions. Identity comes from a server source ID, never model key.
-    const itemId = `a${Array.from(context.source.id).map(char => char.codePointAt(0)!.toString(16)).join('_')}_${index}`;
+    // Identity comes from a server source ID, never model key. Sanitized to the capture item-id schema (same as dialogue.ts).
+    const itemId = `a${context.source.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 40)}_${index}`;
     responses[t.id] = addCollectionItem(t, current, { path: item.collection, itemId, sourceIds: [context.source.id] }, evidence);
     const fields = [...item.fields].sort((a, b) => (['name', 'term'].includes(a.path) ? -10 : 0) - (['name', 'term'].includes(b.path) ? -10 : 0) + Number(!!adaptiveSlot(t, response(t.id), `${item.collection}[${itemId}].${a.path}`).definition.when) - Number(!!adaptiveSlot(t, response(t.id), `${item.collection}[${itemId}].${b.path}`).definition.when));
     for (const field of fields) applyFact({ ...field, topicId: t.id, path: `${item.collection}[${itemId}].${field.path}` });

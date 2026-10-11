@@ -56,7 +56,7 @@ it('keeps explicit family ownership through admission and stored readback withou
 });
 it('stores explicit full-mode35s deadline while legacy retains15s execution plus5s recovery grace',async()=>{
   for(const fullCapture of [true,false]){
-    const now=Date.now(),ctx=fullCaseContext('R1'),content=conversation({mentalHealth:'phq4',patients:{}} as ClinicApiConfig);
+    const now=Date.now(),ctx=fullCaseContext('R1'),content=conversation({mentalHealth:'phq4',patients:{'first-intake':{reference:ctx.binding.patient,displayName:'Synthetic Patient',description:'Synthetic only',careTeams:{medical:'CareTeam/md',nutrition:'CareTeam/rd',administrative:'CareTeam/admin'}}}} as ClinicApiConfig);
     let entered!:()=>void,finish!:(value:{draft:unknown})=>void;const started=new Promise<void>(r=>{entered=r;}),tail=new Promise<{draft:unknown}>(r=>{finish=r;});
     const api=adaptiveSession(content,undefined,{now:()=>now,timeoutMs:45000,fullCapture,streamProposer:{propose:async()=>{entered();return tail;}}});
     const initial=api.initialize({schema:1,id:ctx.binding.sessionId,patient:ctx.binding.patient,scenario:'first-intake',revision:0,createdAt:new Date(now).toISOString(),savedAt:new Date(now).toISOString(),phase:'conversation',turns:[],topics:{},requests:{},version:1} as Draft);

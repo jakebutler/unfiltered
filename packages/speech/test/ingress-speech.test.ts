@@ -41,7 +41,9 @@ describe('shared speech upgrade admission placement', () => {
   it.each(['ingress-socket-busy', 'ingress-outcome-unknown'])('does not upgrade or dispatch on %s', async code => {
     const reserve = vi.fn(async () => { throw new ApiFailure(code, code.endsWith('unknown') ? 503 : 429); });
     const f = await fixture(reserve), browser = f.browser();
-    await expect(browser.opened).rejects.toThrow(); expect(reserve).toHaveBeenCalledOnce();
+    await expect(browser.opened).rejects.toThrow();
+    // Busy is a proven pre-reservation denial, retried with the 6-step backoff (1 + 6 calls); unknown outcome is never retried.
+    expect(reserve).toHaveBeenCalledTimes(code === 'ingress-socket-busy' ? 7 : 1);
     expect(f.connect).not.toHaveBeenCalled(); expect(f.providerReserve).not.toHaveBeenCalled();
   });
   it('releases shared capacity only after observed native socket closure', async () => {

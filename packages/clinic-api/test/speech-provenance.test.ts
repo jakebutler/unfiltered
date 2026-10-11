@@ -3,7 +3,7 @@ import { conversation } from '../src/conversation.js';
 import { handoffs, type Snapshot } from '../src/handoffs.js';
 import { decodeDocument, document, saveDraft, DRAFT_SYSTEM, SNAPSHOT_SYSTEM } from '../src/store.js';
 import { digest, validateSubmissionIntegrity } from '../../clinical-core/src/domain.js';
-import { planHandoff } from '../../clinical-core/src/fhir.js';
+import { planHandoff, resolveReferences, type FhirResource } from '../../clinical-core/src/fhir.js';
 import type { MedplumClient } from '../../clinical-core/src/medplum.js';
 import type { SourceChannel } from '../../clinic-contract/src/index.js';
 import type { ClinicApiConfig, Draft, StoredDraft } from '../src/types.js';
@@ -76,11 +76,23 @@ describe('immutable speech provenance through confirmation and handoff', () => {
     const draft = answer(fresh(), 'More energy.');
     draft.preview = await content.preview(draft); draft.phase = 'review';
     const final = await content.finalize(draft);
-    const snapshot: Snapshot = { schema: 1, id: draft.id, patient: draft.patient, patientName: patient.displayName, scenario: draft.scenario, confirmation: final.confirmation, topics: final.topics };
+    const snapshot: Snapshot = { schema: 2, deliveryContract: 'conditional-resumable-v1', id: draft.id, patient: draft.patient, patientName: patient.displayName, scenario: draft.scenario, confirmation: final.confirmation, topics: final.topics };
     const resource = { ...document(SNAPSHOT_SYSTEM, `${draft.id}.v1`, draft.patient, snapshot), id: 'snapshot' };
+    // Anchored source and response components as the real handoff writes them (planned resources, source reference rewritten to the anchor version).
+    const plan = await planHandoff(final.confirmation);
+    const sourceAnchor = 'DocumentReference/source-anchor', responseAnchor = 'QuestionnaireResponse/response-anchor';
+    const anchorReferences = new Map([[plan.components[0].fullUrl, `${sourceAnchor}/_history/1`]]);
+    const atVersion = (component: FhirResource): FhirResource => ({ ...resolveReferences(component, anchorReferences), meta: { ...(component.meta as Record<string, unknown>), versionId: '1' } });
+    const anchored: Record<string, FhirResource> = { [sourceAnchor]: atVersion(plan.components[0].resource), [responseAnchor]: atVersion(plan.components[1].resource) };
     const client = {
-      request: vi.fn(async (path: string) => ({ body: path.startsWith('Task/') ? { resourceType: 'Task', id: 'work', meta: { versionId: '1' } } : path.includes('?') ? { resourceType: 'Bundle', type: 'searchset', total: 1, entry: [{ resource }] } : resource })),
-      check: vi.fn(async () => ({ state: 'received', digest: final.digest, resources: Object.fromEntries(final.confirmation.submission.work.map(w => [`${draft.id}.v1.work.${w.id}`, `Task/${w.id}`])) })),
+      request: vi.fn(async (path: string) => ({ body: path.includes('?') ? { resourceType: 'Bundle', type: 'searchset', total: 1, entry: [{ resource }] } : resource })),
+      history: vi.fn(async () => [resource]),
+      versionRead: vi.fn(async (reference: string) => reference === 'DocumentReference/snapshot' ? resource : anchored[reference]),
+      // Work Tasks are not part of this probe, so the receipt is incomplete while source and response are anchored.
+      check: vi.fn(async () => ({ state: 'incomplete', digest: final.digest, present: 2, resources: {}, verifiedWork: [], anchors: {
+        source: { reference: sourceAnchor, version: '1', hash: await digest(anchored[sourceAnchor]) },
+        response: { reference: responseAnchor, version: '1', hash: await digest(anchored[responseAnchor]) },
+      } })),
     } as unknown as MedplumClient;
     const staff = { membershipId: 'md', profile: 'Practitioner/md', policy: 'AccessPolicy/clinical', name: 'Synthetic MD', role: 'physician' as const, patients: [draft.patient], careTeams: [patient.careTeams.medical] };
     const view = await handoffs(config).view(client, client, staff, `${draft.id}.v1`);

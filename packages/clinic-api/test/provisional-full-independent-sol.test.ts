@@ -63,8 +63,9 @@ it('does not replay an old provisional closure over a later directly reopened li
   let d = draft(); medicine(d, 1, true);
   const before = projectProvisional(d, [topic]).responses.Q08;
   expect(before.answers.medicines?.complete).toBe(true);
-  const content = conversation({ mentalHealth: 'phq4', patients: {} } as ClinicApiConfig);
-  d = content.turn(content.select(d, 'Q08', 'medicines'), { promptId: 'Q08:medicines', action: 'answer', text: '__add', channel: 'text' });
+  const patient = { reference: 'Patient/test', displayName: 'Synthetic Patient', description: 'Synthetic only', careTeams: { medical: 'CareTeam/md', nutrition: 'CareTeam/rd', administrative: 'CareTeam/admin' } };
+  const content = conversation({ mentalHealth: 'phq4', patients: { 'first-intake': patient } } as ClinicApiConfig);
+  d = content.turn(content.select(d, 'Q08', 'medicines'), { requestId: crypto.randomUUID(), expectedRevision: d.revision, promptId: 'Q08:medicines', action: 'answer', text: '__add', channel: 'text' });
   expect(d.topics.Q08.answers.medicines?.complete).toBe(false);
   const p = projectProvisional(d, [topic]);
   expect(p.responses.Q08.answers.medicines?.complete).toBe(false);

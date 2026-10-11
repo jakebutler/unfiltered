@@ -51,8 +51,9 @@ function fixture(proposer: AdaptiveProposer = { propose: vi.fn(async ctx => good
             if (failure) { if (failure === 'after-read-loss') failedReads = 1; throw new TransportError('network'); }
             return { body: structuredClone(resource) };
         },
-        async check() { return { state: 'unknown', present: 0 }; },
-        deliver: vi.fn(async () => ({ receipt: { state: 'unknown', present: 0 }, write: 'outcome-unknown' })),
+        // Real MedplumClient receipts always carry the full DeliveryProgress shape, even when unknown or incomplete.
+        async check(confirmation: { digest: string }) { return { state: 'unknown', digest: confirmation.digest, present: 0, resources: {}, anchors: {}, verifiedWork: [] }; },
+        deliver: vi.fn(async (confirmation: { digest: string }) => ({ receipt: { state: 'unknown', digest: confirmation.digest, present: 0, resources: {}, anchors: {}, verifiedWork: [] }, write: 'outcome-unknown' })),
     };
     const runtime = async () => ({ client, qualification: {} } as unknown as Runtime);
     const makeHandler = () => createClinicHandler(config, { runtime, ...(options.available === false ? {} : { adaptiveProposer: proposer }), adaptiveTimeoutMs: options.timeoutMs, adaptiveNow: options.now });

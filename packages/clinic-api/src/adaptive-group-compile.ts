@@ -242,7 +242,8 @@ export function validateAdaptiveGroupProposal(raw: unknown, context: AdaptiveCon
   // Always run the unchanged guard over the combined surviving proposal: isolated
   // preflights are not acceptance, coverage, or a substitute for conflict checks.
   let outcome = guard(proposal);
-  const sourceCode = Array.from(context.source.id).map(char => char.codePointAt(0)!.toString(16)).join('_');
+  // Must match dialogue.ts and adaptive-validation.ts; capture item ids are limited to ^[A-Za-z0-9_-]{1,64}$.
+  const sourceCode = context.source.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 40);
   const failed = new Map<string, string>();
   for (const group of parsed.groups) {
     if (group.scope === 'patient' || group.scope.mode !== 'new') continue;

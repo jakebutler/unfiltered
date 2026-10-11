@@ -179,7 +179,8 @@ export function selectAdaptiveGroupDialogue(context: AdaptiveContext, groups: Va
 /** Exact production exclusions, also exposed for offline eligibility qualification. */
 export function adaptiveGroupRejectedTargets(context: AdaptiveContext, groups: ValidatedAdaptiveGroups): RejectedTarget[] {
   assertValidatedAdaptiveGroups(context, groups);
-  const sourceCode = Array.from(context.source.id).map(char => char.codePointAt(0)!.toString(16)).join('_');
+  // Must match adaptive-validation.ts and adaptive-group-compile.ts; capture item ids are limited to ^[A-Za-z0-9_-]{1,64}$.
+  const sourceCode = context.source.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 40);
   const targets: RejectedTarget[] = groups.semanticRejections.filter(rejection => {
     if (groups.sourceProtocol !== 'scoped-groups-v7' || rejection.topicId !== 'Q03' || rejection.reason !== 'unscoped-response' || adaptiveHistoryWindowUncertainty(context, rejection.path)) return true;
     const scopes = adaptiveHistoryScopes(context, rejection.evidence);

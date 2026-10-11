@@ -95,7 +95,8 @@ describe('independent v4 semantic counterexamples', () => {
 
 describe('independent durable unmapped result', () => {
   it('survives serialized draft readback and a new session service, with reason and spans covered by result digest', async () => {
-    const content = conversation({ mentalHealth: 'phq4' } as ClinicApiConfig);
+    const patient = { reference: 'Patient/review', displayName: 'Synthetic Patient', description: 'Synthetic only', careTeams: { medical: 'CareTeam/md', nutrition: 'CareTeam/rd', administrative: 'CareTeam/admin' } };
+    const content = conversation({ mentalHealth: 'phq4', patients: { 'first-intake': patient } } as ClinicApiConfig);
     let captured: ReturnType<typeof apply> | undefined;
     const proposer = { propose: async (ctx: AdaptiveContext) => {
       const m = createAdaptiveManifest(ctx), raw = wire(m, { facts: [fact(m, 'Q01', 'reason', 'More energy')], unmapped: [{ evidence: span(m, 'The other issue is hard to explain.'), reason: 'ambiguous' }] });
