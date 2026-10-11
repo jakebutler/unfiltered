@@ -6,6 +6,7 @@ import type { Id } from '../../../convex/_generated/dataModel';
 import { api } from '../../../convex/_generated/api';
 import { usePages } from './data';
 import { DateTime, Field, Notice, Pages } from './components';
+import { readPrivateRecording } from './private-recording';
 import { CAPTURE_LIMITS } from '../../../packages/research-capture/src/contracts';
 type Scope = { clientId: Id<'researchClients'>; projectId: Id<'researchProjects'>; sessionId: Id<'researchSessions'> };
 type Media = FunctionReturnType<typeof api.capture.media>['page'][number];
@@ -30,24 +31,23 @@ function PrivatePlayer({ scope, row }: { scope: Scope; row: Media }) {
   const active = useRef<AbortController | null>(null);
   const object = useRef<string | null>(null);
   const player = useRef<HTMLMediaElement | null>(null);
-  function clear() { active.current?.abort(); active.current = null; player.current?.pause(); if (object.current) URL.revokeObjectURL(object.current); object.current = null; setUrl(null); }
+  function clear() { active.current?.abort(); active.current = null; player.current?.pause(); if (object.current) URL.revokeObjectURL(object.current); object.current = null; setUrl(null); setLoading(false); }
   useEffect(() => { clear(); return clear; }, [token, row.id, scope.clientId, scope.projectId, scope.sessionId]);
   async function load() {
     clear(); setLoading(true); setError(''); const controller = new AbortController(); active.current = controller;
     try {
       if (!token || row.descriptor.bytes > CAPTURE_LIMITS.segmentBytes) throw new Error('Access unavailable');
       const params = new URLSearchParams(scope);
-      const response = await fetch(`/capture/media/${encodeURIComponent(row.id)}?${params}`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal, cache: 'no-store', referrerPolicy: 'same-origin' });
-      if (!response.ok || Number(response.headers.get('Content-Length')) !== row.descriptor.bytes) throw new Error('Source unavailable');
-      const reader = response.body?.getReader(); if (!reader) throw new Error('Source unavailable');
-      const parts: Uint8Array[] = []; let bytes = 0;
-      try { while (true) { const next = await reader.read(); if (next.done) break; bytes += next.value.byteLength; if (bytes > row.descriptor.bytes) throw new Error('Source exceeds its receipt'); parts.push(next.value); } } finally { await reader.cancel().catch(() => undefined); }
-      if (bytes !== row.descriptor.bytes || controller.signal.aborted || active.current !== controller) throw new Error('Source incomplete');
+      const parts = await readPrivateRecording(`/capture/media/${encodeURIComponent(row.id)}?${params}`, token, row.descriptor.bytes, controller);
+      if (controller.signal.aborted || active.current !== controller) return;
       object.current = URL.createObjectURL(new Blob(parts as BlobPart[], { type: row.descriptor.mime })); setUrl(object.current);
-    } catch { if (!controller.signal.aborted) setError('This source could not be opened. Refresh recordings to check current access.'); }
+    } catch {
+      if (active.current === controller && controller.signal.reason?.name === 'TimeoutError') setError('Opening this recording timed out. Refresh recordings to check access before trying again.');
+      else if (active.current === controller && !controller.signal.aborted) setError('This source could not be opened. Refresh recordings to check current access.');
+    }
     finally { if (active.current === controller) setLoading(false); }
   }
-  return <div className="private-player">{url ? <>{row.descriptor.modality === 'microphone' ? <audio ref={element => { player.current = element; }} controls src={url} preload="metadata" /> : <video ref={element => { player.current = element; }} controls src={url} preload="metadata" playsInline />}<button className="text-button" onClick={clear}>Close source</button><p className="muted">This bounded source is loaded into this tab. Closing it releases the local playback copy.</p></> : <button className="secondary" disabled={loading || !token} onClick={() => void load()}>{loading ? 'Opening private source…' : 'Open recording source'}</button>}{error && <Notice error>{error}</Notice>}</div>;
+  return <div className="private-player">{url ? <>{row.descriptor.modality === 'microphone' ? <audio ref={element => { player.current = element; }} controls src={url} preload="metadata" /> : <video ref={element => { player.current = element; }} controls src={url} preload="metadata" playsInline />}<button className="text-button" onClick={clear}>Close source</button><p className="muted">This bounded source is loaded into this tab. Closing it releases the local playback copy.</p></> : <button className="secondary" disabled={loading || !token} onClick={() => void load()}>{loading ? 'Opening private source…' : 'Open recording source'}</button>}{loading && <button className="text-button" onClick={clear}>Cancel opening</button>}{error && <Notice error>{error}</Notice>}</div>;
 }
 export function PrototypeAuthorization({ scope, studyId, prototypeUrl, active }: { scope: Omit<Scope, 'sessionId'>; studyId: Id<'researchStudies'>; prototypeUrl: string; active: boolean }) {
   const convex = useConvex();

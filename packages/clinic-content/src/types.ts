@@ -8,7 +8,7 @@ export type AnswerState = 'known' | 'negative' | 'unknown' | 'declined' | 'uncer
 export type Scalar = string | number | boolean | { readonly feet: number; readonly inches: number };
 type Evidence = { readonly sourceIds: readonly string[] };
 export type SlotAnswer =
-  | (Evidence & { readonly state: 'known'; readonly value: Scalar; readonly items?: never })
+  | (Evidence & { readonly state: 'known'; readonly value: Scalar; readonly items?: never; readonly reusedFrom?: { readonly topicId: 'Q06' | 'Q07'; readonly path: string } })
   | (Evidence & { readonly state: 'known'; readonly items: readonly { readonly id: string; readonly answers: SlotAnswers }[]; readonly complete: boolean; readonly value?: never })
   | (Evidence & { readonly state: Exclude<AnswerState, 'known' | 'not-asked'>; readonly note?: string })
   | { readonly state: 'not-asked'; readonly sourceIds?: readonly [] };
@@ -21,6 +21,8 @@ export interface SlotDefinition {
   readonly promptIds: readonly string[];
   readonly choices?: readonly (string | number | boolean)[];
   readonly acceptsNegative?: boolean;
+  /** A component absence cannot establish whole composite absence through extraction. Guided explicit none remains allowed. */
+  readonly extractionNegativeScope?: 'composite';
   readonly acceptsNotApplicable?: boolean;
   readonly acceptsUncertain?: boolean;
   readonly fields?: readonly SlotDefinition[];
@@ -47,6 +49,10 @@ export interface TopicResponse {
 export interface EvidenceContext {
   /** Patient-scoped, validated source IDs from the server; not arbitrary client assertions. */
   readonly validSourceIds: ReadonlySet<string>;
+  /** Trusted final-review authority for this exact fact, never source-wide trust. */
+  readonly reviewedFact?: (topicId: string, path: string, answer: SlotAnswer) => boolean;
+  readonly reviewedSourceAccountedFor?: (sourceId: string) => boolean;
+  readonly topicId?: string;
 }
 export interface SlotReadiness {
   readonly id: string;

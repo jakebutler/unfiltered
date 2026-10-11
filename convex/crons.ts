@@ -6,4 +6,6 @@ crons.interval('Research lifecycle backfill', { minutes: 1 }, internal.lifecycle
 crons.interval('Research invitation expiry recovery', { minutes: 1 }, internal.lifecycle.sweepInvitations, {});
 crons.interval('Research source retention recovery', { minutes: 1 }, internal.lifecycle.sweepRetention, {});
 crons.interval('Research capture and upload recovery', { minutes: 1 }, internal.captureLifecycle.sweep, {});
+crons.interval('Research report expiry and viewer cleanup', { minutes: 1 }, internal.researchReportLifecycle.sweep, {});
+crons.interval('Research hosted durable object retirement', { minutes: 1 }, internal.researchGatewayLeases.cleanupTick, {});
 export default crons;

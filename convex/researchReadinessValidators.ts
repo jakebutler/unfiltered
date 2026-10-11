@@ -1,0 +1,14 @@
+import { v } from 'convex/values';
+export const capability = v.union(v.literal('scripted-text'), v.literal('goal-aware-interview'), v.literal('voice'), v.literal('private-capture'), v.literal('analysis'), v.literal('screen-baseline'), v.literal('controlled-dom'));
+export const savedScope = v.object({ clientId: v.id('researchClients'), projectId: v.id('researchProjects'), studyId: v.id('researchStudies'), studyVersion: v.number() });
+export const capacity = v.object({ interviewCalls: v.number(), speechSeconds: v.number(), speechCharacters: v.number(), captureBytes: v.number(), analysisCalls: v.number() });
+const model = v.union(v.literal('qwen3.8-max'), v.literal('glm-5.3-flash'), v.null());
+const gate = { enabled: v.boolean(), qualified: v.boolean() };
+export const runtimeFacts = v.object({ revision: v.string(), configurationDigest: v.string(), observedAt: v.number(), interview: v.object({ ...gate, model }), voice: v.object(gate), capture: v.object({ ...gate, gatewayAllocationId: v.union(v.string(), v.null()), cleanupAllocationId: v.optional(v.string()) }), analysis: v.object({ ...gate, model }), screenBaselineQualified: v.boolean() });
+export const command = v.object({ scope: savedScope, expectedRevision: v.string(), capability, enabled: v.boolean(), requestId: v.string() });
+export const snapshot = v.object({ scope: savedScope, revision: v.string(), runtimeConfigurationDigest: v.optional(v.string()), observedAt: v.number(), validUntil: v.optional(v.number()), expiresAt: v.union(v.number(), v.null()), fallback: v.string(), capabilities: v.array(v.object({ id: capability, label: v.string(), state: v.union(v.literal('off'), v.literal('setup-required'), v.literal('ready'), v.literal('exhausted'), v.literal('unresolved')), reason: v.string(), allowances: v.array(v.object({ remaining: v.number(), unit: v.union(v.literal('requests'), v.literal('calls'), v.literal('seconds'), v.literal('characters'), v.literal('bytes'), v.literal('storage-operations')), expiresAt: v.number() })), canEnable: v.boolean(), canDisable: v.boolean() })), deploymentAllowances: v.optional(v.array(v.object({ remaining: v.number(), unit: v.union(v.literal('requests'), v.literal('bytes'), v.literal('storage-operations')), expiresAt: v.number() }))), envelope: v.optional(v.object({ name: v.string(), expiresAt: v.number(), committed: capacity, remainingUncommitted: capacity })) });
+export const receipt = v.object({ requestId: v.string(), command, state: v.union(v.literal('accepted'), v.literal('denied')), reason: v.string(), snapshot });
+export const child = {
+  interviewPolicyId: v.union(v.id('researchInterviewPolicy'), v.null()), speechGrantId: v.union(v.id('researchSpeechGrants'), v.null()),
+  captureByteLimit: v.number(), captureBytesCharged: v.number(), analysisCallLimit: v.number(), analysisCallsCharged: v.number(),
+};

@@ -40,10 +40,11 @@ export const purgeSources = internalMutation({
     const sources = await ctx.db.query('researchSources').withIndex('by_sessionId_and_sequence', q => q.eq('sessionId', row._id)).take(BATCH);
     for (const source of sources) await ctx.db.delete(source._id);
     const complete = sources.length < BATCH;
+    await ctx.scheduler.runAfter(0, internal.researchReportLifecycle.invalidateSession, { sessionId: row._id, cursor: null });
     // Metadata-only tombstone. No transcript, source excerpt, consent choices, or request IDs.
     // savedAt is left as the last participant activity, rather than pretending deletion was a response.
     await ctx.db.patch(row._id, {
-      retentionState: complete ? 'purged' : 'purging',
+      retentionState: complete ? 'purged' : 'purging', finalReview: undefined, currentPrompt: undefined, followUps: undefined, pendingInterview: undefined, lastInterviewRecovery: undefined,
       ...(complete ? { purgedAt: Date.now() } : {}),
       consent: null, consentAt: null, nextQuestion: 0,
       sourceCount: complete ? 0 : Math.max(0, row.sourceCount - sources.length),

@@ -13,7 +13,7 @@ describe('DigitalOcean strict route', () => {
     expect(init?.redirect).toBe('error');
     expect(JSON.parse(String(init?.body))).toMatchObject({ model: config.model, max_tokens: 128, stream: false });
   });
-  it.each(['gpt-5', 'anthropic/claude', 'arcee-ai/trinity', 'glm-5.3', 'auto'])('rejects excluded or unapproved model %s before network access', model => {
+  it.each(['gpt-5', 'anthropic/claude', 'arcee-ai/trinity', 'glm-5.2', 'auto'])('rejects excluded or unapproved model %s before network access', model => {
     const fetcher = vi.fn<Fetch>();
     expect(() => digitalOcean({ ...config, model } as DigitalOceanConfig, fetcher)).toThrow('invalid-inference-configuration');
     expect(fetcher).not.toHaveBeenCalled();

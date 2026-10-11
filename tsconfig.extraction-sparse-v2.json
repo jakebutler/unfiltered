@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.extraction-object-array-q4f.json",
+  "compilerOptions": { "outDir": ".extraction-sparse-v2-build" },
+  "include": ["scripts/qualification/extraction-sparse-v2-manifest.ts", "scripts/qualification/extraction-object-array-codec.mjs", "scripts/qualification/fixtures/adaptive-extraction-sparse-v2-readback.ts"]
+}

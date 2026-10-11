@@ -1,6 +1,6 @@
 export const RESEARCH_LIMITS = Object.freeze({
   page: 25, scriptQuestions: 30, goals: 12, contextFiles: 8, contextBytes: 48_000,
-  answerCharacters: 8_000, sourceCount: 200, invitationDays: 7, retentionDays: 30,
+  answerCharacters: 8_000, sourceCount: 512, invitationDays: 7, retentionDays: 30,
 });
 
 export function boundedText(value: string, max: number, label: string): string {

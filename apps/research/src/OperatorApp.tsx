@@ -15,7 +15,7 @@ export function OperatorApp() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   if (isLoading)
     return (
-      <main id="main" className="entry">
+      <main id="main" tabIndex={-1} className="entry">
         <Brand />
         <p role="status">Opening your workspace…</p>
       </main>
@@ -51,7 +51,7 @@ function SignIn() {
         <Brand />
         <span className="demo-label">Synthetic demo</span>
       </header>
-      <main id="main" className="entry">
+      <main id="main" tabIndex={-1} className="entry">
         <h1>Your research workspace</h1>
         <p className="lede">
           Keep each client’s studies and participant sources together.
@@ -179,7 +179,7 @@ function Workspace() {
             Client data stays scoped to its own projects.
           </p>
         </aside>
-        <main id="main" className="workspace">
+        <main id="main" tabIndex={-1} className="workspace">
           {error && <Notice error>{error}</Notice>}
           {me.error && <Notice error>{me.error}</Notice>}
           {selected ? (

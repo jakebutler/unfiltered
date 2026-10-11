@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.foundation.json",
+  "compilerOptions": { "outDir": ".voice-choice-build" },
+  "include": [
+    "packages/clinic-api/src/handler.ts",
+    "packages/clinic-api/src/speech-access.ts",
+    "packages/clinic-api/src/bounded-providers.ts",
+    "packages/clinic-api/src/adaptive-reply-full-compact.ts",
+    "apps/clinic-server/src/http.ts",
+    "apps/clinic-server/src/speech.ts",
+    "scripts/qualification/fixtures/adaptive-full-development.ts"
+  ]
+}

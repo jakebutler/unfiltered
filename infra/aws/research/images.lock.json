@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "source": "https://registry-1.docker.io/v2/library/node/manifests/22.22.3-bookworm-slim",
+  "repository": "node",
+  "tag": "22.22.3-bookworm-slim",
+  "indexDigest": "sha256:e21fc383b50d5347dc7a9f1cae45b8f4e2f0d39f7ade28e4eef7d2934522b752",
+  "platforms": {
+    "linux/amd64": "sha256:16d364eebf6b62da439dc993d9b80940c78b0ca38438452f011ab9a25c752644",
+    "linux/arm64": "sha256:111d09056e51bb52d1bfca06a3e73476d6022b156dc4c36c5379503cd307660b"
+  }
+}

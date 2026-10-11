@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "topology": {
+    "compute": "single-private-node",
+    "replicas": 1,
+    "tlsEdge": true,
+    "privateDataServices": true,
+    "encryptedDurableVolumes": true
+  },
+  "gates": {
+    "phiEnabled": false,
+    "liveProvidersEnabled": false,
+    "complianceClaim": "none",
+    "productionReview": "required"
+  },
+  "stackId": "research",
+  "product": "research",
+  "publicOrigin": "https://research.example.invalid",
+  "authority": {
+    "convexOrigin": "https://convex.example.invalid",
+    "convexSiteOrigin": "https://convex-site.example.invalid",
+    "authSecretRef": "unfiltered/research/auth",
+    "gatewaySecretRef": "unfiltered/research/gateway",
+    "metadataNamespace": "research-metadata",
+    "objectNamespace": "research-objects"
+  }
+}

@@ -1,12 +1,69 @@
 import type { StaffRole, ConfirmedSubmission } from '../../clinical-core/src/domain.js';
 import type { ScenarioId, ClinicSessionView, SourceTurn, DeliveryView } from '../../clinic-contract/src/index.js';
 import type { TopicResponse } from '../../clinic-content/src/types.js';
+import type { AdaptiveBinding, AdaptiveClarification, AdaptiveOutcome, AdaptiveProvenance, AdaptiveUpdate, DisplayedPrompt, DialogueState, EvidenceSpan } from './adaptive-validation.js';
+import type { AdaptiveProposalReceipt } from './adaptive.js';
+import type { DialogueOutcome } from './dialogue.js';
+import type { ProvisionalCapture } from './provisional-draft.js';
+import type { DigitalOceanStreamReceipt } from '../../clinical-core/src/digitalocean-stream.js';
+export interface AdaptiveStreamState {
+    protocol: 'durable-provisional-stream-v1';
+    reply: 'pending' | 'saved' | 'withheld';
+    capture: 'pending' | 'saved' | 'partial' | 'discarded';
+    targetGenerations: Record<string, number>;
+    replyId?: string;
+    replyScope?: { revision: number; sha256: string };
+    /** Navigation-only prefix audit; never projected as a clinical answer. */
+    navigation?: ProvisionalCapture;
+    provisional?: ProvisionalCapture;
+    receipt?: DigitalOceanStreamReceipt;
+    /** Frozen source-first reports/held detail; descriptive only, never projected as answers. */
+    sourceInterpretation?: import('./adaptive-extraction-focused.js').SourceFirstInventory;
+}
+export type AdaptiveRawProposalAudit = {
+    representation: 'canonical-json-v1' | 'raw-proposal-string-v1';
+} & ({ retention: 'retained'; bytes: number; sha256: string; content: string }
+    | { retention: 'oversize' | 'session-capacity'; bytes: number; sha256: string }
+    | { retention: 'unserializable' });
+export interface AdaptiveOperation {
+    id: string;
+    requestId: string;
+    sourceId: string;
+    fingerprint: string;
+    status: 'accepted' | 'processing' | 'applied' | 'failed' | 'unresolved' | 'discarded';
+    acceptedAt: string;
+    updatedAt: string;
+    binding: AdaptiveBinding;
+    displayed?: DisplayedPrompt;
+    dialogue?: DialogueState;
+    attemptId?: string;
+    processingRevision?: number;
+    deadlineAt?: string;
+    resultDigest?: string;
+    receipt?: AdaptiveProposalReceipt;
+    rawProposalAudit?: AdaptiveRawProposalAudit;
+    errorCode?: string;
+    updates?: AdaptiveUpdate[];
+    provenance?: AdaptiveProvenance[];
+    clarifications?: AdaptiveClarification[];
+    coveredCandidates?: AdaptiveOutcome['coveredCandidates'];
+    unresolvedQuestions?: EvidenceSpan[];
+    unmapped?: AdaptiveOutcome['unmapped'];
+    /** intake-interpreter-v1 audit of rejected model candidates; never patient-facing. */
+    rejectedCandidates?: AdaptiveOutcome['rejectedCandidates'];
+    hasUnresolvedInterpretation?: boolean;
+    stream?: AdaptiveStreamState;
+    queuedAfter?: string;
+    queuedWaiting?: boolean;
+}
 export interface PatientFixture {
     reference: string;
     displayName: string;
     description: string;
     careTeams: Record<'medical' | 'nutrition' | 'administrative', string>;
     context?: string;
+    /** Trusted server-loaded record context; never accepted from browser/provider requests. */
+    nativeContext?: import('../../clinic-content/src/native-questionnaire.js').NativeRoutingContext;
 }
 export interface StaffAssignment {
     membershipId: string;
@@ -26,6 +83,7 @@ export interface ClinicApiConfig {
     cookieSecret: string;
     patients: Record<ScenarioId, PatientFixture>;
     staff: StaffAssignment[];
+    nativeQuestionnaire?: import('../../clinic-content/src/native-questionnaire.js').NativeBinding & { reference: string };
     mentalHealth: 'pending' | 'phq4' | 'unscored';
 }
 export interface Draft {
@@ -41,6 +99,7 @@ export interface Draft {
     turns: SourceTurn[];
     activeSlot?: string;
     relevantTopicIds?: string[];
+    questionnaireHistory?: import('../../clinic-content/src/native-questionnaire.js').NativeInactiveAnswer[];
     safety?: {
         rule: import('./safety.js').EscalationRule;
         version: 'E-0.1';
@@ -53,7 +112,16 @@ export interface Draft {
     requests: Record<string, {
         fingerprint: string;
         revision: number;
+        operationId?: string;
     }>;
+    adaptive?: {
+        mode: 'adaptive' | 'guided';
+        operations: Record<string, AdaptiveOperation>;
+        activeOperationId?: string;
+        exchange?: DialogueOutcome;
+        /** Direct edits only; source interpretation cannot increment or reset these. */
+        targetGenerations?: Record<string, number>;
+    };
     version: number;
     preview?: {
         digest: string;

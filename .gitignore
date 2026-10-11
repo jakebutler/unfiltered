@@ -54,4 +54,30 @@ worker-configuration.d.ts
 
 # Local clinical boundary qualification build
 .qualification-build/
+.stream-qualification-build/
+.stream-compact-build/
+.stream-full-build/
+.voice-choice-build/
 /apps/clinic/dist/
+
+.stream-domain-build/
+.stream-domain-comparison-build/
+.stream-domain-bounded-build/
+
+.stream-domain-bounded-m-build/
+
+.extraction-scoped-build/
+
+.extraction-scoped-v2-build/
+
+.extraction-scoped-final-build/
+
+.extraction-settlement-build/
+
+.extraction-grouped-build/
+
+.extraction-grouped-v2-build/
+
+# Local qualification/extraction build outputs
+.extraction-*-build/
+.stream-*-build/

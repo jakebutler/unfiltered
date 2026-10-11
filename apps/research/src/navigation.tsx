@@ -20,7 +20,7 @@ export function DraftProtection({ children }: { children: ReactNode }) {
       allow: () =>
         !dirty.current ||
         window.confirm(
-          "Discard your unsaved study edits? Saved study versions will remain unchanged.",
+          "Discard your unsaved changes? Saved versions will remain unchanged.",
         ),
     }),
     [],

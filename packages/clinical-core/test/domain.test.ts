@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalJson, clinicalRoles, confirmSubmission, digest, recordReview, staffView, validateSubmission, type StaffContext } from '../src/domain.js';
+import { canonicalJson, clinicalRoles, confirmSubmission, digest, recordReview, staffView, validateSubmission, type OwnWorkReceipt, type StaffContext } from '../src/domain.js';
 import { fixture, fixtureContent, fixtureSufficiency } from '../../../scripts/qualification/fixture.js';
 
 const scope = (s: Awaited<ReturnType<typeof fixture>>['submission']) => ({ patient: s.patient, submissionId: s.submissionId, scenario: s.scenario });
@@ -83,32 +83,33 @@ describe('confirmed clinical domain', () => {
 });
 describe('staff projection and explicit review', () => {
   const context = (role: StaffContext['role']): StaffContext => ({ member: 'Practitioner/named', role, patient: 'Patient/synthetic', assignedCareTeams: ['CareTeam/synthetic'] });
+  const ownReceipt = (f: Awaited<ReturnType<typeof fixture>>, workId = 'intake'): OwnWorkReceipt => ({ state: 'own-work-verified', digest: f.digest, patient: f.submission.patient, workId, owner: 'CareTeam/synthetic', task: 'Task/synthetic', anchors: { source: 'DocumentReference/source/_history/1', response: 'QuestionnaireResponse/response/_history/1' } });
   it.each(clinicalRoles)('gives the assigned %s full intake and source context', async role => {
     const f = await fixture();
     expect(staffView(f.submission, context(role))).toEqual({ visibility: 'full-clinical', submission: f.submission });
-    if (role !== 'registered-dietitian') expect(await recordReview(f, context(role), 'intake', 'reviewed', '2026-10-09T02:00:00Z', { state: 'received', digest: f.digest })).toMatchObject({ member: 'Practitioner/named', role, version: 1, digest: f.digest });
+    if (role !== 'registered-dietitian') expect(await recordReview(f, context(role), 'intake', 'reviewed', '2026-10-09T02:00:00Z', ownReceipt(f))).toMatchObject({ member: 'Practitioner/named', role, version: 1, digest: f.digest });
   });
   it('restricts admin projection and cannot let admin closure close clinical work', async () => {
-    const f = await fixture(); f.submission.work.push({ id: 'logistics', kind: 'administrative', responsibility: 'administrative', owner: 'CareTeam/synthetic' }); f.digest = await digest(f.submission);
+    const f = await fixture(); f.submission.administrativeLogistics = { kind: 'other' }; f.submission.work.push({ id: 'logistics', kind: 'administrative', responsibility: 'administrative', owner: 'CareTeam/synthetic' }); f.digest = await digest(f.submission);
     const projected = staffView(f.submission, context('administrative'));
     expect(projected).toEqual({ visibility: 'administrative-minimal', submissionId: f.submission.submissionId, version: 1, patient: f.submission.patient, work: [f.submission.work[1]] });
-    await expect(recordReview(f, context('administrative'), 'intake', 'resolved', '2026-10-09T02:00:00Z', { state: 'received', digest: f.digest })).rejects.toThrow('review-work-denied');
-    expect((await recordReview(f, context('administrative'), 'logistics', 'resolved', '2026-10-09T02:00:00Z', { state: 'received', digest: f.digest })).workId).toBe('logistics');
+    await expect(recordReview(f, context('administrative'), 'intake', 'resolved', '2026-10-09T02:00:00Z', ownReceipt(f))).rejects.toThrow('review-work-denied');
+    expect((await recordReview(f, context('administrative'), 'logistics', 'resolved', '2026-10-09T02:00:00Z', ownReceipt(f, 'logistics'))).workId).toBe('logistics');
     expect(f.submission.work).toHaveLength(2);
   });
   it('keeps full clinical visibility separate from nutrition and medical disposition authority', async () => {
     const f = await fixture();
     expect(staffView(f.submission, context('registered-dietitian')).visibility).toBe('full-clinical');
-    await expect(recordReview(f, context('registered-dietitian'), 'intake', 'resolved', '2026-10-09T02:00:00Z', { state: 'received', digest: f.digest })).rejects.toThrow('review-work-denied');
+    await expect(recordReview(f, context('registered-dietitian'), 'intake', 'resolved', '2026-10-09T02:00:00Z', ownReceipt(f))).rejects.toThrow('review-work-denied');
     f.submission.work[0].responsibility = 'nutrition'; f.digest = await digest(f.submission);
-    expect((await recordReview(f, context('registered-dietitian'), 'intake', 'reviewed', '2026-10-09T02:00:00Z', { state: 'received', digest: f.digest })).role).toBe('registered-dietitian');
-    await expect(recordReview(f, context('physician'), 'intake', 'resolved', '2026-10-09T02:00:00Z', { state: 'received', digest: f.digest })).rejects.toThrow('review-work-denied');
+    expect((await recordReview(f, context('registered-dietitian'), 'intake', 'reviewed', '2026-10-09T02:00:00Z', ownReceipt(f))).role).toBe('registered-dietitian');
+    await expect(recordReview(f, context('physician'), 'intake', 'resolved', '2026-10-09T02:00:00Z', ownReceipt(f))).rejects.toThrow('review-work-denied');
   });
   it('requires confirmed receipt and rejects review of a mutated submitted version', async () => {
     const f = await fixture();
-    await expect(recordReview(f, context('physician'), 'intake', 'reviewed', '2026-10-09T02:00:00Z', { state: 'unknown', digest: f.digest })).rejects.toThrow('review-requires-receipt');
+    await expect(recordReview(f, context('physician'), 'intake', 'reviewed', '2026-10-09T02:00:00Z', { ...ownReceipt(f), state: 'unknown' } as never)).rejects.toThrow('review-requires-receipt');
     f.submission.answers[0].text = 'Changed after confirmation';
-    await expect(recordReview(f, context('physician'), 'intake', 'reviewed', '2026-10-09T02:00:00Z', { state: 'received', digest: f.digest })).rejects.toThrow('confirmation-digest-mismatch');
+    await expect(recordReview(f, context('physician'), 'intake', 'reviewed', '2026-10-09T02:00:00Z', ownReceipt(f))).rejects.toThrow('confirmation-digest-mismatch');
   });
   it('denies unassigned and wrong-patient staff', async () => {
     const f = await fixture();

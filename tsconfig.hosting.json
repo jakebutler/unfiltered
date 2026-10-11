@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.foundation.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["infra/cloud/vercel/**/*.ts"],
+  "exclude": ["infra/cloud/vercel/test"]
+}

@@ -1,0 +1,46 @@
+# AWS package baseline
+
+This package supplies typed, secret-free deployment manifests, provider-off application packages, a dedicated Medplum authority/backup/restore package, and private research object-storage composition with offline infrastructure templates. No AWS infrastructure has been provisioned. The following inventory separates exact locally accepted artifacts from remaining final-version integration work.
+
+| Slice | Operations and accepted evidence | Boundary |
+| --- | --- | --- |
+| Clinic application | [Clinic operations](OPERATIONS.md), [container and template evidence](../../docs/implementation/evidence/AWS-CLINIC-PACKAGE.md), [final compatibility audit](../../docs/implementation/evidence/S9-AWS-FINAL-DOC-CONFIG-ALIGNMENT-REVIEW.md) | Oct9 clinic A/B artifacts passed baseline smoke/template checks without valid native authority. Their schema1 transaction qualification is superseded and incompatible with current Q4f/schema2 conditional-resumable configuration. Final successor packaging and two-client native patient-to-staff integration remain. |
+| Dedicated Medplum | [Medplum operations](medplum/OPERATIONS.md), [reproducible package5/6 evidence](../../docs/implementation/evidence/AWS-MEDPLUM-EMPTY-DIRECTORY-REPAIR.md), [accepted Q3 restore](../../docs/implementation/evidence/AWS-MEDPLUM-NATIVE-2026-10-10-Q3.md) | Q3 passed 17 source and 17 restored checks against frozen package5; package6 has identical file hashes. Restored traffic remains sealed; final clinic-manifest wiring and postcheckpoint reconciliation are unqualified. |
+| Research object storage | [S3 operations](S3-OPERATIONS.md), [port/template evidence](../../docs/implementation/evidence/AWS-RESEARCH-S3-PORT.md), [package3 local acceptance](../../docs/implementation/evidence/AWS-RESEARCH-LOCAL-ACCEPTANCE-2026-10-10.md) | Adapter is composed in the independent research runtime. Local native workflow/recovery used modeled object storage; actual S3/IAM/KMS/retirement remains unqualified. |
+| Independent research runtime | [Research operations](research/OPERATIONS.md), [package3 local acceptance](../../docs/implementation/evidence/AWS-RESEARCH-LOCAL-ACCEPTANCE-2026-10-10.md), [accepted reboot companion](../../docs/implementation/evidence/AWS-RESEARCH-REBOOT-INDEPENDENT-SOL-REVIEW-2026-10-10.md) | Immutable package3 and its companion have local image, native workflow, 32-source persistence and sealed metadata recovery/quarantine evidence. Restored traffic stays sealed. Final source reconciliation, positive normal-start admission and native AWS behavior remain. |
+
+`examples/clinic-a.json` and `clinic-b.json` use distinct application/Medplum origins, native identities, secret references and storage namespaces. `examples/research.json` describes a separate Convex/object-storage boundary. Their `.invalid` domains and `synthetic-*` identities are deliberately non-deployable examples, not discovered cloud resources. `clinic/images.lock.json` records digests observed from the official Node registry for explicit architectures; it does not invent a future application distribution digest or AMI.
+
+The schema describes one private compute node per independent stack, encrypted durable volumes, and an explicit TLS edge. These fields are requirements, not evidence that infrastructure exists. The clinic application template retains an encrypted root disk; durable clinical records and attachments belong to the separate packaged Medplum stack. The application template provisions no unused data volume. Secret references become exact account/region/name-scoped IAM references during synthesis; synthesis reads no secret material.
+
+## Clinic entrypoint contract
+
+- `AWS_DEPLOYMENT_MANIFEST_JSON`: bounded, secret-free JSON matching the clinic manifest schema (maximum 16 KiB).
+- `CLINIC_CONFIG_JSON`: runtime-injected private configuration (maximum 48,000 bytes), containing the existing seven-scenario synthetic fixtures, four named staff assignments, service/client cookie secrets and complete native storage qualification.
+- The exact app origin, Medplum base URL, project, client and membership must match the manifest and qualification. The parser requires current bounded proof dates, successful required checks and `conditional-resumable-v1` selected-contract qualification. Its structural check does **not** establish signature validity or native authorization. Existing runtime verification still checks HMAC signature and observed identity, effective policy and server version before storage access.
+- Current native configuration binds the authored Questionnaire canonical/version/digest and exact history reference, with typed patient routing context where supplied. Current source support does not update the old packaged clinic A/B bundles or transfer cloud Q4f qualification to a different native authority.
+- Clinical qualification expires. The current hosted synthetic seal expires `2026-10-17T20:25:41.318Z`; each AWS profile requires its own current proof. Follow [expiry and bounded renewal](OPERATIONS.md#clinical-qualification-expiry-and-bounded-renewal); static health does not preserve clinical admission after expiry.
+- Packaging places `public/` and `asset-manifest.json` adjacent to the entry artifact. `loadClinicAssets` continues hash/path validation. Importing `entry.ts` does not start a listener; the CommonJS launcher reads the baked manifest and a bounded private runtime file, then listens on port 8080.
+
+The entry reuses `infra/cloud/vercel/application.ts` without changing the demo/local wrappers. It injects no inference or speech adapters and ignores provider keys. Guided text remains available subject to existing native storage gates. The process has no clinic database or filesystem session persistence. The future private network/TLS edge must make only its intended app routes reachable; actual ingress/host routing, WebSockets, cancellation and proxy behavior require deployment qualification. Port 8080 HTTP is not a public deployment profile.
+
+This baseline deliberately retains the current synthetic inventory contract: all seven scenarios, exactly four staff assignments, one patient reference per assignment, and PHQ-4. It is not a complete general-client configuration system. A later package must separate tenant configuration from synthetic seed inventory before claiming general client deployment support.
+
+## Focused local checks
+
+Coordinate the serial execution slot first. These commands perform no cloud or provider call and start no persistent application service. Tests use offline fixtures/mocks plus one short-lived ephemeral loopback listener to verify the existing void `close()` API's asynchronous native close event.
+
+```sh
+NODE_OPTIONS=--max-old-space-size=1024 node node_modules/typescript/bin/tsc -p infra/aws/tsconfig.json
+NODE_OPTIONS=--max-old-space-size=1024 node node_modules/vitest/vitest.mjs run --config infra/aws/vitest.config.mts --maxWorkers=1 --no-file-parallelism
+```
+
+Use Node 22. The existing hosting suite remains the reusable factory's verification; no fresh hosting acceptance is claimed by a configuration test. The new counterexamples cover cross-tenant/endpoint/proof drift, foreign secret/storage references, premature PHI/provider/replica flags, incomplete selected-contract proof, expired proof, malformed/oversized private input, no secret echo, forged signature rejection before native I/O, and provider-off composition.
+
+## Production and PHI gate
+
+Current manifests accept only `phiEnabled: false`, `liveProvidersEnabled: false`, and `complianceClaim: none`. They do not detect PHI in human-entered text. Use synthetic data only. No provider adapter receives transcripts merely because a key is present.
+
+Before any live PHI deployment, explicitly review each data flow, service eligibility, required BAAs and provider contracts/retention terms, identity and policy controls, encryption, backups, deletion and incident procedures, and qualified deployment/clinical governance. Keep external inference/speech egress disabled unless that particular route is approved and qualified. A future change to these gates requires concrete deployment and contractual evidence; an AWS account, successful template synthesis or hosting location establishes no HIPAA compliance claim.
+
+Remaining local delivery work is final source/configuration reconciliation and patient-to-staff integration through two independently configured clinic containers and their native authorities. Defer a new clinic package until the final adaptive/native backend is selected and frozen, then review the exact successor and its own conditional-resumable/native qualification; the old A/B artifacts cannot accept Q4f configuration. Research package3 remains accepted within its recorded local scope and needs final-version reconciliation, not repetition of unchanged recovery proof. The accepted Medplum Q3 checkpoint restore likewise need not be repeated for unchanged package/pins. Native S3 conditional retirement, AWS networking/TLS/IAM/volume behavior, off-host archive/key recovery and production recovery remain later qualification gates. None may automatically deploy, activate providers, replay an unknown operation or destroy preserved volumes.

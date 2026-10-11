@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.stream-domain-bounded.json",
+  "compilerOptions": { "outDir": ".stream-domain-bounded-m-build" }
+}

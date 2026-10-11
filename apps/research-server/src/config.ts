@@ -1,6 +1,7 @@
-import { constants } from 'node:fs';
-import { open, mkdir, lstat } from 'node:fs/promises';
+import { mkdir, lstat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { privateJson } from './private-json.mjs';
+export { privateJson } from './private-json.mjs';
 import { CAPTURE_LIMITS } from '../../../packages/research-capture/src/contracts';
 
 export type ResearchServerConfig = {
@@ -8,14 +9,6 @@ export type ResearchServerConfig = {
   gatewaySecret: string; objectDirectory: string; maxSegmentBytes: number;
   cleanupIntervalMs: number; bindOrigin: 'http://127.0.0.1:8789';
 };
-export async function privateJson(path: string): Promise<unknown> {
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-  try {
-    const info = await file.stat();
-    if (!info.isFile() || info.mode & 0o077 || info.size > 65_536) throw new Error('Private configuration must be a bounded mode-0600 file');
-    return JSON.parse(await file.readFile('utf8'));
-  } finally { await file.close(); }
-}
 export async function loadConfig(path: string): Promise<ResearchServerConfig> {
   const raw = await privateJson(resolve(path));
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid research gateway configuration');

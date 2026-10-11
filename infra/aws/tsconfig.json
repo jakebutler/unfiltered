@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.foundation.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["./manifest.schema.ts", "./clinic/**/*.ts"],
+  "exclude": ["./test"]
+}

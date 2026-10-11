@@ -84,8 +84,10 @@ export function SourceList({
   sources,
   canCorrect,
   onCorrect,
+  reviewedSpokenSourceIds = [],
 }: {
   sources: Source[];
+  reviewedSpokenSourceIds?: string[];
   canCorrect?: boolean;
   onCorrect?: (source: Source) => void;
 }) {
@@ -109,10 +111,18 @@ export function SourceList({
                   : "Interviewer"}
               </strong>
               <span>
-                {source.supersedes
-                  ? "Correction"
+                {source.channel === 'spoken-answer'
+                  ? reviewedSpokenSourceIds.includes(source.sourceId) ? 'Spoken answer · wording reviewed' : 'Spoken answer · wording unreviewed'
+                  : source.channel === 'confirmed-transcript'
+                    ? 'Reviewed voice transcript'
+                  : source.supersedes
+                    ? "Correction"
+                  : source.channel === "follow-up"
+                    ? 'Interview follow-up'
                   : source.channel === "script"
                     ? "Study script"
+                    : source.channel === 'unreviewed-transcript'
+                      ? 'Original voice transcript · unreviewed'
                     : source.channel === "text"
                       ? "Text"
                       : "Reviewed voice transcript"}
@@ -133,7 +143,7 @@ export function SourceList({
                 Source {source.sequence + 1}
               </button>
               <DateTime value={source.recordedAt} />
-              {canCorrect && source.author === "participant" && !old && (
+              {canCorrect && source.author === "participant" && source.channel !== 'unreviewed-transcript' && !old && (
                 <button
                   className="text-button"
                   onClick={() => onCorrect?.(source)}

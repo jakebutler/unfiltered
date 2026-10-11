@@ -36,6 +36,11 @@ describe('authorized bounded TTS', () => {
     const { speak, reserve, fetcher } = setup(); reserve.mockRejectedValueOnce(new Error('admission-denied'));
     await expect(speak(input)).rejects.toThrow('admission-denied'); expect(fetcher).not.toHaveBeenCalled();
   });
+  it('revalidates the current source after admission without dispatching stale speech', async () => {
+    const { speak, authorize, fetcher, settle } = setup();
+    authorize.mockResolvedValueOnce(source).mockResolvedValueOnce({ ...source, text: 'Different prompt at the same claimed revision' });
+    await expect(speak(input)).rejects.toThrow('not-authorized'); expect(fetcher).not.toHaveBeenCalled(); expect(settle).toHaveBeenCalledExactlyOnceWith('failed');
+  });
   it('aborts provider reads on browser cancellation and settles once without retry', async () => {
     const canceled = vi.fn();
     const fetcher = vi.fn(async () => new Response(new ReadableStream<Uint8Array>({ cancel: canceled }), { headers: { 'content-type': 'audio/mpeg' } }));

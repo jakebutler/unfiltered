@@ -29,6 +29,8 @@ export interface SpeechOutputRequest {
   expectedRevision: number;
   /** Server resolves this to a current prompt or an authorized assistant source. */
   sourceId: string;
+  /** Reference to a current offered choice, never caller-authored speech text. */
+  choiceConfirmation?: { value: string };
 }
 
 export interface SpeechTranscript {
@@ -38,6 +40,13 @@ export interface SpeechTranscript {
   /** Recognition is always editable, never a clinical confidence assessment. */
   requiresReview: true;
 }
+
+export type SpeechInputEvent =
+  | { type: 'ready'; sampleRate: 16000; channels: 1; maxCaptureMs: number }
+  | { type: 'recognition'; segment: { start: number; duration: number; text: string; isFinal: boolean; speechFinal: boolean } }
+  | { type: 'speech-started' }
+  | { type: 'ended'; outcome: 'completed' | 'interrupted' | 'failed' | 'unknown' }
+  | { type: 'error'; code: string; message: string };
 
 export function validScope(scope: SpeechTurnScope): boolean {
   return Boolean(scope && typeof scope.sessionId === 'string' && scope.sessionId.length > 0 && scope.sessionId.length <= 100

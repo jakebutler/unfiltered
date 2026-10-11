@@ -1,3 +1,4 @@
+import { requireStudyCapability } from './researchReadiness';
 import { paginationOptsValidator } from 'convex/server';
 import { ConvexError, v } from 'convex/values';
 import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
@@ -8,10 +9,14 @@ import { consent } from './validators';
 import { descriptor, domEvent, modality, segmentView } from './captureValidators';
 import { CAPTURE_LIMITS as L, captureLimits, validateDescriptor, validateDomEvent } from '../packages/research-capture/src/contracts';
 import { requestId } from '../packages/research-core/src/limits';
+import { reserveCaptureCleanup, captureCleanupCovered } from './cleanupAdmission';
 import { canonical } from '../packages/research-capture/src/proof';
 
 // Convex provides process.env in its V8 runtime; this is a module-scoped type only.
 declare const process: { env: Record<string, string | undefined> };
+function cleanupRequired(studyBound: boolean) {
+  return studyBound || !!(process.env.RESEARCH_HOSTED_GATEWAY_ORIGIN || process.env.RESEARCH_HOSTED_GATEWAY_ALLOCATION || process.env.RESEARCH_HOSTED_CLEANUP_ALLOCATION || process.env.CONVEX_SITE_URL && process.env.CONVEX_SITE_URL !== 'http://127.0.0.1:3211');
+}
 
 export async function captureFor(ctx: QueryCtx, sessionId: Id<'researchSessions'>) {
   return ctx.db.query('researchCaptures').withIndex('by_sessionId', q => q.eq('sessionId', sessionId)).unique();
@@ -30,9 +35,12 @@ async function capacity(ctx: MutationCtx) {
 }
 export const start = mutation({ args: { token: v.string() }, returns: v.object({ captureId: v.id('researchCaptures'), startedAt: v.number(), deadline: v.number(), bytesRemaining: v.number() }), handler: async (ctx, { token }) => {
   const { session } = await participant(ctx, token);
+  const studyAdmission = await requireStudyCapability(ctx, session, 'private-capture');
+  if (studyAdmission && studyAdmission.captureBytesCharged >= studyAdmission.captureByteLimit) throw new ConvexError('Study capture allowance is exhausted');
   if (session.state !== 'active' || !session.consent?.storage || !session.consent.analysis || ![session.consent.microphone, session.consent.camera, session.consent.screen, session.consent.dom].some(Boolean)) throw new ConvexError('Choose capture consent before recording');
   let row = await captureFor(ctx, session._id);
   if (row) {
+    if (cleanupRequired(!!studyAdmission) && !await captureCleanupCovered(ctx, row)) throw new ConvexError('Recording cleanup authority is unavailable');
     if (!['active', 'paused'].includes(row.state) || row.deadline <= Date.now()) throw new ConvexError('Recording has ended; the conversation can continue');
     if (row.state === 'paused') {
       // Resuming the conversation does not restart any capture. This explicit
@@ -47,7 +55,8 @@ export const start = mutation({ args: { token: v.string() }, returns: v.object({
     const cap = await capacity(ctx), limits = captureLimits(process.env.RESEARCH_CAPTURE_LIMITS_JSON);
     if (cap.retainedSessions >= limits.retainedSessions || cap.activeSessionId && cap.activeUntil > Date.now()) throw new ConvexError('Recording capacity is unavailable; the conversation can continue');
     const now = Date.now(), deadline = Math.min(now + limits.sessionMs, session.retainUntil);
-    const id = await ctx.db.insert('researchCaptures', { sessionId: session._id, ownerId: session.ownerId, clientId: session.clientId, projectId: session.projectId, state: 'active', startedAt: now, deadline, retainUntil: session.retainUntil, reservedBytes: 0, segmentCount: 0, consentEpoch: 1, revokedThrough: { microphone: 0, camera: 0, screen: 0, dom: 0 }, domCount: 0, domLastAt: 0, domGeneration: 0, domGenerationStart: 0, domChallengeHash: null, domOrigin: null });
+    const cleanup = cleanupRequired(!!studyAdmission) ? await reserveCaptureCleanup(ctx, session.retainUntil, limits.segments) : {};
+    const id = await ctx.db.insert('researchCaptures', { ...cleanup, sessionId: session._id, ownerId: session.ownerId, clientId: session.clientId, projectId: session.projectId, state: 'active', startedAt: now, deadline, retainUntil: session.retainUntil, reservedBytes: 0, segmentCount: 0, consentEpoch: 1, revokedThrough: { microphone: 0, camera: 0, screen: 0, dom: 0 }, domCount: 0, domLastAt: 0, domGeneration: 0, domGenerationStart: 0, domChallengeHash: null, domOrigin: null });
     await ctx.db.patch(cap._id, { retainedSessions: cap.retainedSessions + 1, activeSessionId: session._id, activeUntil: deadline });
     row = (await ctx.db.get(id))!;
     await ctx.scheduler.runAt(deadline, internal.captureLifecycle.stopAtDeadline, { captureId: id, deadline });
@@ -87,6 +96,9 @@ export const reserve = mutation({ args: { token: v.string(), requestId: v.string
     if (canonical(prior.descriptor) !== canonical(args.descriptor)) throw new ConvexError('Request identifier was already used for different content');
     return viewMedia(prior);
   }
+  const admission = await requireStudyCapability(ctx, session, 'private-capture');
+  if (admission && admission.captureBytesCharged + args.descriptor.bytes > admission.captureByteLimit) throw new ConvexError('Study capture allowance is exhausted');
+  if (cleanupRequired(!!admission) && (!await captureCleanupCovered(ctx, capture) || capture.segmentCount >= capture.cleanupMediaLimit!)) throw new ConvexError('Recording cleanup authority is unavailable');
   if (session.state !== 'active' || capture.state !== 'active' || capture.deadline <= Date.now() || capture.reservedBytes + args.descriptor.bytes > limits.sessionBytes || capture.segmentCount >= limits.segments) throw new ConvexError('Recording capacity is unavailable');
   if (!study.definition.script.some(q => q.id === args.descriptor.questionId)) throw new ConvexError('Unknown interview question');
   if (args.descriptor.sourceId) {
@@ -99,6 +111,7 @@ export const reserve = mutation({ args: { token: v.string(), requestId: v.string
   const id = await ctx.db.insert('researchMedia', { captureId: capture._id, sessionId: session._id, clientId: session.clientId, projectId: session.projectId, requestId: args.requestId, descriptor: args.descriptor, state: 'reserved', sourceId: `${session._id}:media:${capture.segmentCount}`, consentEpoch: capture.consentEpoch, objectKey: 'pending', attempt: 0, retiredKeys: [], retryUntil: now + limits.uploadRecoveryMs, claimUntil: now + limits.reservationMs, recordedAt: now, availableAt: null, expiresAt: now + limits.uploadRecoveryMs, leaseUntil: 0, deletedAt: null });
   await ctx.db.patch(id, { objectKey: `research/${session._id}/${id}-a0` });
   await ctx.db.patch(capture._id, { segmentCount: capture.segmentCount + 1, reservedBytes: capture.reservedBytes + args.descriptor.bytes });
+  if (admission) await ctx.db.patch(admission._id, { captureBytesCharged: admission.captureBytesCharged + args.descriptor.bytes });
   return viewMedia((await ctx.db.get(id))!);
 } });
 export const gap = mutation({ args: { token: v.string(), requestId: v.string(), modality, atMs: v.number(), reason: v.union(v.literal('permission-denied'), v.literal('track-ended'), v.literal('muted'), v.literal('upload-failed'), v.literal('capacity'), v.literal('paused'), v.literal('unsupported')) }, returns: v.null(), handler: async (ctx, args) => {
@@ -114,7 +127,7 @@ export const gap = mutation({ args: { token: v.string(), requestId: v.string(), 
 export const changeConsent = mutation({ args: { token: v.string(), expectedRevision: v.number(), consent }, returns: v.number(), handler: async (ctx, args) => {
   const { session } = await participant(ctx, args.token); revision(session.revision, args.expectedRevision);
   if (!session.consent) return denied();
-  if (args.consent.shareAudio && !args.consent.microphone || args.consent.shareCamera && !args.consent.camera || args.consent.shareScreen && !args.consent.screen) throw new ConvexError('Sharing requires matching capture consent');
+  if (args.consent.shareAudio && !args.consent.microphone || args.consent.shareCamera && !args.consent.camera || args.consent.shareScreen && !args.consent.screen || args.consent.shareDom && !args.consent.dom) throw new ConvexError('Sharing requires matching capture consent');
   const capture = await captureFor(ctx, session._id);
   if (capture) {
     const revokedThrough = { ...capture.revokedThrough };
@@ -122,7 +135,9 @@ export const changeConsent = mutation({ args: { token: v.string(), expectedRevis
     await ctx.db.patch(capture._id, { consentEpoch: capture.consentEpoch + 1, revokedThrough, ...(!args.consent.dom || !args.consent.storage || !args.consent.analysis ? { domChallengeHash: null } : {}) });
     await ctx.scheduler.runAfter(0, internal.captureLifecycle.purge, { captureId: capture._id });
   }
-  await ctx.db.patch(session._id, { consent: args.consent, consentAt: Date.now(), savedAt: Date.now(), revision: session.revision + 1, ...(!args.consent.storage || !args.consent.analysis ? { withdrawnAt: Date.now(), retentionState: 'purging' as const } : {}) });
+  const sharingChanged = ['shareTranscript', 'shareAudio', 'shareCamera', 'shareScreen', 'shareDom', 'retainApprovedExcerpts'].some(k => !!args.consent[k as keyof typeof args.consent] !== !!session.consent![k as keyof typeof args.consent]);
+  await ctx.db.patch(session._id, { consent: args.consent, consentAt: Date.now(), savedAt: Date.now(), revision: session.revision + 1, sharingEpoch: (session.sharingEpoch ?? 0) + (sharingChanged ? 1 : 0), ...(!args.consent.storage || !args.consent.analysis ? { withdrawnAt: Date.now(), retentionState: 'purging' as const, finalReview: undefined, currentPrompt: undefined, followUps: undefined, pendingInterview: undefined, lastInterviewRecovery: undefined } : {}) });
+  await ctx.scheduler.runAfter(0, internal.researchReportLifecycle.invalidateSession, { sessionId: session._id, cursor: null });
   if (!args.consent.storage || !args.consent.analysis) await ctx.scheduler.runAfter(0, internal.lifecycle.purgeSources, { ownerId: session.ownerId, clientId: session.clientId, projectId: session.projectId, studyId: session.studyId, sessionId: session._id, retainUntil: session.retainUntil });
   return session.revision + 1;
 } });
@@ -138,6 +153,7 @@ export const authorizePrototype = operatorMutation({ args: { clientId: v.id('res
 } });
 export const connectDom = mutation({ args: { token: v.string(), origin: v.string(), challenge: v.string() }, returns: v.object({ generation: v.number(), nextSequence: v.number() }), handler: async (ctx, args) => {
   const { session } = await participant(ctx, args.token), capture = await captureFor(ctx, session._id);
+  await requireStudyCapability(ctx, session, 'private-capture');
   const policy = await ctx.db.query('researchDomPolicies').withIndex('by_studyId', q => q.eq('studyId', session.studyId)).unique();
   if (!capture || session.state !== 'active' || capture.state !== 'active' || capture.deadline <= Date.now() || !session.consent?.dom || !policy || policy.origin !== args.origin) return denied();
   const hash = await hashCapability(args.challenge);
@@ -173,6 +189,7 @@ export const appendDom = mutation({ args: { token: v.string(), challenge: v.stri
     if (canonical(prior.events) !== canonical(args.events) || prior.origin !== args.origin || prior.challengeHash !== challengeHash) throw new ConvexError('Conflicting DOM batch');
     return prior.sourceId;
   }
+  await requireStudyCapability(ctx, session, 'private-capture');
   if (session.state !== 'active' || capture.domChallengeHash !== challengeHash || capture.domOrigin !== args.origin || capture.state !== 'active' || capture.deadline <= Date.now()) return denied();
   const limits = captureLimits(process.env.RESEARCH_CAPTURE_LIMITS_JSON);
   if (args.events.length < 1 || args.events.length > limits.domBatch) throw new ConvexError('Invalid DOM batch');

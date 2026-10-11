@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.foundation.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": [
+    "infra/cloud/vercel/research/**/*.ts"
+  ],
+  "exclude": [
+    "infra/cloud/vercel/research/test"
+  ]
+}

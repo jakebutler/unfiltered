@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.extraction-grouped-v2.json",
+  "compilerOptions": { "outDir": ".extraction-object-array-q4f-build", "allowJs": true, "checkJs": false },
+  "include": [
+    "scripts/qualification/extraction-object-array-manifest.ts",
+    "scripts/qualification/extraction-object-array-codec.mjs",
+    "scripts/qualification/fixtures/adaptive-extraction-object-array-readback.ts"
+  ]
+}

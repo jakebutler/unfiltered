@@ -59,3 +59,11 @@ describe("rendered source review", () => {
     ).not.toContain("Correct answer");
   });
 });
+
+it('automatic spoken answer lineage is never labeled a correction or falsely reviewed', () => {
+  const raw = { ...original, channel: 'unreviewed-transcript' as const }, spoken = { ...original, sourceId: 'session:2', sequence: 2, channel: 'spoken-answer' as const, supersedes: raw.sourceId };
+  const unseen = renderToStaticMarkup(createElement(SourceList, { sources: [raw, spoken] }));
+  expect(unseen).toContain('Spoken answer · wording unreviewed'); expect(unseen).not.toContain('Correction');
+  const reviewed = renderToStaticMarkup(createElement(SourceList, { sources: [raw, spoken], reviewedSpokenSourceIds: [spoken.sourceId] }));
+  expect(reviewed).toContain('Spoken answer · wording reviewed'); expect(reviewed).not.toContain('Correction');
+});

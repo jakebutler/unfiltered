@@ -1,19 +1,22 @@
+import { digest } from '../../clinical-core/src/domain.js';
+import type { QualifiedClinicConfig } from './deployment-qualification.js';
 import { requestJson, TransportError, type Fetch } from '../../clinical-core/src/transport.js';
 import { MedplumClient } from '../../clinical-core/src/medplum.js';
 import { cookies } from './cookies.js';
 import { object } from './store.js';
 import { ApiFailure, type ClinicApiConfig, type StaffAssignment } from './types.js';
+import { staffSessionCookies } from './staff-session.js';
 interface StaffSession {
     token: string;
     assignment: StaffAssignment;
     expires: number;
 }
 export function staffAuthentication(config: ClinicApiConfig, fetcher: Fetch, jar: ReturnType<typeof cookies>) {
-    const sessions = new Map<string, StaffSession>();
+    const portable = staffSessionCookies(config.cookieSecret, `${config.origin}|${config.medplumBaseUrl}|${config.projectId}`, new URL(config.origin).protocol === 'https:');
     async function verify(session: StaffSession) {
         const me = object((await requestJson(fetcher, new URL('auth/me', config.medplumBaseUrl).href, { headers: { Authorization: `Bearer ${session.token}` } }, 10000)).body);
         const profile = object(me.profile), project = object(me.project), membership = object(me.membership);
-        if (project.id !== config.projectId || `${profile.resourceType}/${profile.id}` !== session.assignment.profile || (membership.id && membership.id !== session.assignment.membershipId))
+        if (project.id !== config.projectId || `${profile.resourceType}/${profile.id}` !== session.assignment.profile || membership.id !== session.assignment.membershipId || membership.active === false)
             throw new ApiFailure('staff-membership-denied', 403);
         // A policy downgrade must not retain old application role authority.
         const policy = object(me.accessPolicy);
@@ -22,6 +25,8 @@ export function staffAuthentication(config: ClinicApiConfig, fetcher: Fetch, jar
         }[] | undefined)?.map(r => r.reference) ?? [];
         if (policy.id !== session.assignment.policy.split('/')[1] && !refs.includes(session.assignment.policy))
             throw new ApiFailure('staff-policy-changed', 403);
+        const proof = (config as QualifiedClinicConfig).storageQualification?.payload;
+        if (proof) { const { id: _, meta: __, ...effective } = policy; if (proof.namedPolicyDigests[session.assignment.membershipId] !== await digest(effective)) throw new ApiFailure('staff-policy-changed', 403); }
         return session;
     }
     return {
@@ -44,14 +49,8 @@ export function staffAuthentication(config: ClinicApiConfig, fetcher: Fetch, jar
                     throw new ApiFailure('staff-not-assigned', 403);
                 const session = { token: token.access_token, assignment, expires: Date.now() + Math.min(Number(token.expires_in) || 300, 1800) * 1000 };
                 await verify(session);
-                for (const [id, s] of sessions)
-                    if (s.expires < Date.now())
-                        sessions.delete(id);
-                if (sessions.size >= 100)
-                    throw new ApiFailure('staff-session-capacity', 503);
                 const id = crypto.randomUUID();
-                sessions.set(id, session);
-                return { identity: { name: assignment.name, role: assignment.role }, cookie: await jar.issue('clinic_staff', { kind: 'staff', sessionId: id, expires: session.expires }) };
+                return { identity: { name: assignment.name, role: assignment.role }, cookie: await portable.issue({ schema: 1, sessionId: id, token: session.token, profile: assignment.profile, membershipId: assignment.membershipId, issuedAt: Date.now(), expires: session.expires }) };
             }
             catch (error) {
                 if (error instanceof TransportError && error.status === 429)
@@ -62,25 +61,33 @@ export function staffAuthentication(config: ClinicApiConfig, fetcher: Fetch, jar
             }
         },
         async read(request: Request) {
-            const claims = await jar.read(request, 'clinic_staff');
-            const session = claims.kind === 'staff' ? sessions.get(claims.sessionId) : undefined;
-            if (!session || session.expires < Date.now())
+            const claims = await portable.read(request);
+            const assignment = config.staff.find(assignment => assignment.profile === claims.profile && assignment.membershipId === claims.membershipId);
+            if (!assignment)
                 throw new ApiFailure('staff-session-required', 401);
+            const session: StaffSession = { token: claims.token, assignment, expires: claims.expires };
             try {
                 await verify(session);
             }
             catch {
-                sessions.delete(claims.sessionId);
                 throw new ApiFailure('staff-access-revoked', 403);
             }
             const baseUrl = new URL('fhir/R4/', config.medplumBaseUrl).href;
             const mode = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(baseUrl).hostname) ? 'local' : 'live';
             return { assignment: session.assignment, client: new MedplumClient({ baseUrl, accessToken: session.token, timeoutMs: 10000, mode }, fetcher) };
         },
-        async logout(request: Request) { try {
-            const c = await jar.read(request, 'clinic_staff');
-            sessions.delete(c.sessionId);
-        }
-        catch { /* Already signed out. */ } return jar.clear('clinic_staff'); },
+        async logout(request: Request) {
+            let claims;
+            try { claims = await portable.read(request); }
+            catch { return jar.clear('clinic_staff'); }
+            // Revocation is shared by every instance. Clearing a cookie alone
+            // would leave a copied encrypted cookie usable until expiry.
+            try {
+                await requestJson(fetcher, new URL('oauth2/logout', config.medplumBaseUrl).href, { method: 'POST', headers: { Authorization: `Bearer ${claims.token}`, 'Content-Type': 'application/json' }, body: '{}' }, 10000);
+            } catch (error) {
+                if (!(error instanceof TransportError && error.status === 401)) throw new ApiFailure('staff-logout-unconfirmed', 503, true);
+            }
+            return jar.clear('clinic_staff');
+        },
     };
 }

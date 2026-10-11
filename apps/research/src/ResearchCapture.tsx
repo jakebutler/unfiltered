@@ -13,8 +13,9 @@ function bounded<T>(promise: Promise<T>): Promise<T> {
   return Promise.race([promise, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Result unconfirmed')), 65_000); })]).finally(() => clearTimeout(timer));
 }
 
-export type CaptureControls = { stop: (retain?: boolean) => Promise<void>; microphoneStream: () => MediaStream | null };
-export function ResearchCapture({ token, session, controls, refresh, devices }: { token: string; session: Participant; controls: MutableRefObject<CaptureControls | null>; refresh: () => void; devices?: BrowserCaptureDevices }) {
+export type CaptureActivity = { devices: string[]; page: boolean; pending: number; controlPending: boolean };
+export type CaptureControls = { endRecording?: () => Promise<void>; stop: (retain?: boolean) => Promise<void>; microphoneStream: () => MediaStream | null };
+export function ResearchCapture({ token, session, controls, refresh, devices, onActivity, blocked = false }: { token: string; session: Participant; controls: MutableRefObject<CaptureControls | null>; refresh: () => void; devices?: BrowserCaptureDevices; onActivity?: (activity: CaptureActivity) => void; blocked?: boolean }) {
   const convex = useConvex();
   const status = useRead(api.capture.status, { token });
   const modes = ['microphone', 'camera', 'screen'] as const;
@@ -77,7 +78,7 @@ export function ResearchCapture({ token, session, controls, refresh, devices }: 
     await domWork.current;
   }
   useEffect(() => {
-    alive.current = true; controls.current = { stop, microphoneStream: () => capture.current!.microphone.activeStream() };
+    alive.current = true; controls.current = { stop, endRecording, microphoneStream: () => capture.current!.microphone.activeStream() };
     const leave = () => { void stop(false); };
     window.addEventListener('pagehide', leave);
     return () => { alive.current = false; controls.current = null; window.removeEventListener('pagehide', leave); void stop(false); };
@@ -91,7 +92,7 @@ export function ResearchCapture({ token, session, controls, refresh, devices }: 
     if (!session.consent?.dom) stopDom();
   }, [session.consent?.microphone, session.consent?.camera, session.consent?.screen, session.consent?.dom]);
   async function consent(track: Modality | 'dom', enabled: boolean) {
-    if (!session.consent) return;
+    if (blocked || busy || consentPending || !session.consent) return;
     // Selective withdrawal closes only its own source before the write.
     setBusy(true); setError('');
     if (!enabled) { if (track === 'dom') { stopDom(); domPending.current = null; uncertainConnect.current = null; keepConnection(null); } else { deviceGeneration.current[track]++; uploadAdmission.current[track].abort(); void capture.current![track].stop(false); } }
@@ -103,7 +104,7 @@ export function ResearchCapture({ token, session, controls, refresh, devices }: 
   }
   async function start(mode: Modality) {
     const state = status.data;
-    if (!state || !session.question || !session.consent?.[mode]) return;
+    if (blocked || busy || consentPending || !state || !session.question || !session.consent?.[mode]) return;
     setBusy(true); setError(''); const generation = actionGeneration.current; const device = ++deviceGeneration.current[mode];
     try {
       const receipt = await bounded(convex.mutation(api.capture.start, { token }));
@@ -123,7 +124,7 @@ export function ResearchCapture({ token, session, controls, refresh, devices }: 
   }
   async function openDom() {
     const state = status.data;
-    if (!state?.domPolicy || !session.prototypeUrl || domPending.current || uncertainConnect.current) return;
+    if (blocked || busy || consentPending || !state?.domPolicy || !session.prototypeUrl || domPending.current || uncertainConnect.current) return;
     // The exact prototype is opened directly; invitation capability is never sent.
     const popup = window.open(session.prototypeUrl, 'corvo-controlled-prototype');
     if (!popup) { setError('Allow this study’s prototype tab to open, then connect again.'); return; }
@@ -151,6 +152,7 @@ export function ResearchCapture({ token, session, controls, refresh, devices }: 
           if (stopped || bridge.current?.challenge !== challenge || !current.current.consent?.dom || current.current.state !== 'active') return;
           const pending = { challenge, origin: state.domPolicy!.origin, requestId: crypto.randomUUID(), events: [accepted] };
           domPending.current = pending;
+          if (alive.current) setDomState('Saving controlled page activity…');
           await bounded(convex.mutation(api.capture.appendDom, { token, ...pending }));
           domPending.current = null;
           if (alive.current) setDomState('Controlled page activity is connected.');
@@ -168,18 +170,22 @@ export function ResearchCapture({ token, session, controls, refresh, devices }: 
   }
   const activeModes = modes.filter(mode => ['requesting', 'recording'].includes(snapshots[mode].phase));
   const pending = modes.reduce((count, mode) => count + snapshots[mode].pending, 0);
-  const disabled = busy || consentPending || session.state !== 'active';
+  const disabled = blocked || busy || consentPending || session.state !== 'active';
+  const controlPending = busy || consentPending || !!domPending.current || !!uncertainConnect.current || modes.some(mode => snapshots[mode].phase === 'unconfirmed');
+  const activityKey = activeModes.join(',');
+  useEffect(() => { onActivity?.({ devices: activeModes.map(mode => mode === 'microphone' ? 'audio' : mode), page: !!bridge.current, pending, controlPending }); }, [activityKey, pending, controlPending, domState, onActivity]);
+  useEffect(() => () => onActivity?.({ devices: [], page: false, pending: 0, controlPending: false }), [onActivity]);
   return <section className="research-capture" aria-label="Optional research recording">
-    <div className="section-heading"><h2>Optional recording</h2><span className="capture-state" role="status">{activeModes.length ? `Recording: ${activeModes.join(', ')}` : 'Devices off'}</span></div>
-    <p className="muted">You can answer every question in text. Choose each recording permission separately. Screen sharing can show any page you choose; page activity is available only on the study’s authorized prototype.</p>
-    <fieldset disabled={busy || consentPending}><legend>Allow Corvo Labs to record for this study</legend>
-      {(['microphone', 'camera', 'screen', 'dom'] as const).map(track => <label className="check" key={track}><input type="checkbox" checked={!!session.consent?.[track]} onChange={event => void consent(track, event.target.checked)} /><span>{track === 'dom' ? 'Masked activity on the controlled prototype' : track === 'microphone' ? 'Microphone audio' : track === 'camera' ? 'Camera video' : 'The screen or tab I choose'}</span></label>)}
+    <details className="recording-options"><summary>Optional study recording <span>{activeModes.length ? `Recording ${activeModes.join(', ')}` : 'Devices off'}</span></summary>
+    <p className="muted">Study recordings are separate from spoken answers. Choose each permission separately; allowing a device does not start recording. Screen sharing can show any page you choose; page activity is available only on the study’s authorized prototype.</p>
+    <fieldset disabled={blocked || busy || consentPending}><legend>Allow devices for this study</legend>
+      {(['microphone', 'camera', 'screen', 'dom'] as const).map(track => <label className="check" key={track}><input type="checkbox" checked={!!session.consent?.[track]} onChange={event => void consent(track, event.target.checked)} /><span>{track === 'dom' ? 'Masked activity on the controlled prototype' : track === 'microphone' ? 'Microphone for spoken answers or study audio' : track === 'camera' ? 'Camera video' : 'The screen or tab I choose'}</span></label>)}
     </fieldset>
     {consentPending && <Notice>A permission change may already be saved. The affected recording is stopped.<button className="secondary" onClick={() => { setBusy(true); void bounded(convex.query(api.participant.resume, { token })).then(() => { refresh(); status.refresh(); setConsentPending(false); }).catch(() => setError('Saved permissions are still unconfirmed. The affected recording remains stopped.')).finally(() => setBusy(false)); }}>Check saved permissions</button></Notice>}
     {session.state === 'active' && <div className="capture-tracks">{modes.map(mode => {
       const snapshot = snapshots[mode];
       const live = snapshot.phase === 'requesting' || snapshot.phase === 'recording';
-      const label = mode === 'screen' ? 'Screen sharing' : mode === 'camera' ? 'Camera' : 'Microphone';
+      const label = mode === 'screen' ? 'Study screen recording' : mode === 'camera' ? 'Study camera recording' : 'Study audio recording';
       return <div className="capture-track" key={mode}><div><strong>{label}</strong><p className="muted" role="status">{snapshot.phase === 'requesting' ? 'Awaiting browser permission' : snapshot.phase === 'recording' ? 'Recording' : snapshot.phase === 'saving' ? 'Saving sources' : snapshot.phase === 'unconfirmed' ? 'Stopped · result unconfirmed' : 'Off'}</p></div><div className="actions">
         <button className="secondary" disabled={disabled || live || !!snapshot.pending || !session.question || !session.consent?.[mode] || !status.data || ['stopped', 'purging', 'purged'].includes(status.data.recording)} onClick={() => void start(mode)}>Start {mode === 'screen' ? 'screen sharing' : mode}</button>
         {(live || snapshot.pending > 0) && <button className="text-button" onClick={() => { void capture.current![mode].stop(); }}>Stop {mode === 'screen' ? 'screen sharing' : mode}</button>}
@@ -189,6 +195,7 @@ export function ResearchCapture({ token, session, controls, refresh, devices }: 
     {pending > 0 && <p className="muted">Keep this tab open until recording sources are confirmed. Unconfirmed recording does not prevent text answers.</p>}
     {session.state !== 'active' && modes.filter(mode => snapshots[mode].phase === 'unconfirmed').map(mode => <button key={mode} className="secondary" disabled={busy} onClick={() => void capture.current![mode].recover()}>Check original {mode} recording</button>)}
     {session.consent?.dom && <div className="dom-controls"><p role="status">{domState}</p>{uncertainConnect.current && <button className="secondary" disabled={busy} onClick={async () => { const pending = uncertainConnect.current; if (!pending) return; setBusy(true); try { await convex.mutation(api.capture.connectDom, { token, ...pending }); await convex.mutation(api.capture.disconnectDom, { token, challenge: pending.challenge }); uncertainConnect.current = null; setDomState('Connection state confirmed. Reconnect to continue.'); } catch { setDomState('Connection state is still unconfirmed.'); } finally { setBusy(false); } }}>Check original connection</button>}{status.data?.domPolicy ? <button className="secondary" disabled={disabled || !!domPending.current || !!uncertainConnect.current} onClick={() => void openDom()}>Connect controlled prototype</button> : <p className="muted">The operator has not authorized page activity for this study.</p>}{bridge.current && <button className="text-button" onClick={() => { const old = stopDom(); if (old) void convex.mutation(api.capture.disconnectDom, { token, challenge: old.challenge }).catch(() => setError('Page activity stopped locally; reconnect state is unconfirmed.')); }}>Stop page activity</button>}{domPending.current && <button className="secondary" onClick={async () => { const pending = domPending.current; if (!pending) return; try { await bounded(convex.mutation(api.capture.appendDom, { token, ...pending })); domPending.current = null; setDomState('Original page activity source confirmed. Reconnect to continue.'); } catch { setDomState('Page activity source is still unconfirmed.'); } }}>Check original page activity</button>}</div>}
+    </details>
     {(error || status.error) && <Notice error>{error || status.error}</Notice>}
   </section>;
 }

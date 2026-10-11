@@ -1,5 +1,5 @@
 import { ClinicalError, digest, type ConfirmedSubmission } from './domain.js';
-import { IDENTIFIER_SYSTEM, identifierQuery, planHandoff, type FhirResource } from './fhir.js';
+import { IDENTIFIER_SYSTEM, identifierQuery, componentKey, planHandoff, type FhirResource } from './fhir.js';
 import { MedplumClient, fhirResource, type AtomicQualification, type MedplumConfig } from './medplum.js';
 import { TransportError, type Fetch } from './transport.js';
 
@@ -87,7 +87,7 @@ export async function qualifyMedplum(config: MedplumConfig, confirmation: Confir
       }
       return response;
     };
-    const delivery = await new MedplumClient(config, loseReceipt).deliver(confirmation, qualification);
+    const delivery = await new MedplumClient(config, loseReceipt).deliverAtomic(confirmation, qualification);
     report.checks.validTransaction = validTransactionResponse && delivery.receipt.state === 'received';
     if (!report.checks.validTransaction) report.checks.atomicRollback = false;
     report.checks.lostResponseRecovery = dropped && delivery.write === 'outcome-unknown' && delivery.receipt.state === 'received';
@@ -97,7 +97,7 @@ export async function qualifyMedplum(config: MedplumConfig, confirmation: Confir
     const changed = structuredClone(confirmation.submission);
     changed.sources[0].text += ' DIFFERENT PAYLOAD';
     const changedDigest = await digest(changed);
-    const conflict = await client.check({ ...confirmation, submission: changed, digest: changedDigest, ...(confirmation.sufficiency ? { sufficiency: { ...confirmation.sufficiency, submissionDigest: changedDigest } } : {}) });
+    const conflict = await client.checkAtomic({ ...confirmation, submission: changed, digest: changedDigest, ...(confirmation.sufficiency ? { sufficiency: { ...confirmation.sufficiency, submissionDigest: changedDigest } } : {}) });
     report.checks.payloadConflict = conflict.state === 'conflict';
     if (Object.values(report.checks).every(Boolean)) {
       report.nativeTransactions = simulated ? 'mock-pass' : 'qualified-for-tested-credentials';
@@ -109,4 +109,90 @@ export async function qualifyMedplum(config: MedplumConfig, confirmation: Confir
 }
 export function assertSyntheticQualification(confirmation: ConfirmedSubmission): void {
   if (!confirmation.submission.submissionId.startsWith('qualification-')) throw new ClinicalError('qualification-fixture-required');
+}
+
+export const conditionalChecks = ['conditionalCreate', 'conditionalConcurrency', 'versionConflict', 'versionHistory', 'lostResponseRecovery', 'partialResume', 'zeroTaskResume', 'sourceVerification', 'payloadConflict'] as const;
+export interface ConditionalQualificationReport {
+  schema: 2; deliveryContract: 'conditional-resumable-v1'; mode: 'mock' | 'local' | 'live'; runId: string; endpoint: string;
+  checks: Record<typeof conditionalChecks[number], boolean>;
+  delivery: 'qualified-for-tested-credentials' | 'mock-pass' | 'not-qualified'; handoff: 'received' | 'mock-received' | 'not-qualified';
+  authorization: 'not-qualified'; providerInference: 'not-called'; retainedSyntheticIdentifiers: string[];
+  qualification?: import('./medplum.js').DeliveryQualification;
+}
+/** Selected delivery qualification. Historic qualifyMedplum remains an atomic capability drill. */
+export async function qualifyConditionalMedplum(config: MedplumConfig, confirmation: ConfirmedSubmission, fetcher: Fetch = fetch, simulated = false): Promise<ConditionalQualificationReport> {
+  assertSyntheticQualification(confirmation);
+  const client = new MedplumClient(config, fetcher), plan = await planHandoff(confirmation);
+  const report: ConditionalQualificationReport = { schema: 2, deliveryContract: 'conditional-resumable-v1', mode: simulated ? 'mock' : config.mode, runId: crypto.randomUUID(), endpoint: client.config.baseUrl, checks: Object.fromEntries(conditionalChecks.map(check => [check, false])) as ConditionalQualificationReport['checks'], delivery: 'not-qualified', handoff: 'not-qualified', authorization: 'not-qualified', providerInference: 'not-called', retainedSyntheticIdentifiers: plan.components.map(component => component.key) };
+  const qualification: import('./medplum.js').DeliveryQualification = { deliveryContract: 'conditional-resumable-v1', baseUrl: client.config.baseUrl, mode: config.mode, credentialFingerprint: await digest(config.accessToken), conditionalCreate: true, conditionalConcurrency: true, versionConflict: true, versionHistory: true, qualifiedAt: new Date().toISOString() };
+  try {
+    let conditional = true, concurrent = true;
+    // Each actual resource type receives two concurrent conditional requests. Dependencies are resolved by delivery afterward.
+    for (const type of ['DocumentReference', 'QuestionnaireResponse', 'Task']) {
+      const component = plan.components.find(item => item.resource.resourceType === type)!;
+      const key = `${confirmation.submission.submissionId}.qualification-${type}`;
+      report.retainedSyntheticIdentifiers.push(key);
+      const resource = structuredClone(component.resource);
+      resource.identifier = type === 'QuestionnaireResponse' ? { system: IDENTIFIER_SYSTEM, value: key } : [{ system: IDENTIFIER_SYSTEM, value: key }];
+      // Probe creates use only supported, fully resolved patient references.
+      if (type === 'QuestionnaireResponse') resource.extension = (resource.extension as Array<{ url: string }>).filter(extension => !extension.url.endsWith('source-document'));
+      if (type === 'Task') { delete resource.focus; delete resource.input; }
+      const create = async () => fhirResource((await client.request(type, 'POST', resource, { 'If-None-Exist': identifierQuery(key) })).body);
+      const winners = await Promise.all([create(), create()]), persisted = await client.findByIdentifier(type, key);
+      conditional &&= !!persisted?.id && winners.every(winner => winner.id === persisted.id);
+      concurrent &&= conditional;
+      if (persisted) {
+        const different = { ...resource, status: type === 'Task' ? 'completed' : type === 'QuestionnaireResponse' ? 'stopped' : 'superseded' };
+        const winner = fhirResource((await client.request(type, 'POST', different, { 'If-None-Exist': identifierQuery(key) })).body);
+        conditional &&= winner.id === persisted.id && winner.status === persisted.status;
+      }
+    }
+    report.checks.conditionalCreate = conditional; report.checks.conditionalConcurrency = concurrent;
+    let lost = false;
+    const lose: Fetch = async (input, init) => {
+      const response = await fetcher(input, init);
+      if (!lost && init?.method === 'POST' && String(input) === `${client.config.baseUrl}DocumentReference` && response.ok) { lost = true; await response.arrayBuffer(); throw new Error('qualification-lost-response'); }
+      return response;
+    };
+    const interrupted = await new MedplumClient(config, lose).deliver(confirmation, qualification);
+    report.checks.lostResponseRecovery = lost && interrupted.write === 'outcome-unknown' && interrupted.receipt.present > 0;
+    let blocked = false;
+    const failTask: Fetch = async (input, init) => {
+      if (!blocked && init?.method === 'POST' && String(input) === `${client.config.baseUrl}Task`) { blocked = true; return new Response('{}', { status: 503 }); }
+      return fetcher(input, init);
+    };
+    const anchorsOnly = await new MedplumClient(config, failTask).deliver(confirmation, qualification);
+    const zero = anchorsOnly.receipt.state === 'incomplete' && !!anchorsOnly.receipt.anchors.source && !!anchorsOnly.receipt.anchors.response && !anchorsOnly.receipt.verifiedWork.length;
+    let manifestBlocked = false;
+    const failManifest: Fetch = async (input, init) => {
+      const resource = init?.body ? asRecord(JSON.parse(String(init.body))) : {};
+      const identifiers = Array.isArray(resource.identifier) ? resource.identifier : [resource.identifier];
+      if (init?.method === 'POST' && identifiers.some(identifier => String(asRecord(identifier).value).endsWith('.manifest'))) { manifestBlocked = true; return new Response('{}', { status: 503 }); }
+      return fetcher(input, init);
+    };
+    const partial = await new MedplumClient(config, failManifest).deliver(confirmation, qualification);
+    const resumed = await client.deliver(confirmation, qualification);
+    report.checks.zeroTaskResume = zero && resumed.receipt.state === 'received';
+    report.checks.partialResume = manifestBlocked && partial.receipt.state === 'incomplete' && partial.receipt.verifiedWork.length === confirmation.submission.work.length && resumed.receipt.state === 'received';
+    report.checks.sourceVerification = resumed.receipt.state === 'received' && !!resumed.receipt.anchors.source && !!resumed.receipt.anchors.response;
+    if (resumed.receipt.state === 'received') {
+      report.handoff = simulated ? 'mock-received' : 'received';
+      const taskReference = resumed.receipt.resources[componentKey(confirmation.submission, `work.${confirmation.submission.work[0].id}`)];
+      const task = fhirResource((await client.request(taskReference)).body), initial = version(task)!;
+      const changed = fhirResource((await client.request(taskReference, 'PUT', { ...task, status: 'received' }, { 'If-Match': `W/"${initial}"` })).body);
+      let stale = false;
+      try { await client.request(taskReference, 'PUT', task, { 'If-Match': `W/"${initial}"` }); } catch (error) { stale = error instanceof TransportError && error.status === 412; }
+      report.checks.versionConflict = stale && version(changed) !== initial && (await client.request(taskReference)).body !== undefined;
+      const history = await client.history(taskReference), original = await client.versionRead(taskReference, initial);
+      const manifest = plan.components.at(-1)!;
+      const manifestReference = resumed.receipt.resources[manifest.key], manifestVersions = await client.history(manifestReference);
+      report.checks.versionHistory = history.length >= 2 && original.status === 'requested' && !!version(manifestVersions.at(-1)!);
+      const changedSubmission = structuredClone(confirmation.submission); changedSubmission.sources[0].text += ' DIFFERENT PAYLOAD';
+      const changedDigest = await digest(changedSubmission);
+      const conflict = await client.check({ ...confirmation, submission: changedSubmission, digest: changedDigest, ...(confirmation.sufficiency ? { sufficiency: { ...confirmation.sufficiency, submissionDigest: changedDigest } } : {}) });
+      report.checks.payloadConflict = conflict.state === 'conflict';
+    }
+    if (Object.values(report.checks).every(Boolean)) { report.delivery = simulated ? 'mock-pass' : 'qualified-for-tested-credentials'; if (!simulated) report.qualification = qualification; }
+  } catch { /* Ambiguous or missing evidence does not qualify this delivery contract. */ }
+  return report;
 }

@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import { ConvexReactClient } from "convex/react";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { OperatorApp } from "./OperatorApp";
+import { ClientReportApp } from "./ClientReportApp";
+import { createSyntheticVoiceFixture } from "./synthetic-voice-fixture";
 import { ParticipantApp } from "./ParticipantApp";
 import { Brand } from "./components";
 import { DraftProtection } from "./navigation";
@@ -36,8 +38,20 @@ class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
 const endpoint =
   import.meta.env.VITE_RESEARCH_CONVEX_URL ||
   (import.meta.env.DEV ? "http://127.0.0.1:3210" : "");
+const syntheticVoice = import.meta.env.DEV && window.location.pathname === "/participate/synthetic-voice" ? createSyntheticVoiceFixture() : undefined;
 const root = createRoot(document.getElementById("root")!);
-if (!endpoint)
+if (window.location.pathname.startsWith("/report/"))
+  root.render(
+    <React.StrictMode>
+      <Boundary>
+        <a className="skip" href="#main">
+          Skip to content
+        </a>
+        <ClientReportApp />
+      </Boundary>
+    </React.StrictMode>,
+  );
+else if (!endpoint)
   root.render(
     <main className="entry">
       <Brand />
@@ -57,8 +71,8 @@ else {
           <a className="skip" href="#main">
             Skip to content
           </a>
-          {window.location.pathname === "/participate" ? (
-            <ParticipantApp />
+          {(window.location.pathname === "/participate" || syntheticVoice) ? (
+            <ParticipantApp fixture={syntheticVoice} />
           ) : (
             <DraftProtection>
               <OperatorApp />

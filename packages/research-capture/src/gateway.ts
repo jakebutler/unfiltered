@@ -1,4 +1,5 @@
-import { CAPTURE_LIMITS, byteRange, digest, type MediaDescriptor, type PrivateObjectStore } from './contracts';
+import { protectedObjectResponse } from './protected-read';
+import { CAPTURE_LIMITS, digest, type MediaDescriptor, type PrivateObjectStore } from './contracts';
 export type AuthorizedMedia = { id: string; key: string; attempt: number; retryUntil: number; claimUntil: number; descriptor: MediaDescriptor; leaseUntil: number; state: string };
 export interface CaptureAuthority {
   claim(token: string, id: string, attempt: number): Promise<AuthorizedMedia>;
@@ -68,28 +69,7 @@ export function mediaGateway(store: PrivateObjectStore, authority: CaptureAuthor
       if (request.method !== 'GET') return new Response('Method unavailable', { status: 405, headers });
       const bearer = /^Bearer (.+)$/.exec(request.headers.get('Authorization') ?? '')?.[1] ?? '';
       const scope = { id, clientId: url.searchParams.get('clientId') ?? '', projectId: url.searchParams.get('projectId') ?? '', sessionId: url.searchParams.get('sessionId') ?? '' };
-      const row = await authority.read(bearer, scope), stored = await store.head(row.key);
-      if (!stored || stored.bytes !== row.descriptor.bytes || stored.sha256 !== row.descriptor.sha256 || stored.mime !== row.descriptor.mime) throw new Error('Source unavailable');
-      let range;
-      try { range = byteRange(request.headers.get('Range'), stored.bytes); } catch { return new Response('Range unavailable', { status: 416, headers: { ...headers, 'Content-Range': `bytes */${stored.bytes}` } }); }
-      const body = await store.read(row.key, range);
-      // Reauthorize before the response and each bounded emitted chunk. Revocation cannot
-      // recall bytes already sent; it prevents the next chunk/read. No CDN caching.
-      await authority.read(bearer, scope);
-      const reader = body.getReader(); let pending: Uint8Array | undefined;
-      const protectedBody = new ReadableStream<Uint8Array>({
-        async pull(controller) {
-          try {
-            await authority.read(bearer, scope);
-            if (!pending?.byteLength) { const next = await reader.read(); if (next.done) { controller.close(); return; } pending = next.value; }
-            // Object I/O may have stalled arbitrarily long since the first check.
-            // Check again immediately before enqueue, including each split chunk.
-            await authority.read(bearer, scope);
-            const chunk = pending.subarray(0, 256_000); pending = pending.subarray(chunk.byteLength); controller.enqueue(chunk);
-          } catch { await reader.cancel().catch(() => undefined); controller.error(new Error('Source access ended')); }
-        }, async cancel() { await reader.cancel(); },
-      }, { highWaterMark: 0 });
-      return new Response(protectedBody, { status: range.partial ? 206 : 200, headers: { ...headers, 'Content-Type': stored.mime, 'Content-Length': String(range.end - range.start + 1), 'Accept-Ranges': 'bytes', ...(range.partial ? { 'Content-Range': `bytes ${range.start}-${range.end}/${stored.bytes}` } : {}) } });
+      return await protectedObjectResponse(store, () => authority.read(bearer, scope), request.headers.get('Range'));
     } catch { return new Response('Source unavailable; reconcile before retrying', { status: 409, headers }); }
   };
 }

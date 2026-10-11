@@ -23,12 +23,15 @@ export function createSpeechRelay(options: {
   /** Host sends only these normalized events to the authorized browser; must not buffer unboundedly. */
   emit(event: RelayEvent): void;
   now?: () => number;
+  /** Native setup/admission time consumes the concurrency lease; never extend its total lifetime. */
+  captureMs?: number;
 }) {
   const now = options.now ?? Date.now;
+  const captureMs = Math.max(1, Math.min(options.captureMs ?? speechLimits.captureMs, speechLimits.captureMs));
   const started = now();
   let bytes = 0, messages = 0, providerBytes = 0, stopped = false, finishing = false;
   let idle: ReturnType<typeof setTimeout>, flush: ReturnType<typeof setTimeout> | undefined;
-  const hard = setTimeout(() => stop('interrupted'), speechLimits.captureMs + 5_000);
+  const hard = setTimeout(() => stop('interrupted'), captureMs + 5_000);
   function stop(outcome: SpeechOutcome) {
     if (stopped) return;
     stopped = true; clearTimeout(hard); clearTimeout(idle); clearTimeout(flush);
@@ -45,8 +48,8 @@ export function createSpeechRelay(options: {
       if (stopped || finishing) throw new SpeechError('interrupted');
       const elapsed = now() - started;
       if (!(frame instanceof Uint8Array) || !frame.byteLength || frame.byteLength % 2 !== 0 || frame.byteLength > 16_384
-          || elapsed < 0 || elapsed > speechLimits.captureMs
-          || bytes + frame.byteLength > pcmBytesPerSecond * speechLimits.captureMs / 1_000
+          || elapsed < 0 || elapsed > captureMs
+          || bytes + frame.byteLength > pcmBytesPerSecond * captureMs / 1_000
           || bytes + frame.byteLength > pcmBytesPerSecond * (elapsed / 1_000 + 2)
           || options.provider.bufferedAmount > 64_000) { stop('interrupted'); throw new SpeechError('limit'); }
       bytes += frame.byteLength; resetIdle();

@@ -1,0 +1,4 @@
+import type { Finding, SourceKind, Excerpt, RawGrant } from './analysis';
+export type PublishedEvidence = { evidenceId: string; kind: SourceKind; sessionLabel: string; start: number; end: number; artifactStart: number | null; artifactEnd: number | null; sourceUntil: number; sourceAvailable: boolean; fullArtifactLabel: string; view: boolean; download: boolean };
+export type PublishedReport = { title: string; clientName: string; projectName: string; version: number; publishedAt: number; expiresAt: number; accessExpiresAt: number; findings: Finding[]; excerpts: Excerpt[]; evidence: PublishedEvidence[]; grants: RawGrant[]; downloadNotice: string };
+export type AnalysisReadiness = { state: 'disabled' | 'offline-fixture' | 'live'; reservations: { id: string; model: string; expiresAt: number; classification: 'offline-fixture' | 'live' }[]; message: string; maxFrames?: number; textOnly?: boolean };

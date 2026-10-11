@@ -50,6 +50,7 @@ export const saveStudy = operatorMutation({ args: { clientId: v.id('researchClie
     if (new Set(repo.files.map(f => f.path)).size !== repo.files.length || new TextEncoder().encode(JSON.stringify(repo)).length > LIMITS.contextBytes) throw new ConvexError('Context is duplicated or exceeds 48 KB');
     definition.repository = repo;
   }
+  if (d.captureExpectation) definition.captureExpectation = { ...d.captureExpectation, alternatePath: boundedText(d.captureExpectation.alternatePath, 1000, 'capture alternate path') };
   assertContextSafe(JSON.stringify(definition));
   const version = project.latestStudyVersion + 1;
   const studyId = await ctx.db.insert('researchStudies', { ownerId: ctx.operator.userId, clientId: client._id, projectId: project._id, version, definition, createdAt: Date.now() });
@@ -65,11 +66,11 @@ export const readStudy = operatorQuery({ args: { clientId: v.id('researchClients
 export const sessionSources = operatorQuery({ args: { clientId: v.id('researchClients'), projectId: v.id('researchProjects'), sessionId: v.id('researchSessions'), paginationOpts: paginationOptsValidator }, returns: sourcePage, handler: async (ctx, args) => {
   await projectFor(ctx, ctx.operator.userId, args.clientId, args.projectId); pageSize(args.paginationOpts.numItems);
   const session = await ctx.db.get(args.sessionId);
-  if (!session || session.projectId !== args.projectId || session.clientId !== args.clientId || session.ownerId !== ctx.operator.userId || !retainsSources(session)) throw new ConvexError('Access unavailable');
+  if (!session || session.purpose === 'readiness-test' || session.projectId !== args.projectId || session.clientId !== args.clientId || session.ownerId !== ctx.operator.userId || !retainsSources(session)) throw new ConvexError('Access unavailable');
   return pageResult(await ctx.db.query('researchSources').withIndex('by_sessionId_and_sequence', q => q.eq('sessionId', session._id)).paginate(args.paginationOpts));
 } });
 export const sessions = operatorQuery({ args: { clientId: v.id('researchClients'), projectId: v.id('researchProjects'), paginationOpts: paginationOptsValidator }, returns: v.object({ page: v.array(v.object({ sessionId: v.id('researchSessions'), studyId: v.id('researchStudies'), state: sessionState, revision: v.number(), sourceCount: v.number(), savedAt: v.number(), retainUntil: v.number() })), isDone: v.boolean(), continueCursor: v.string() }), handler: async (ctx, args) => {
   await projectFor(ctx, ctx.operator.userId, args.clientId, args.projectId); pageSize(args.paginationOpts.numItems);
-  const result = await ctx.db.query('researchSessions').withIndex('by_projectId', q => q.eq('projectId', args.projectId)).order('desc').paginate(args.paginationOpts);
-  return { ...pageResult(result), page: result.page.map(({ _id, studyId, state, revision, sourceCount, savedAt, retainUntil }) => ({ sessionId: _id, studyId, state, revision, sourceCount, savedAt, retainUntil })) };
+  const result = await ctx.db.query('researchSessions').withIndex('by_projectId_and_purpose', q => q.eq('projectId', args.projectId).eq('purpose', undefined)).order('desc').paginate(args.paginationOpts);
+  return { ...pageResult(result), page: result.page.filter(row => row.purpose !== 'readiness-test').map(({ _id, studyId, state, revision, sourceCount, savedAt, retainUntil }) => ({ sessionId: _id, studyId, state, revision, sourceCount, savedAt, retainUntil })) };
 } });

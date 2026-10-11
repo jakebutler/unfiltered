@@ -1,0 +1,17 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { medplumTemplate } from './templates/medplum.mjs';
+import { medplumProfile } from './medplum/profile.schema.ts';
+import { profileDigest, digest, realDirectory } from './medplum/render.mjs';
+import { publicExample, newPrivateOutput } from './io.mjs';
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const arg = name => { const i = process.argv.indexOf(name); if (i < 0 || !process.argv[i + 1]) throw new Error('argument-required'); return process.argv[i + 1]; };
+const clinic = publicExample(root, arg('--manifest')), packagePath = realDirectory(resolve(arg('--package')));
+if (!packagePath.startsWith(`${root}/infra/aws/.private/`)) throw new Error('owned-offline-package-required');
+const p = JSON.parse(readFileSync(join(packagePath, 'package.json'), 'utf8'));
+if (p.profileHash !== profileDigest(medplumProfile(clinic)) || p.packageHash !== digest(JSON.stringify(p.files))) throw new Error('exact-package-profile-required');
+for (const [name, expected] of Object.entries(p.files)) if (!/^(?:[A-Za-z0-9_-]+\.mjs|compose\.yml|images\.lock\.json|bootstrap\.sh|clinic\.json)$/.test(name) || digest(readFileSync(join(packagePath, name))) !== expected) throw new Error('package-file-invalid');
+const output = newPrivateOutput(root, arg('--output')), template = medplumTemplate(clinic, p.packageHash);
+writeFileSync(output, JSON.stringify(template, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+console.log(JSON.stringify({ state: 'synthesized-offline-unqualified', output, resources: Object.keys(template.Resources).length, cloudCalls: 0 }));

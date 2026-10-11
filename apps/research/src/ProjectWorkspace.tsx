@@ -4,7 +4,12 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { usePages, useRead } from "./data";
+import { FindingsWorkspace } from "./FindingsWorkspace";
+import { ReportsWorkspace } from "./PublicationPreview";
 import { CaptureSources, PrototypeAuthorization } from "./CaptureSources";
+import { StudyReadiness } from "./StudyReadiness";
+import { StudyCaptureTest } from "./StudyCaptureTest";
+import { NewInterviewRun } from "./NewInterviewRun";
 import { useNavigationGuard, useStudyDraftProtection } from "./navigation";
 import { DateTime, Field, Notice, Pages, SourceList } from "./components";
 import {
@@ -29,8 +34,12 @@ export function ProjectWorkspace({
   const allowNavigation = useNavigationGuard();
   const scope = { clientId, projectId };
   const record = useRead(api.research.project, scope);
-  const [tab, setTab] = useState<"study" | "invitations" | "sessions">("study");
+  const [tab, setTab] = useState<
+    "study" | "invitations" | "sessions" | "findings" | "reports"
+  >("study");
   const [editing, setEditing] = useState(false);
+  const [reviewedAnalysis, setReviewedAnalysis] =
+    useState<Id<"researchAnalyses"> | null>(null);
   if (record.error)
     return (
       <Notice error>
@@ -70,7 +79,9 @@ export function ProjectWorkspace({
         />
       )}
       <nav className="tabs" aria-label="Project sections">
-        {(["study", "invitations", "sessions"] as const).map((value) => (
+        {(
+          ["study", "invitations", "sessions", "findings", "reports"] as const
+        ).map((value) => (
           <button
             key={value}
             aria-current={tab === value ? "page" : undefined}
@@ -82,7 +93,11 @@ export function ProjectWorkspace({
               ? "Study setup"
               : value === "invitations"
                 ? "Invitations"
-                : "Sessions & sources"}
+                : value === "sessions"
+                  ? "Sessions & sources"
+                  : value === "findings"
+                    ? "Findings & review"
+                    : "Reports & access"}
           </button>
         ))}
       </nav>
@@ -93,6 +108,25 @@ export function ProjectWorkspace({
         <Invitations scope={scope} project={project} active={active} />
       )}{" "}
       {tab === "sessions" && <Sessions scope={scope} />}
+      {tab === "findings" && (
+        <FindingsWorkspace
+          latestStudyVersion={project.latestStudyVersion}
+          scope={scope}
+          active={active}
+          onReviewed={(id) => {
+            setReviewedAnalysis(id);
+            setTab("reports");
+          }}
+        />
+      )}
+      {tab === "reports" && (
+        <ReportsWorkspace
+          scope={scope}
+          active={active}
+          analysisId={reviewedAnalysis}
+          onBack={() => setTab("findings")}
+        />
+      )}
     </>
   );
 }
@@ -189,11 +223,21 @@ function StudyWorkspace({
 }) {
   const allowNavigation = useNavigationGuard();
   const [version, setVersion] = useState<number | null>(null);
+  const [newRunPending, setNewRunPending] = useState(false);
   const selected = version ?? project.latestStudyVersion;
   const study = useRead(
     api.research.readStudy,
     selected ? { ...scope, version: selected } : null,
   );
+  const editor = <StudyEditor
+    key={`${scope.projectId}:${selected}`}
+    scope={scope}
+    project={project}
+    active={active && !newRunPending}
+    initial={study.data?.definition ?? emptyStudy(project.name)}
+    sourceVersion={selected}
+    onSaved={setVersion}
+  />;
   return (
     <>
       <div className="section-heading">
@@ -232,20 +276,29 @@ function StudyWorkspace({
           <button onClick={study.refresh}>Refresh</button>
         </Notice>
       )}
+      {study.data && <NewInterviewRun scope={scope} sourceVersion={study.data.version} definition={study.data.definition} project={project} active={active} allowNavigation={allowNavigation} onSaved={setVersion} onPending={setNewRunPending} />}
       {study.error ? null : selected > 0 && !study.data ? (
         <p role="status">Loading study version…</p>
       ) : (
-        <StudyEditor
-          key={`${scope.projectId}:${selected}`}
+        study.data ? <details className="saved-study-editor">
+          <summary>
+            <strong>Edit saved study</strong>
+            <span>{study.data.definition.title} · {study.data.definition.goals.length} {study.data.definition.goals.length === 1 ? "goal" : "goals"} · {study.data.definition.script.length} {study.data.definition.script.length === 1 ? "question" : "questions"}</span>
+          </summary>
+          {editor}
+        </details> : editor
+      )}
+      {study.data ? <StudyReadiness key={`readiness:${study.data.studyId}`} scope={{ ...scope, studyId: study.data.studyId, studyVersion: study.data.version }} active={active} /> : null}
+      {study.data ? <StudyCaptureTest key={`test:${study.data.studyId}:${study.data.version}`} scope={{ ...scope, studyId: study.data.studyId, studyVersion: study.data.version }} active={active} /> : null}
+      {study.data?.definition.prototypeUrl && (
+        <PrototypeAuthorization
+          key={`prototype:${study.data.studyId}`}
           scope={scope}
-          project={project}
+          studyId={study.data.studyId}
+          prototypeUrl={study.data.definition.prototypeUrl}
           active={active}
-          initial={study.data?.definition ?? emptyStudy(project.name)}
-          sourceVersion={selected}
-          onSaved={setVersion}
         />
       )}
-      {study.data?.definition.prototypeUrl && <PrototypeAuthorization key={study.data.studyId} scope={scope} studyId={study.data.studyId} prototypeUrl={study.data.definition.prototypeUrl} active={active} />}
     </>
   );
 }
@@ -426,6 +479,15 @@ function StudyEditor({
             )}
           </section>
           <section className="editor-section">
+            <h3>Capture expectations</h3>
+            <p>Request capture separately from participant consent. Camera is always optional.</p>
+            {(["screen", "controlledDom"] as const).map(mode => <label className="check" key={mode}>
+              <input type="checkbox" checked={!!draft.captureExpectation?.[mode]} onChange={event => change("captureExpectation", { screen: draft.captureExpectation?.screen ?? false, controlledDom: draft.captureExpectation?.controlledDom ?? false, alternatePath: draft.captureExpectation?.alternatePath ?? "Continue with text if a device permission is denied.", [mode]: event.target.checked })} />
+              <span>{mode === "screen" ? "Request screen sharing" : "Request controlled page activity"}</span>
+            </label>)}
+            {draft.captureExpectation ? <Field label="Alternative when capture is unavailable" hint="Participants see this path. It does not make missing evidence complete."><textarea required maxLength={1000} rows={3} value={draft.captureExpectation.alternatePath} onChange={event => change("captureExpectation", { ...draft.captureExpectation!, alternatePath: event.target.value })} /></Field> : null}
+          </section>
+          <section className="editor-section">
             <h3>Prototype and repository</h3>
             <Field
               label="Prototype URL (optional)"
@@ -583,13 +645,13 @@ function StudyEditor({
         </p>
         <dl>
           <dt>Interview</dt>
-          <dd>Text · ordered script</dd>
+          <dd>The saved script is the text fallback. Available interview modes are listed below.</dd>
           <dt>Capture</dt>
-          <dd>No microphone, camera or screen recording in this interview</dd>
+          <dd>Recording depends on study availability, participant choices and browser permissions.</dd>
           <dt>Participant sources</dt>
           <dd>Exact answers and earlier corrections are preserved</dd>
         </dl>
-        <p>This interview collects text answers for your review.</p>
+        <p>Check availability and preview the participant welcome before sharing an invitation.</p>
       </aside>
     </form>
   );
@@ -936,7 +998,10 @@ function Sessions({ scope }: { scope: Scope }) {
               ) : (
                 <>
                   <SourceList sources={sources.rows} />
-                  <CaptureSources key={session.sessionId} scope={{ ...scope, sessionId: session.sessionId }} />
+                  <CaptureSources
+                    key={session.sessionId}
+                    scope={{ ...scope, sessionId: session.sessionId }}
+                  />
                   <Pages {...sources} />
                   {!sources.loading &&
                     !sources.rows.length &&

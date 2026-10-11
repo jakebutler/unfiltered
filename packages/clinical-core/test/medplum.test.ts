@@ -9,27 +9,27 @@ import { mockFhir } from '../../../scripts/qualification/mock-fhir.js';
 const config: MedplumConfig = { baseUrl: 'http://127.0.0.1:8103/fhir/R4/', accessToken: 'only-for-tests', timeoutMs: 1000, mode: 'local' };
 const qualification = async (): Promise<AtomicQualification> => ({ baseUrl: config.baseUrl, mode: 'local', credentialFingerprint: await digest(config.accessToken), atomicRollback: true, conditionalCreate: true, versionConflict: true, qualifiedAt: '2026-10-09T00:00:00Z' });
 
-describe('Medplum conditional handoff', () => {
+describe('historic native atomic capability drill', () => {
   it('uses only the verified immutable response storage time for receipt time', async () => {
     const server = mockFhir(); const client = new MedplumClient(config, server.fetcher); const f = await fixture();
-    await client.deliver(f, await qualification());
+    await client.deliverAtomic(f, await qualification());
     const response = [...server.resources.values()].find(r => r.resourceType === 'QuestionnaireResponse')!;
     const task = [...server.resources.values()].find(r => r.resourceType === 'Task')!;
     response.meta = { ...(response.meta as object), lastUpdated: '2026-10-09T10:05:12.345Z' };
     task.meta = { ...(task.meta as object), lastUpdated: '2026-10-09T12:00:00.000Z' };
-    expect(await client.check(f)).toMatchObject({ state: 'received', receivedAt: '2026-10-09T10:05:12.345Z' });
+    expect(await client.checkAtomic(f)).toMatchObject({ state: 'received', receivedAt: '2026-10-09T10:05:12.345Z' });
     task.meta = { ...(task.meta as object), lastUpdated: '2026-10-10T12:00:00.000Z' };
-    expect(await client.check(f)).toMatchObject({ state: 'received', receivedAt: '2026-10-09T10:05:12.345Z' });
+    expect(await client.checkAtomic(f)).toMatchObject({ state: 'received', receivedAt: '2026-10-09T10:05:12.345Z' });
     response.meta = { versionId: '1' };
-    expect(await client.check(f)).not.toHaveProperty('receivedAt');
+    expect(await client.checkAtomic(f)).not.toHaveProperty('receivedAt');
   });
   it('writes one linked immutable handoff and a duplicate call performs no write', async () => {
     const server = mockFhir(); const client = new MedplumClient(config, server.fetcher); const f = await fixture(); const q = await qualification();
-    const first = await client.deliver(f, q);
+    const first = await client.deliverAtomic(f, q);
     expect(first.write).toBe('acknowledged'); expect(first.receipt.state).toBe('received');
     expect(first.receipt).toMatchObject({ review: 'not-established' });
     const before = server.counters.writes;
-    expect((await client.deliver(f, q)).write).toBe('not-attempted');
+    expect((await client.deliverAtomic(f, q)).write).toBe('not-attempted');
     expect(server.counters.writes).toBe(before);
     expect(server.resources.size).toBe(4);
     const plan = await planHandoff(f);
@@ -37,7 +37,7 @@ describe('Medplum conditional handoff', () => {
   });
   it('handles concurrent identical conditional submissions without duplicate resources', async () => {
     const server = mockFhir(); const client = new MedplumClient(config, server.fetcher); const f = await fixture(); const q = await qualification();
-    const attempts = await Promise.all([client.deliver(f, q), client.deliver(f, q)]);
+    const attempts = await Promise.all([client.deliverAtomic(f, q), client.deliverAtomic(f, q)]);
     expect(attempts.every(a => a.receipt.state === 'received')).toBe(true);
     expect(server.resources.size).toBe(4); expect(server.counters.writes).toBe(4);
   });
@@ -55,7 +55,7 @@ describe('Medplum conditional handoff', () => {
     for (let i = 0; i < 100; i++) f.submission.sources.push({ id: `large-${i}`, patient: f.submission.patient, kind: 'patient-statement', capturedAt: '2026-10-09T00:00:00Z', text: 'x'.repeat(12000) });
     f.digest = await digest(f.submission); f.sufficiency!.submissionDigest = f.digest;
     const server = mockFhir();
-    await expect(new MedplumClient(config, server.fetcher).deliver(f, await qualification())).rejects.toThrow('submission-too-large');
+    await expect(new MedplumClient(config, server.fetcher).deliverAtomic(f, await qualification())).rejects.toThrow('submission-too-large');
     expect(server.counters.requests).toBe(0);
   });
   it('recovers a response lost after acceptance without resubmitting', async () => {
@@ -66,52 +66,52 @@ describe('Medplum conditional handoff', () => {
       return response;
     };
     const client = new MedplumClient(config, fetcher);
-    const result = await client.deliver(await fixture(), await qualification());
+    const result = await client.deliverAtomic(await fixture(), await qualification());
     expect(result).toMatchObject({ write: 'outcome-unknown', receipt: { state: 'received', review: 'not-established' } });
     expect(server.counters.transactionPosts).toBe(1);
   });
   it('refuses an identifier collision with a different payload before mutation', async () => {
     const server = mockFhir(); const client = new MedplumClient(config, server.fetcher); const f = await fixture(); const q = await qualification();
-    await client.deliver(f, q); const writes = server.counters.writes;
+    await client.deliverAtomic(f, q); const writes = server.counters.writes;
     f.submission.answers[0].text = 'different confirmed value'; f.digest = await digest(f.submission); f.sufficiency!.submissionDigest = f.digest;
-    expect(await client.deliver(f, q)).toMatchObject({ write: 'not-attempted', receipt: { state: 'conflict' } });
+    expect(await client.deliverAtomic(f, q)).toMatchObject({ write: 'not-attempted', receipt: { state: 'conflict' } });
     expect(server.counters.writes).toBe(writes);
   });
   it('rejects content tampering even when the confirmation tag is retained', async () => {
     const server = mockFhir(); const client = new MedplumClient(config, server.fetcher); const f = await fixture();
-    await client.deliver(f, await qualification());
+    await client.deliverAtomic(f, await qualification());
     const source = [...server.resources.values()].find(r => r.resourceType === 'DocumentReference')!;
     source.content = [{ attachment: { contentType: 'application/json', data: btoa('changed') } }];
-    expect((await client.check(f)).state).toBe('conflict');
+    expect((await client.checkAtomic(f)).state).toBe('conflict');
   });
   it('does not treat missing components or failed source reads as received', async () => {
     const server = mockFhir(); const client = new MedplumClient(config, server.fetcher); const f = await fixture();
-    await client.deliver(f, await qualification());
+    await client.deliverAtomic(f, await qualification());
     const manifest = [...server.resources.entries()].filter(([, r]) => r.resourceType === 'DocumentReference')[1][0];
     server.resources.delete(manifest);
     const count = server.counters.writes;
-    expect(await client.deliver(f, await qualification())).toMatchObject({ write: 'not-attempted', receipt: { state: 'incomplete' } });
+    expect(await client.deliverAtomic(f, await qualification())).toMatchObject({ write: 'not-attempted', receipt: { state: 'incomplete' } });
     expect(server.counters.writes).toBe(count);
     const denied = new MedplumClient(config, async () => new Response('{}', { status: 403 }));
-    expect((await denied.check(f)).state).toBe('unknown');
+    expect((await denied.checkAtomic(f)).state).toBe('unknown');
   });
   it('blocks duplicate conditional matches and mismatched credential qualification', async () => {
     const server = mockFhir(); const client = new MedplumClient(config, server.fetcher); const f = await fixture();
-    await client.deliver(f, await qualification());
+    await client.deliverAtomic(f, await qualification());
     const first = [...server.resources.values()][0]; server.resources.set('duplicate', { ...structuredClone(first), id: 'duplicate' });
-    expect((await client.check(f)).state).toBe('conflict');
-    await expect(new MedplumClient({ ...config, accessToken: 'different-project-token' }, server.fetcher).deliver(f, await qualification())).rejects.toThrow('native-transaction-not-qualified');
+    expect((await client.checkAtomic(f)).state).toBe('conflict');
+    await expect(new MedplumClient({ ...config, accessToken: 'different-project-token' }, server.fetcher).deliverAtomic(f, await qualification())).rejects.toThrow('native-transaction-not-qualified');
   });
   it('allows staff Task state changes while never inferring explicit review', async () => {
     const server = mockFhir(); const client = new MedplumClient(config, server.fetcher); const f = await fixture();
-    await client.deliver(f, await qualification());
+    await client.deliverAtomic(f, await qualification());
     [...server.resources.values()].find(r => r.resourceType === 'Task')!.status = 'completed';
-    expect(await client.check(f)).toMatchObject({ state: 'received', review: 'not-established' });
+    expect(await client.checkAtomic(f)).toMatchObject({ state: 'received', review: 'not-established' });
   });
   it('keeps ambiguity explicit when a receipt read fails and never blindly retries', async () => {
     let calls = 0;
     const client = new MedplumClient(config, async () => { calls++; throw new Error('secret'); });
-    expect(await client.deliver(await fixture(), await qualification())).toMatchObject({ write: 'not-attempted', receipt: { state: 'unknown' } });
+    expect(await client.deliverAtomic(await fixture(), await qualification())).toMatchObject({ write: 'not-attempted', receipt: { state: 'unknown' } });
     expect(calls).toBe(1);
   });
   it('requires explicit local/live endpoint mode and does not forward secrets to URL credentials', () => {

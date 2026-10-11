@@ -1,7 +1,7 @@
 import type { EvidenceContext, SlotAnswer, SlotAnswers, SlotDefinition, SlotReadiness, TopicDefinition, TopicReadiness, TopicResponse } from './types.js';
 
-export function hasValidEvidence(answer: SlotAnswer | undefined, context: EvidenceContext): boolean {
-  return !!answer?.sourceIds?.length && answer.sourceIds.every(id => context.validSourceIds.has(id));
+export function hasValidEvidence(answer: SlotAnswer | undefined, context: EvidenceContext, path?: string): boolean {
+  return !!answer?.sourceIds?.length && (answer.sourceIds.every(id => context.validSourceIds.has(id)) || !!(context.topicId && path && !/^MH0[1-4]$/.test(path) && context.reviewedFact?.(context.topicId, path, answer)));
 }
 
 function valueValid(slot: SlotDefinition, answer: SlotAnswer): boolean {
@@ -27,10 +27,10 @@ export function evaluateSlots(definitions: readonly SlotDefinition[], answers: S
     if (slot.optional && (!answer || answer.state === 'not-asked')) { results.push({...base,state:'not-applicable'}); continue; }
     if (slot.when) {
       if (slot.when.condition === 'uncertain') {
-        const anchors = [slot.when.slotId,...(slot.when.orSlotIds ?? [])].map(id=>answers[id]);
-        const uncertain = anchors.some(anchor=>anchor?.state === 'uncertain' && hasValidEvidence(anchor,context));
+        const anchorIds = [slot.when.slotId,...(slot.when.orSlotIds ?? [])], anchors = anchorIds.map(id=>answers[id]);
+        const uncertain = anchors.some((anchor,index)=>anchor?.state === 'uncertain' && hasValidEvidence(anchor,context,prefix + anchorIds[index]));
         if (!uncertain) {
-          const settled = anchors.every(anchor=>hasValidEvidence(anchor,context) && (anchor?.state === 'known' || anchor?.state === 'negative'));
+          const settled = anchors.every((anchor,index)=>hasValidEvidence(anchor,context,prefix + anchorIds[index]) && (anchor?.state === 'known' || anchor?.state === 'negative'));
           results.push({...base,state:settled ? 'not-applicable' : 'unresolved',...(settled ? {} : {reason:'condition-unresolved' as const}),sourceIds:settled ? [...new Set(anchors.flatMap(anchor=>anchor?.sourceIds??[]))] : base.sourceIds,promptIds:[]});
           continue;
         }
@@ -38,8 +38,8 @@ export function evaluateSlots(definitions: readonly SlotDefinition[], answers: S
       const anchor = answers[slot.when.slotId];
       const anchorDefinition = definitions.find(d => d.id === slot.when!.slotId);
       const extra = slot.when.alsoWhenTrue ? answers[slot.when.alsoWhenTrue] : undefined;
-      const additionalTrigger = extra?.state === 'known' && extra.value === true && hasValidEvidence(extra, context);
-      const valid = hasValidEvidence(anchor, context);
+      const additionalTrigger = extra?.state === 'known' && extra.value === true && hasValidEvidence(extra, context, prefix + slot.when.alsoWhenTrue);
+      const valid = hasValidEvidence(anchor, context, prefix + slot.when.slotId);
       const negative = valid && anchor?.state === 'negative' && anchorDefinition?.acceptsNegative === true;
       const positive = valid && anchor?.state === 'known' && !!anchorDefinition && valueValid(anchorDefinition, anchor);
       if ((slot.when.condition === 'positive' && negative) || (slot.when.condition === 'estimate-needed' && !additionalTrigger && positive && anchor?.state === 'known' && anchor.value === true)) {
@@ -51,7 +51,7 @@ export function evaluateSlots(definitions: readonly SlotDefinition[], answers: S
       }
     }
     if (!answer || answer.state === 'not-asked') { results.push({ ...base, state: 'unresolved', reason: 'missing' }); continue; }
-    if (!hasValidEvidence(answer, context)) { results.push({ ...base, state: 'unresolved', reason: 'invalid-evidence', promptIds: [] }); continue; }
+    if (!hasValidEvidence(answer, context, id)) { results.push({ ...base, state: 'unresolved', reason: 'invalid-evidence', promptIds: [] }); continue; }
     if (answer.state === 'negative') { results.push({ ...base, state: slot.acceptsNegative ? 'sufficient' : 'unresolved', ...(slot.acceptsNegative ? {} : { reason: 'negative-not-allowed' as const }) }); continue; }
     if (answer.state === 'not-applicable') { results.push({ ...base, state: slot.acceptsNotApplicable ? 'not-applicable' : 'unresolved', ...(slot.acceptsNotApplicable ? {} : { reason: 'not-applicable-not-allowed' as const }) }); continue; }
     if (answer.state === 'uncertain' && slot.acceptsUncertain) { results.push({ ...base, state: 'sufficient' }); continue; }
@@ -79,9 +79,10 @@ export function evaluateTopic(topic: TopicDefinition, response: TopicResponse, c
     const slots: SlotReadiness[] = topic.slots.filter(slot=>!slot.optional).map(slot=>({id:slot.id,answerState:'not-asked',state:notApplicable ? 'not-applicable' : 'unresolved',...(notApplicable ? {} : {reason:'condition-unresolved' as const}),sourceIds:[...sourceIds],promptIds:[]}));
     return {topicId:topic.id,presentedOrAccountedFor:notApplicable || response.presented,sufficient:notApplicable,collection:notApplicable ? 'not-applicable' : response.stopped ? 'stopped' : 'awaiting-information',slots,unresolvedSlotIds:notApplicable ? [] : slots.map(slot=>slot.id),nextPromptIds:[],partialHandoffAllowed:true};
   }
+  context = { ...context, topicId: topic.id };
   let slots = evaluateSlots(topic.slots, response.answers, context);
   if (topic.id === 'Q04') slots = checkHeightUnitPair(slots, response.answers);
-  if (topic.id === 'Q06' && response.answers.reportedConditions?.state === 'negative' && topic.slots.some(slot=>slot.id.startsWith('conditions.') && response.answers[slot.id]?.state === 'known' && (response.answers[slot.id] as {value?:unknown}).value === true && hasValidEvidence(response.answers[slot.id],context))) {
+  if (topic.id === 'Q06' && response.answers.reportedConditions?.state === 'negative' && topic.slots.some(slot=>slot.id.startsWith('conditions.') && response.answers[slot.id]?.state === 'known' && (response.answers[slot.id] as {value?:unknown}).value === true && hasValidEvidence(response.answers[slot.id],context,slot.id))) {
     slots = slots.map(slot=>slot.id === 'reportedConditions' ? {...slot,state:'unresolved',reason:'invalid-value'} : slot);
   }
   const unresolved = slots.filter(slot => slot.state === 'unresolved');

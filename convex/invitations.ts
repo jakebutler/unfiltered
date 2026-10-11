@@ -48,5 +48,7 @@ export const revoke = operatorMutation({ args: { clientId: v.id('researchClients
 export const list = operatorQuery({ args: { clientId: v.id('researchClients'), projectId: v.id('researchProjects'), paginationOpts: paginationOptsValidator }, returns: v.object({ page: v.array(v.object({ ...result, studyId: v.id('researchStudies'), revokedAt: v.union(v.number(), v.null()) })), isDone: v.boolean(), continueCursor: v.string() }), handler: async (ctx, args) => {
   await projectFor(ctx, ctx.operator.userId, args.clientId, args.projectId); pageSize(args.paginationOpts.numItems);
   const rows = await ctx.db.query('researchInvitations').withIndex('by_projectId_and_requestId', q => q.eq('projectId', args.projectId)).paginate(args.paginationOpts);
-  return { ...pageResult(rows), page: rows.page.map(({ _id, sessionId, expiresAt, studyId, revokedAt }) => ({ invitationId: _id, sessionId, expiresAt, studyId, revokedAt })) };
+  const ordinary = [];
+  for (const row of rows.page) if ((await ctx.db.get(row.sessionId))?.purpose !== 'readiness-test') ordinary.push(row);
+  return { ...pageResult(rows), page: ordinary.map(({ _id, sessionId, expiresAt, studyId, revokedAt }) => ({ invitationId: _id, sessionId, expiresAt, studyId, revokedAt })) };
 } });

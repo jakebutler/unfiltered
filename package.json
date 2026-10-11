@@ -50,7 +50,8 @@
     "react-dom": "^19.1.0",
     "tailwind-merge": "^3.5.0",
     "ws": "8.22.0",
-    "zod": "^3.24.1"
+    "zod": "^3.25.76",
+    "@aws-sdk/client-s3": "3.984.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241218.0",
@@ -72,5 +73,22 @@
     "vite": "6.4.2",
     "vitest": "^3.0.0",
     "wrangler": "^4.84.1"
+  },
+  "overrides": {
+    "fast-xml-parser": {
+      "fast-xml-builder": "1.1.7"
+    },
+    "vite": {
+      "postcss": "8.5.23"
+    },
+    "@tailwindcss/postcss": {
+      "postcss": "8.5.23"
+    },
+    "postcss": {
+      "nanoid": "3.3.18",
+      "source-map-js": "1.2.2"
+    },
+    "nanoid": "3.3.18",
+    "source-map-js": "1.2.2"
   }
 }

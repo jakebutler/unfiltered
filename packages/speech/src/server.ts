@@ -53,26 +53,42 @@ export function createSpeechOutput(options: SpeechServerOptions) {
       throw new SpeechError('not-authorized');
     if (typeof source.text !== 'string' || !source.text.trim() || source.text.length > speechLimits.ttsCharacters)
       throw new SpeechError('limit');
+    const admissionStarted = Date.now();
     const lease = await options.admission.reserve({ sessionId: source.sessionId, requestId: input.requestId,
       provider: 'elevenlabs', maxCharacters: source.text.length, maxAudioSeconds: 0 });
+    let settlementStarted = false;
+    const settle = (outcome: SpeechOutcome) => {
+      if (settlementStarted) return;
+      settlementStarted = true;
+      // Admission already charged the full bound. Bookkeeping cannot delay or invalidate audio,
+      // including when its acknowledgement is lost; retain the reservation and never retry speech.
+      try { void Promise.resolve(lease.settle(outcome)).catch(() => undefined); }
+      catch { /* The durable reservation remains charged and its concurrency lease expires normally. */ }
+    };
+    try {
+      const fresh = await options.authorize(input);
+      if (fresh.sessionId !== source.sessionId || fresh.sourceId !== source.sourceId || fresh.revision !== source.revision || fresh.text !== source.text)
+        throw new SpeechError('not-authorized');
+    } catch (error) { settle('failed'); throw error; }
+    const timeoutMs = Math.min(speechLimits.providerTimeoutMs, 35_000 - (Date.now() - admissionStarted));
+    if (timeoutMs <= 0) { settle('failed'); throw new SpeechError('timeout'); }
     const controller = new AbortController();
     let timeout = false, ended = false, reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let output: ReadableStreamDefaultController<Uint8Array> | undefined;
-    const release = async (outcome: SpeechOutcome) => {
+    const release = (outcome: SpeechOutcome) => {
       if (ended) return;
       ended = true; clearTimeout(timer); signal?.removeEventListener('abort', interrupted);
-      await lease.settle(outcome);
+      settle(outcome);
     };
     const cancel = (error: SpeechError, outcome: SpeechOutcome) => {
       if (ended) return;
       controller.abort();
       void reader?.cancel().catch(() => undefined);
       output?.error(error);
-      // Lease errors must be handled by admission's own durable reconciliation, never logged here.
-      void release(outcome).catch(() => undefined);
+      release(outcome);
     };
     const interrupted = () => cancel(new SpeechError('interrupted'), 'interrupted');
-    const timer = setTimeout(() => { timeout = true; cancel(new SpeechError('timeout'), 'unknown'); }, speechLimits.providerTimeoutMs);
+    const timer = setTimeout(() => { timeout = true; cancel(new SpeechError('timeout'), 'unknown'); }, timeoutMs);
     signal?.addEventListener('abort', interrupted, { once: true });
     try {
       if (signal?.aborted) { interrupted(); throw new SpeechError('interrupted'); }
@@ -99,7 +115,7 @@ export function createSpeechOutput(options: SpeechServerOptions) {
             if (ended) return;
             if (result.done) {
               if (!bytes) throw new SpeechError('invalid-provider-response');
-              await release('completed'); control.close(); return;
+              release('completed'); control.close(); return;
             }
             bytes += result.value.byteLength;
             if (bytes > speechLimits.ttsBytes) throw new SpeechError('limit');
@@ -109,12 +125,12 @@ export function createSpeechOutput(options: SpeechServerOptions) {
             else control.error(new SpeechError('unavailable'));
           }
         },
-        async cancel() { controller.abort(); void reader?.cancel().catch(() => undefined); await release('interrupted'); },
+        cancel() { controller.abort(); void reader?.cancel().catch(() => undefined); release('interrupted'); },
       });
       return new Response(stream, { status: 200, headers: { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
     } catch (error) {
       controller.abort();
-      await release(controller.signal.aborted && signal?.aborted ? 'interrupted' : 'unknown');
+      release(controller.signal.aborted && signal?.aborted ? 'interrupted' : 'unknown');
       if (error instanceof SpeechError) throw error;
       throw new SpeechError(timeout ? 'timeout' : signal?.aborted ? 'interrupted' : 'unavailable');
     }

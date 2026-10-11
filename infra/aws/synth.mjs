@@ -1,0 +1,12 @@
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { clinicTemplate } from './templates/clinic.mjs';
+import { publicExample, newPrivateOutput } from './io.mjs';
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const arg = name => { const at = process.argv.indexOf(name); if (at < 0 || !process.argv[at + 1]) throw new Error('explicit-synthesis-arguments-required'); return process.argv[at + 1]; };
+const input = publicExample(root, arg('--manifest')), output = newPrivateOutput(root, arg('--output'));
+const template = clinicTemplate(input, arg('--platform'));
+mkdirSync(dirname(output), { recursive: true, mode: 0o700 });
+writeFileSync(output, `${JSON.stringify(template, null, 2)}\n`, { flag: 'wx' });
+console.log(JSON.stringify({ state: 'synthesized-offline-unqualified', output, resources: Object.keys(template.Resources).length, cloudCalls: 0 }));

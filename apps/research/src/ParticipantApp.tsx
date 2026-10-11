@@ -1,3 +1,7 @@
+import { StudyWelcomePanel } from "./StudyWelcome";
+import { ConsentWithdrawal } from "./ConsentWithdrawal";
+import { ConsentSharing } from "./ConsentSharing";
+import { InterviewNextStep } from "./InterviewNextStep";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useConvex } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -10,7 +14,11 @@ import {
   SourceList,
 } from "./components";
 import { usePages, useRead } from "./data";
-import { ResearchCapture, type CaptureControls } from "./ResearchCapture";
+import { readLocalDraft, saveLocalDraft, clearLocalDraft, type LocalDraftScope } from './local-draft';
+import { ResearchCapture, type CaptureControls, type CaptureActivity } from "./ResearchCapture";
+import { ResearchSpeech, type ResearchSpeechControls } from './ResearchSpeech';
+import type { ResearchMediaFixture } from './synthetic-voice-fixture';
+import type { ResearchTranscriptReceipt, ResearchSpokenReceipt } from '../../../packages/research-core/src/speech-contract';
 import {
   CAPABILITY_KEY,
   clearSessionItem,
@@ -43,10 +51,11 @@ function takeCapability() {
 }
 // Extract before the first rendered tree and strip the fragment immediately.
 const initialCapability =
-  window.location.pathname === "/participate" ? takeCapability() : null;
+  (window.location.pathname === "/participate" || import.meta.env.DEV && window.location.pathname === "/participate/synthetic-voice") ? takeCapability() : null;
 
-export function ParticipantApp() {
+export function ParticipantApp({ fixture }: { fixture?: ResearchMediaFixture } = {}) {
   const [token, setToken] = useState(initialCapability);
+  const [withdrawalRevision, setWithdrawalRevision] = useState<number | null>(null);
   const record = useRead(api.participant.resume, token ? { token } : null);
   const [now, setNow] = useState(Date.now());
   const deadline = record.data
@@ -71,13 +80,16 @@ export function ParticipantApp() {
     };
   }, [deadline, now]);
   const expired = deadline !== null && deadline <= now;
+  useEffect(() => { if (record.error) clearLocalDraft(record.data?.sessionId, sessionStorage); }, [record.error]);
   useEffect(() => {
     if (!expired) return;
+    clearLocalDraft(record.data?.sessionId, sessionStorage);
     clearSessionItem(CAPABILITY_KEY);
     if (record.data)
       clearSessionItem(`corvo.research.pending.${record.data.sessionId}`);
   }, [expired, record.data?.sessionId]);
   const forget = () => {
+    clearLocalDraft(record.data?.sessionId, sessionStorage);
     try {
       sessionStorage.removeItem(CAPABILITY_KEY);
       if (record.data)
@@ -93,10 +105,17 @@ export function ParticipantApp() {
     <>
       <header className="topbar participant-topbar">
         <Brand />
-        <span className="demo-label">Synthetic research</span>
+        <span className="demo-label">{fixture ? "Synthetic voice fixture · no microphone or provider" : "Synthetic research"}</span>
       </header>
-      <main id="main" className="participant-main">
-        {!token ? (
+      <main id="main" tabIndex={-1} className="participant-main">
+        {withdrawalRevision !== null ? (
+          <>
+            <h1>You withdrew consent</h1>
+            <p>Your withdrawal was accepted. Access to this interview and its shared sources has stopped. Your saved answers and recordings are queued for permanent deletion.</p>
+            <p>Reports and shared excerpts that depend on these sources are no longer available. Copies already viewed or downloaded cannot be recalled.</p>
+            <p className="muted" role="status">Withdrawal accepted at interview revision {withdrawalRevision}. Deletion is queued; this receipt does not claim it has finished.</p>
+          </>
+        ) : !token ? (
           <>
             <h1>Open your research invitation</h1>
             <p>
@@ -124,10 +143,12 @@ export function ParticipantApp() {
         ) : (
           <Interview
             key={record.data.sessionId}
+            fixture={fixture}
             token={token}
             session={record.data}
             refresh={record.refresh}
             forget={forget}
+            onWithdrawn={revision => { forget(); setWithdrawalRevision(revision); }}
           />
         )}
       </main>
@@ -140,23 +161,39 @@ function Interview({
   session,
   refresh,
   forget,
+  fixture,
+  onWithdrawn,
 }: {
   token: string;
   session: Participant;
   refresh: () => void;
   forget: () => void;
+  fixture?: ResearchMediaFixture;
+  onWithdrawn: (revision: number) => void;
 }) {
   const convex = useConvex();
   const captureControls = useRef<CaptureControls | null>(null);
+  const speechControls = useRef<ResearchSpeechControls | null>(null);
+  const [captureActivity, setCaptureActivity] = useState<CaptureActivity>({ devices: [], page: false, pending: 0, controlPending: false });
+  const draftScope: LocalDraftScope = { sessionId: session.sessionId, promptId: session.question?.id ?? '', revision: session.revision, expiresAt: Math.min(session.expiresAt, session.retainUntil) };
+  const [restoredDraft, setRestoredDraft] = useState(() => readLocalDraft(draftScope, sessionStorage));
+  const [draftStored, setDraftStored] = useState(true);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const draftOrigin = useRef<'text' | 'voice'>('text');
+  const [voiceDraft, setVoiceDraft] = useState(false);
+  const [voiceReceipt, setVoiceReceipt] = useState<ResearchTranscriptReceipt | null>(null);
   const sources = usePages(api.participant.sources, { token });
-  const [draft, setDraft] = useState("");
+  const finalReview = useRead(api.participant.reviewSnapshot, session.consent ? { token } : null);
+  const [reviewPending, setReviewPending] = useState<{ expectedRevision: number; requestId: string; answerGeneration: number; manifestHash: string } | null>(null);
+  const [draft, setDraft] = useState(restoredDraft?.current ? restoredDraft.draft.text : "");
   const [draftQuestion, setDraftQuestion] = useState(session.question?.id);
-  const [correction, setCorrection] = useState<Source | null>(null);
+  const [correction, setCorrection] = useState<(Pick<Source, 'sourceId' | 'sequence' | 'text'> & { question?: string }) | null>(null);
   const [correctedText, setCorrectedText] = useState("");
   const storageKey = `corvo.research.pending.${session.sessionId}`;
   const [operation, setOperation] = useState<PendingSource | null>(() =>
     readPending(storageKey),
   );
+  const [sharingPending, setSharingPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
@@ -165,6 +202,11 @@ function Interview({
   const [leave, setLeave] = useState(false);
   const [uncertainTransition, setUncertainTransition] = useState(false);
   const closed = session.state === "completed" || session.state === "partial";
+  useEffect(() => {
+    if (closed) { clearLocalDraft(session.sessionId, sessionStorage); return; }
+    if (draft && draftQuestion === session.question?.id) setDraftStored(saveLocalDraft(draftScope, draft, sessionStorage));
+    else if (!draft && !restoredDraft) clearLocalDraft(session.sessionId, sessionStorage);
+  }, [draft, draftQuestion, session.question?.id, session.revision, session.state, session.sessionId, restoredDraft]);
   useEffect(() => {
     void sources.refresh();
   }, [session.revision]);
@@ -198,7 +240,8 @@ function Interview({
             });
       setOperation(null);
       clearSessionItem(storageKey);
-      setDraft("");
+      setDraft(""); setRestoredDraft(null); clearLocalDraft(session.sessionId, sessionStorage);
+      setVoiceDraft(false); setVoiceReceipt(null);
       setCorrection(null);
       setCorrectedText("");
       setSaved(`Answer saved · source ${receipt.sequence + 1}`);
@@ -223,7 +266,7 @@ function Interview({
     setError("");
     setSaved("");
     try {
-      if (state !== "active") await captureControls.current?.stop();
+      if (state !== "active") { speechControls.current?.stop(); await captureControls.current?.stop(); }
       await convex.mutation(api.participant.transition, {
         token,
         expectedRevision: session.revision,
@@ -260,11 +303,42 @@ function Interview({
       setBusy(false);
     }
   }
-  const blocked = busy || !!operation || uncertainTransition;
+  async function confirmWording() {
+    const snapshot = finalReview.data;
+    if (!snapshot || !reviewPending && snapshot.revision !== session.revision || session.pendingInterview) return;
+    speechControls.current?.stop();
+    const request = reviewPending ?? { expectedRevision: snapshot.revision, requestId: crypto.randomUUID(), answerGeneration: snapshot.answerGeneration, manifestHash: snapshot.manifestHash };
+    setBusy(true); setError(''); setReviewPending(request);
+    try {
+      await convex.mutation(api.participant.confirmFinalReview, { token, ...request });
+      setReviewPending(null); setSaved('Your current answer wording is reviewed.'); refresh(); finalReview.refresh();
+    } catch (err) {
+      setError(errorText(err));
+      if (isDefinitiveError(err)) setReviewPending(null);
+      refresh(); finalReview.refresh();
+    } finally { setBusy(false); }
+  }
+  async function microphoneConsent(enabled: boolean) {
+    if (!session.consent) return;
+    speechControls.current?.stop(); setBusy(true); setError('');
+    try { await convex.mutation(api.capture.changeConsent, { token, expectedRevision: session.revision, consent: { ...session.consent, microphone: enabled } }); refresh(); }
+    catch (err) { setError(errorText(err)); setUncertainTransition(true); refresh(); }
+    finally { setBusy(false); }
+  }
+  function spokenCommitted(receipt: ResearchSpokenReceipt, scope: { sessionId: string; promptId: string; expectedRevision: number }) {
+    if (session.sessionId === scope.sessionId && draftQuestion === scope.promptId && draftOrigin.current === 'voice') {
+      setDraft(''); setVoiceDraft(false); setVoiceReceipt(null); setRestoredDraft(null); clearLocalDraft(session.sessionId, sessionStorage);
+    }
+    setSaved('Spoken answer saved · awaiting your final wording review'); void sources.refresh(); refresh(); finalReview.refresh();
+  }
+  const baseBlocked = busy || !!operation || uncertainTransition || !!reviewPending;
+  const blocked = baseBlocked || sharingPending;
   const draftMismatch = !!draft && draftQuestion !== session.question?.id;
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!session.question || draftMismatch || blocked) return;
+    if (!session.question || draftMismatch || blocked || voiceActive || voiceDraft && !voiceReceipt) return;
+    if (voiceReceipt && (voiceReceipt.promptId !== session.question.id || voiceReceipt.expectedRevision !== session.revision)) { setError('The question changed. Review the original voice source before accepting this wording.'); return; }
+    speechControls.current?.stop();
     void send({
       kind: "answer",
       args: {
@@ -272,7 +346,8 @@ function Interview({
         expectedRevision: session.revision,
         questionId: session.question.id,
         text: draft,
-        channel: "text",
+        channel: voiceDraft && voiceReceipt ? "confirmed-transcript" : "text",
+        ...(voiceDraft && voiceReceipt ? { speechAttemptId: voiceReceipt.attemptId } : {}),
       },
     });
   }
@@ -289,10 +364,11 @@ function Interview({
             disabled={blocked}
             onClick={() => setLeave(true)}
           >
-            Save and leave
+            Pause and leave
           </button>
         )}
       </div>
+      {session.welcome?.purpose === "readiness-test" ? <Notice>Capture test only. This session uses text and browser recording. It will not appear in findings or client reports.</Notice> : null}
       {error && <Notice error>{error}</Notice>}
       {saved && <Notice>{saved}</Notice>}
       {uncertainTransition && (
@@ -329,14 +405,13 @@ function Interview({
         <Consent session={session} pending={blocked} agree={agree} />
       ) : (
         <>
-          <ResearchCapture token={token} session={session} controls={captureControls} refresh={refresh} />
           {leave && (
             <section className="confirmation">
               <h2>Pause and leave this interview?</h2>
               <p>
                 Answers already saved will remain.{" "}
                 {draft || correctedText
-                  ? "The text still in your editor has not been saved; copy it before leaving."
+                  ? draftStored ? "Your draft stays only in this browser tab. It has not been sent; clearing this tab’s access removes it." : "Your draft has not been sent or retained. Copy it before leaving."
                   : "Use your original invitation to return before its expiry."}
               </p>
               <div className="actions">
@@ -400,8 +475,9 @@ function Interview({
             </section>
           ) : (
             <>
+              {(captureActivity.devices.length > 0 || captureActivity.page) && <div className="active-recording-strip" role="status"><span>Study recording: {[...captureActivity.devices, ...(captureActivity.page ? ['page activity'] : [])].join(', ')}</span><button type="button" className="secondary" onClick={() => void captureControls.current?.endRecording?.()}>Stop study recording</button></div>}
               <div className="interview-toolbar">
-                <span>Text interview · recording is optional</span>
+                <span>Text or voice interview · recording is optional</span>
                 <button
                   className="text-button"
                   disabled={busy}
@@ -425,15 +501,11 @@ function Interview({
                   </span>
                 </p>
               )}
-              {session.question ? (
-                <section
-                  className="question"
-                  aria-label="Current interview question"
-                >
-                  <p className="question-progress">
-                    Question {session.questionNumber} of {session.questionCount}
-                  </p>
-                  <h2>{session.question.question}</h2>
+              <section className="question" aria-label="Current interview question">
+                {session.question && !session.pendingInterview && <><p className="question-progress">Question {session.questionNumber} of {session.questionCount}</p><h2>{session.question.question}</h2></>}
+                {session.welcome?.purpose !== "readiness-test" && <ResearchSpeech mediaSource={fixture?.speechSource} token={token} session={session} draft={draft} blocked={blocked} controls={speechControls} captureControls={captureControls} onActivity={setVoiceActive} onResetSpeech={() => { setVoiceDraft(false); setVoiceReceipt(null); }} onReceipt={setVoiceReceipt} onCommitted={spokenCommitted} onMicrophoneConsent={microphoneConsent} onDraft={(text, hasTranscript) => { draftOrigin.current = 'voice'; setDraft(text); setDraftQuestion(session.question?.id); if (hasTranscript) setVoiceDraft(true); }} />}
+              {session.pendingInterview ? <InterviewNextStep key={session.pendingInterview.scope.requestId} token={token} pending={session.pendingInterview} refresh={refresh} /> : session.question ? (
+                <>
                   <form onSubmit={submit}>
                     <Field label="Your answer">
                       <textarea
@@ -443,7 +515,8 @@ function Interview({
                         disabled={blocked}
                         value={draft}
                         onChange={(e) => {
-                          setDraft(e.target.value);
+                          speechControls.current?.stop();
+                          draftOrigin.current = 'text'; setDraft(e.target.value);
                           setDraftQuestion(session.question?.id);
                         }}
                         placeholder="Write what you noticed, in your own words."
@@ -458,6 +531,7 @@ function Interview({
                           type="button"
                           onClick={() => {
                             setDraft("");
+                            setVoiceDraft(false); setVoiceReceipt(null);
                             setDraftQuestion(session.question?.id);
                           }}
                         >
@@ -465,18 +539,24 @@ function Interview({
                         </button>
                       </Notice>
                     )}
+                    {draft && <p className="local-draft" role="status">{draftStored ? 'Unsent draft · retained only in this tab' : 'Unsent draft · this browser could not retain it'}</p>}
+                    {restoredDraft && !restoredDraft.current && <Notice>The saved question or revision changed. This earlier draft is still local and has not been sent.<blockquote>{restoredDraft.draft.text}</blockquote>{restoredDraft.draft.promptId === session.question?.id && <button type="button" className="secondary" onClick={() => { setDraft(restoredDraft.draft.text); setDraftQuestion(session.question?.id); setVoiceDraft(false); setVoiceReceipt(null); setRestoredDraft(null); }}>Use this wording for the current question</button>}<button type="button" className="secondary" onClick={() => { setRestoredDraft(null); clearLocalDraft(session.sessionId, sessionStorage); }}>Discard local draft</button></Notice>}
                     <div className="composer-actions">
                       <small>
-                        Your exact words are saved when you continue.
+                        {voiceDraft ? 'Review your spoken wording before saving. The original transcript remains visible.' : 'Your exact words are saved when you continue.'}
                       </small>
                       <button
-                        disabled={blocked || !draft.trim() || draftMismatch}
+                        disabled={blocked || voiceActive || voiceDraft && !voiceReceipt || !draft.trim() || draftMismatch}
                       >
                         {busy ? "Saving answer…" : "Save answer & continue"}
                       </button>
+                      <button className="secondary" type="button" disabled={blocked || voiceActive || draftMismatch} onClick={() => {
+                        speechControls.current?.stop();
+                        void send({ kind: 'answer', args: { requestId: crypto.randomUUID(), expectedRevision: session.revision, questionId: session.question!.id, text: draft || '[Skipped this question]', channel: 'text', intent: 'skip' } });
+                      }}>Skip this question</button>
                     </div>
                   </form>
-                </section>
+                </>
               ) : (
                 <section className="completion">
                   <h2>You’ve reached the end of the questions</h2>
@@ -489,10 +569,11 @@ function Interview({
                   </button>
                 </section>
               )}
+              </section>
               <div className="interview-bottom">
                 <button
                   className="text-button"
-                  disabled={blocked || !!draft || !!correctedText}
+                  disabled={blocked || voiceActive || !!draft || !!correctedText || !!session.pendingInterview}
                   onClick={() => {
                     setFinish(true);
                     setReview(true);
@@ -511,6 +592,16 @@ function Interview({
               </div>
             </>
           )}
+          <ResearchCapture blocked={blocked} devices={fixture?.devices} onActivity={setCaptureActivity} token={token} session={session} controls={captureControls} refresh={refresh} />
+          {review && <section className="final-review" aria-label="Exact answer wording review">
+            <h2>Review your answer wording</h2>
+            <p>These are the current answers. Spoken answers become available for analysis only after you confirm this exact wording. A new answer or correction requires a new review.</p>
+            {finalReview.error ? <Notice error>{finalReview.error}</Notice> : !finalReview.data ? <p role="status">Loading current answer wording…</p> : <>
+              <ol>{finalReview.data.answers.map((answer, index) => <li key={answer.sourceId}><h3>Question {index + 1}: {answer.question}</h3><p className="muted">{answer.channel === 'spoken-answer' ? finalReview.data!.reviewedCurrent ? 'Spoken answer · wording reviewed' : 'Spoken answer · awaiting wording review' : 'Saved answer'}</p><blockquote>{answer.text}</blockquote>{!closed && <button className="text-button" disabled={blocked || voiceActive || finalReview.data!.revision !== session.revision} onClick={() => { speechControls.current?.stop(); setCorrection({ sourceId: answer.sourceId, sequence: answer.sequence, text: answer.text, question: answer.question }); setCorrectedText(answer.text); setFinish(false); }}>Correct this wording</button>}</li>)}</ol>
+              {finalReview.data.reviewedCurrent ? <p role="status">This exact answer set has been reviewed.</p> : <button disabled={blocked || voiceActive || !!session.pendingInterview || finalReview.data.revision !== session.revision || !finalReview.data.answers.length} onClick={() => void confirmWording()}>Confirm this answer wording</button>}
+              {reviewPending && !busy && <button className="secondary" disabled={voiceActive} onClick={() => void confirmWording()}>Check the same review confirmation</button>}
+            </>}
+          </section>}
           {review && (
             <section className="source-review">
               <div className="section-heading">
@@ -533,11 +624,13 @@ function Interview({
               )}
               <SourceList
                 sources={sources.rows}
+                reviewedSpokenSourceIds={finalReview.data?.reviewedCurrent ? finalReview.data.answers.filter(answer => answer.channel === 'spoken-answer').map(answer => answer.sourceId) : []}
                 canCorrect={
                   !closed && !blocked && sources.done && !sources.error
                 }
                 onCorrect={(source) => {
-                  setCorrection(source);
+                  speechControls.current?.stop();
+                  setCorrection({ ...source, question: finalReview.data?.answers.find(answer => answer.sourceId === source.sourceId)?.question });
                   setCorrectedText(source.text);
                   setFinish(false);
                 }}
@@ -551,6 +644,7 @@ function Interview({
           {correction && !closed && (
             <section className="correction-editor">
               <h2>Correct your answer</h2>
+              {correction.question && <p>{correction.question}</p>}
               <p className="muted">
                 This appends a correction to source {correction.sequence + 1};
                 it does not erase the original.
@@ -616,7 +710,7 @@ function Interview({
               </p>
               <div className="actions">
                 <button
-                  disabled={blocked || !!draft || !!correctedText}
+                  disabled={blocked || voiceActive || !!draft || !!correctedText || !!session.pendingInterview || !finalReview.data || finalReview.data.revision !== session.revision || finalReview.data.answers.some(answer => answer.channel === 'spoken-answer') && !finalReview.data.reviewedCurrent}
                   onClick={() =>
                     void transition(session.question ? "partial" : "completed")
                   }
@@ -638,121 +732,16 @@ function Interview({
           <details className="consent-details">
             <summary>Consent, storage and link access</summary>
             <ConsentSummary session={session} />
+            <ConsentSharing token={token} session={session} blocked={baseBlocked || voiceActive || captureActivity.devices.length > 0 || captureActivity.page || captureActivity.pending > 0 || captureActivity.controlPending || !!session.pendingInterview} refresh={refresh} onPending={setSharingPending} />
+            <ConsentWithdrawal token={token} session={session} blocked={blocked} stop={async () => { speechControls.current?.stop(); await captureControls.current?.stop(false); }} onWithdrawn={onWithdrawn} />
           </details>
         </>
       )}
     </>
   );
 }
-function Consent({
-  session,
-  pending,
-  agree,
-}: {
-  session: Participant;
-  pending: boolean;
-  agree: (consent: NonNullable<Participant["consent"]>) => Promise<void>;
-}) {
-  const [storage, setStorage] = useState(false);
-  const [analysis, setAnalysis] = useState(false);
-  const [share, setShare] = useState(false);
-  const [excerpts, setExcerpts] = useState(false);
-  return (
-    <>
-      <p className="introduction">{session.introduction}</p>
-      <Notice>
-        Use fictional details only. This is a synthetic demonstration; do not
-        enter personal, confidential or patient information.
-      </Notice>
-      <form
-        className="consent-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void agree({
-            version: "research-consent-1",
-            storage,
-            analysis,
-            microphone: false,
-            camera: false,
-            screen: false,
-            shareTranscript: share,
-            shareAudio: false,
-            shareCamera: false,
-            shareScreen: false,
-            retainApprovedExcerpts: excerpts,
-          });
-        }}
-      >
-        <h2>Before we begin</h2>
-        <p>
-          Begin with text. Optional microphone, camera, screen sharing and
-          controlled page activity each need a separate choice during the interview.
-        </p>
-        <fieldset disabled={pending}>
-          <legend>Required to take part</legend>
-          <label className="check">
-            <input
-              type="checkbox"
-              required
-              checked={storage}
-              onChange={(e) => setStorage(e.target.checked)}
-            />
-            <span>
-              I agree to Corvo Labs storing my interview answers and corrections
-              until <DateTime value={session.retainUntil} />.
-            </span>
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              required
-              checked={analysis}
-              onChange={(e) => setAnalysis(e.target.checked)}
-            />
-            <span>
-              I agree to Corvo Labs analyzing these answers for this study,
-              including analysis assisted by AI when enabled.
-            </span>
-          </label>
-          <h3 className="consent-sharing-title">Optional client sharing</h3>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={share}
-              onChange={(e) => setShare(e.target.checked)}
-            />
-            <span>
-              Corvo Labs may share my transcript with the study’s client when it
-              publishes selected research material.
-            </span>
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={excerpts}
-              onChange={(e) => setExcerpts(e.target.checked)}
-            />
-            <span>
-              Corvo Labs may retain approved excerpts in a published report for
-              90 days after publication, even after the original transcript
-              expires.
-            </span>
-          </label>
-        </fieldset>
-        <p className="muted">
-          These choices permit storage, analysis or future sharing; they do not
-          publish anything. You can complete the interview without device recording.
-        </p>
-        <button disabled={pending || !storage || !analysis}>
-          {pending ? "Saving your choices…" : "Agree and start interview"}
-        </button>
-        <p className="muted">
-          Your invitation works until <DateTime value={session.expiresAt} />.
-          Keep the original link if you want to return.
-        </p>
-      </form>
-    </>
-  );
+function Consent({ session, pending, agree }: { session: Participant; pending: boolean; agree: (consent: NonNullable<Participant["consent"]>) => Promise<void> }) {
+  return session.welcome ? <StudyWelcomePanel welcome={session.welcome} pending={pending} agree={agree} /> : <Notice error>The study welcome is unavailable. Check the saved session before starting.</Notice>;
 }
 function ConsentSummary({ session }: { session: Participant }) {
   return (
