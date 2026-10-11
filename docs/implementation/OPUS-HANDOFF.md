@@ -1,5 +1,15 @@
 # Clinic adaptive intake — handoff (2026-10-11)
 
+> **Later the same day:**
+> - All work is committed on `codex/unfiltered-foundation` and open as draft PR #7.
+> - Hosted now runs deployment `dpl_JnT84ru5vqugxD9YCiueBr96SfEY`.
+> - **Topic avoidance is recorded explicitly.** The displayed detail is declined, with the patient's words, and the topic stops as `patient-declines`. Staff see "Patient preferred not to discuss this topic. Consider a gentle follow-up." A plain skip is `patient-moves-on`. Facts in the same message are kept.
+> - **Conflict loop fixed.** A compound answer no longer becomes a conflict, and any answer to a conflicting field resolves it.
+> - **"Move on or come back" can no longer loop.**
+> - **Tests:** 23 of the 35 pre-existing failures were fixed. 12 remain in experimental extraction paths and need product/safety decisions (see commit `b96f401`).
+> - Tester instructions are in `DEMO-TESTING-GUIDE.md`.
+> - **Known safety gap:** the authored crisis keyword list misses phrasings such as "don't want to be here anymore". Widening it changes the qualified definition digest.
+
 ## What you can test now (hosted)
 
 https://corvo-clinic-demo.vercel.app is a synthetic demo, not for real PHI, and not HIPAA-certified.
