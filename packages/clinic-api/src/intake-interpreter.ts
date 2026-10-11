@@ -538,6 +538,11 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     const prior = resolved.answer;
     let correctsSourceIds: string[] | undefined;
     if (prior && sameAnswer(prior, answer)) answer = { ...answer, sourceIds: [...new Set([...(prior.sourceIds ?? []), ...(answer.sourceIds ?? [])])] } as SlotAnswer;
+    // Several parts of one message for the same text field ("more energy, and to stop eating at night") are one answer, not a conflict.
+    else if (prior?.state === 'known' && answer.state === 'known' && definition.kind === 'text' && prior.sourceIds.includes(sourceId) && typeof prior.value === 'string' && typeof answer.value === 'string')
+      answer = { ...answer, value: norm(prior.value).includes(norm(answer.value)) ? prior.value : `${prior.value}; ${answer.value}` } as SlotAnswer;
+    // Answering a field already marked conflicting is the patient's clarification: it resolves the conflict, keeping both earlier sources on record.
+    else if (prior?.state === 'conflicting') correctsSourceIds = [...(prior.sourceIds ?? [])];
     else if (prior && !['not-asked', 'unknown', 'uncertain'].includes(prior.state)) {
       const line = candidate.corrects ? known.lines.find(entry => entry.number === candidate.corrects) : undefined;
       const valid = line && line.topicId === t.id && line.path === candidate.path && correctionCue.test(norm(sourceText));

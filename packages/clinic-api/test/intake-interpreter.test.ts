@@ -385,3 +385,25 @@ describe('intake-interpreter-v1 topic avoidance through the clinic handler', () 
     expect(topic.details?.some(detail => detail.state === 'declined' && detail.sourceIds.length === 1)).toBe(true);
   });
 });
+
+describe('intake-interpreter-v1 conflicts', () => {
+  it('merges two parts of one message for the same text field instead of marking a conflict', () => {
+    const ctx = context('More energy, and I want to stop eating at night.', ['Q01']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [
+      { topic: 'Q01', field: 'reason', state: 'known', value: 'more energy', quote: 'More energy' },
+      { topic: 'Q01', field: 'reason', state: 'known', value: 'stop eating at night', quote: 'I want to stop eating at night' },
+    ] }, ctx);
+    expect(answers(outcome, 'Q01').reason).toMatchObject({ state: 'known', value: 'more energy; stop eating at night' });
+    expect(outcome.clarifications).toEqual([]);
+  });
+
+  it('an answer to a field marked conflicting resolves it and keeps the earlier sources on record', () => {
+    const first = context('I want more energy.', ['Q01']);
+    const conflicted = { ...first.responses, Q01: { presented: true, answers: { reason: { state: 'conflicting' as const, sourceIds: [first.source.id], note: 'Patient statements differ; clarification is needed.' } } } };
+    const ctx = nextTurn({ ...first, responses: conflicted }, { responses: conflicted } as unknown as AdaptiveOutcome, 'Mostly the energy, honestly.');
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q01', field: 'reason', state: 'known', value: 'more energy', quote: 'Mostly the energy' }] }, ctx);
+    expect(answers(outcome, 'Q01').reason).toMatchObject({ state: 'known', value: 'more energy' });
+    expect(outcome.provenance).toEqual([expect.objectContaining({ path: 'reason', correctsSourceIds: [first.source.id] })]);
+    expect(outcome.clarifications).toEqual([]);
+  });
+});
