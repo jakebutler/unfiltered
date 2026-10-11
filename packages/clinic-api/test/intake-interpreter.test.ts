@@ -426,3 +426,31 @@ describe('intake-interpreter-v1 engagement choice', () => {
     expect(answers(outcome, 'Q02').onset).toMatchObject({ state: 'known', value: 'about two months ago' });
   });
 });
+
+describe('intake-interpreter-v1 grounded replies and clarification pointers', () => {
+  it('drops an acknowledgement that adds numbers or details the patient did not say', () => {
+    const ctx = context('I want more energy.', ['Q01']);
+    const fact = { topic: 'Q01', field: 'reason', state: 'known', value: 'more energy', quote: 'I want more energy' };
+    expect(interpretIntakeResponse({ ...empty, facts: [fact], ack: 'Noted that you want more energy.' }, ctx).acknowledgement).toBe('Noted that you want more energy.');
+    const invented = interpretIntakeResponse({ ...empty, facts: [fact], ack: 'Noted you want more energy after losing 10 lb with tracking points.' }, ctx);
+    expect(invented.updates.length).toBeGreaterThan(0);
+    expect(invented.acknowledgement).toBeUndefined();
+  });
+
+  it('never stores a clarification pointer such as "keep the first thing I said" as clinical content', () => {
+    const first = context('I want more energy.', ['Q01']);
+    const conflicted = { ...first.responses, Q01: { presented: true, answers: { reason: { state: 'conflicting' as const, sourceIds: [first.source.id] } } } };
+    const ctx = nextTurn({ ...first, responses: conflicted }, { responses: conflicted } as unknown as AdaptiveOutcome, 'Keep the first thing I said.');
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q01', field: 'reason', state: 'known', value: 'keep the first thing I said', quote: 'Keep the first thing I said' }] }, ctx);
+    expect(answers(outcome, 'Q01').reason).toMatchObject({ state: 'conflicting' });
+  });
+
+  it('appends an elaboration when a follow-up asks for more about an answered text field', () => {
+    const first = context('I want more energy.', ['Q01']);
+    const known = { ...first.responses, Q01: { presented: true, answers: { reason: { state: 'known' as const, value: 'more energy', sourceIds: [first.source.id] } } } };
+    const next = nextTurn({ ...first, responses: known }, { responses: known } as unknown as AdaptiveOutcome, 'Also to sleep better.');
+    const ctx = { ...next, displayed: { topicId: 'Q01', promptId: 'Q01.followup.1', targetPaths: ['reason'] } };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q01', field: 'reason', state: 'known', value: 'to sleep better', quote: 'to sleep better' }] }, ctx);
+    expect(answers(outcome, 'Q01').reason).toMatchObject({ state: 'known', value: 'more energy; to sleep better' });
+  });
+});

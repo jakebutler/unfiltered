@@ -285,6 +285,13 @@ const thirdPerson = /\b(?:she|he|they)\b/i;
 const firstPerson = /\b(?:i|i'm|i've|i'd|i was|me)\b/i;
 const correctionCue = /\b(?:actually|correction|correct that|i meant|i mean|sorry|wrong|mistake|changed|now it's|now it is|update|not\b[^.!?;]{0,40}\bbut)\b/i;
 const completionWords = /\b(?:that's all|that is all|that's it|that is it|that's everything|nothing else|no others?|only (?:those|these|that|this|one|two|three)|just (?:those|these|that|this|the one)|none other|all of them|no more|that's the lot)\b/i;
+/** An acknowledgement may only restate the patient's own words: every number and substantive word must appear in the message. */
+const ackFrame = new Set('noted note thanks thank you your yours i ive i\'ve have has and or but the a an of for to with that this these about around now it its is are was were in on at as we will can later come back okay ok got sure also both so far updated update recorded added skipping skip moving move goal goals height weight weights reading readings estimate medicine medicines medication medications symptom symptoms concern concerns family history condition conditions question questions care team diet meal meals food sleep mood details detail possible possibly no not any approach approaches lb lbs pound pounds kg kilograms cm ft foot feet in inch inches mg mcg iu ml units'.split(' '));
+function ackGrounded(ack: string, source: string): boolean {
+  const said = new Set(norm(source).toLowerCase().match(/[a-z0-9']+/g) ?? []);
+  return (norm(ack).toLowerCase().match(/[a-z0-9']+/g) ?? []).every(word => ackFrame.has(word) || said.has(word) || said.has(word.replace(/'s$/, '')) || said.has(word.replace(/s$/, '')));
+}
+const pointerAnswer = /\b(?:(?:the )?(?:first|second|last|earlier|previous|original|other) (?:thing|one|answer|statement|version)|keep (?:it|that|the (?:first|second|earlier|original|last))|what i said (?:first|before|earlier))\b/i;
 const avoidanceWords = /\b(?:rather not|prefer not|(?:don't|do not|dont) (?:want|wish|like) to|not comfortable|uncomfortable|not ready|too personal|private|off limits)\b/i;
 const moveOnWords = /\b(?:skip|move on|next question|rather not|prefer not|(?:don't|do not) want to|not comfortable|pass)\b/i;
 const ackForbidden = /\b(?:dose|dosing|diagnos\w*|prescri\w*|eligib\w*|should take|should stop|recommend\w*|stop taking|normal|healthy|risk|safe|unsafe|treat\w*|cure)\b|\?/i;
@@ -537,9 +544,13 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     let answer = derived.answer;
     const prior = resolved.answer;
     let correctsSourceIds: string[] | undefined;
+    // "Keep the first thing I said" refers to an alternative; it is never itself clinical content.
+    if (answer.state === 'known' && typeof answer.value === 'string' && pointerAnswer.test(answer.value)) { clarify('ambiguous-value'); return false; }
+    const asked = context.displayed?.topicId === t.id && context.displayed.promptId !== '__clarify-record' && (context.displayed.targetPaths ?? []).includes(candidate.path);
     if (prior && sameAnswer(prior, answer)) answer = { ...answer, sourceIds: [...new Set([...(prior.sourceIds ?? []), ...(answer.sourceIds ?? [])])] } as SlotAnswer;
     // Several parts of one message for the same text field ("more energy, and to stop eating at night") are one answer, not a conflict.
-    else if (prior?.state === 'known' && answer.state === 'known' && definition.kind === 'text' && prior.sourceIds.includes(sourceId) && typeof prior.value === 'string' && typeof answer.value === 'string')
+    // A follow-up that asks for more about an answered text field gets an elaboration, not a contradiction.
+    else if (prior?.state === 'known' && answer.state === 'known' && definition.kind === 'text' && (prior.sourceIds.includes(sourceId) || asked && !candidate.corrects) && typeof prior.value === 'string' && typeof answer.value === 'string')
       answer = { ...answer, value: norm(prior.value).includes(norm(answer.value)) ? prior.value : `${prior.value}; ${answer.value}` } as SlotAnswer;
     // Answering a field already marked conflicting is the patient's clarification: it resolves the conflict, keeping both earlier sources on record.
     else if (prior?.state === 'conflicting') correctsSourceIds = [...(prior.sourceIds ?? [])];
@@ -749,7 +760,7 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
   const ack = typeof wire.ack === 'string' ? wire.ack.trim().replace(/\s+/g, ' ') : '';
   // Patient words the server could not place (not model padding) keep the source visible for review.
   const unplaced = rejected.some(entry => entry.evidence && (entry.state === 'known' && !['relative-subject', 'question-not-answer', 'label-vs-actual'].includes(entry.reason) || ['unknown-field', 'unknown-topic'].includes(entry.reason)));
-  if (ack && ack.length <= 160 && !ackForbidden.test(ack) && outcome.updates.length && !outcome.clarifications.length && !unplaced) outcome.acknowledgement = ack;
+  if (ack && ack.length <= 160 && !ackForbidden.test(ack) && ackGrounded(ack, sourceText) && outcome.updates.length && !outcome.clarifications.length && !unplaced) outcome.acknowledgement = ack;
 
   if (rejected.length) outcome.rejectedCandidates = rejected.slice(0, 64);
   outcome.hasUnresolvedInterpretation = !!outcome.unresolvedQuestions?.length || outcome.clarifications.length > 0 || unplaced
