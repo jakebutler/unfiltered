@@ -184,7 +184,7 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
             const sourceIds = [...new Set([...details.flatMap(detail => detail.sourceIds), ...(r.applicabilitySourceIds ?? [])])];
             const gaps = projected.gaps.filter(gap => gap.topicId ? gap.topicId === t.id : gap.evidence.some(span => projected.claims.some(claim => claim.topicId === t.id && claim.sourceId === span.sourceId)));
             const directScreen = d.topics.Q16 ?? { presented: false, answers: {} }; // PHQ is direct exact choice only.
-            return { id: t.id, title: titles[t.id] ?? scenarioTitles[d.scenario], required: requiredIds.has(t.id) && t.presentation !== 'O',
+            return { id: t.id, title: titles[t.id] ?? scenarioTitles[d.scenario], required: requiredIds.has(t.id) && t.presentation !== 'O', ...(r.stopped ? { stopReason: r.stopped } : {}),
                 status: requiredIds.has(t.id) && ready.sufficient ? 'ready-for-review' : r.stopped || gaps.length ? 'stopped-with-gaps' : answered.length || r.presented ? 'more-detail-needed' : 'not-started',
                 missingDetails: [...ready.unresolvedSlotIds.map(id => details.find(detail => detail.id === id)?.label ?? id), ...(details.some(detail => detail.interpretation?.qualified === false) ? ['Proposed interpretation has not been qualified for completeness.'] : [])], details,
                 ...(t.id === 'Q16' ? { screening: { ...scorePhq4(directScreen.answers, screenContext(d, directScreen)), title: 'PHQ-4 for clinician review', text: screenText(d, t, directScreen).trim() } } : {}),

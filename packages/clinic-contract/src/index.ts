@@ -33,6 +33,8 @@ export interface AdaptiveTurnInput { requestId: string; expectedRevision: number
 export interface AdaptiveTurnResult { session: ClinicSessionView; operation: AdaptiveOperationView; }
 export interface TopicView {
   id: string; title: string; status: TopicStatus; required: boolean;
+  /** Why the conversation stopped on this topic (e.g. the patient preferred not to discuss it). Never inferred from affect. */
+  stopReason?: 'patient-declines' | 'patient-moves-on' | 'not-applicable' | 'resistance-after-purpose' | 'safety-interruption';
   answer?: { text: string; state: AnswerState; sourceIds: string[] };
   missingDetails: string[];
   /** Interpreter limitations, never patient-reported uncertainty or a clinical conclusion. */

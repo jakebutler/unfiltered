@@ -105,6 +105,13 @@ export function SourceInspector({ title, ids, sources, provenance, onClose, audi
   </section>;
 }
 
+/** Explicit, source-backed stop reasons. Avoidance is clinically meaningful, so staff see it plainly. */
+const stopNotes: Partial<Record<NonNullable<TopicView['stopReason']>, { patient: string; staff: string }>> = {
+  'patient-declines': { patient: 'You chose not to talk about this. Your care team will see that, and that’s okay.', staff: 'Patient preferred not to discuss this topic. Consider a gentle follow-up.' },
+  'resistance-after-purpose': { patient: 'You chose not to talk about this. Your care team will see that, and that’s okay.', staff: 'Patient preferred not to continue after hearing why we ask. Consider a gentle follow-up.' },
+  'patient-moves-on': { patient: 'You skipped this for now. You can add an answer anytime before sending.', staff: 'Patient skipped this topic for now.' },
+  'safety-interruption': { patient: 'Paused for your safety.', staff: 'Stopped by a safety interruption.' },
+};
 export function TopicContent({ topic, onChange, onSource, disabled = false, audience = 'staff' }: {
   topic: TopicView; onChange?: (slotPath?: string) => void; onSource: (selection: SourceSelection, trigger: HTMLButtonElement) => void; disabled?: boolean; audience?: Audience;
 }) {
@@ -132,6 +139,7 @@ export function TopicContent({ topic, onChange, onSource, disabled = false, audi
       {recorded.length > 0 ? <dl className="answer-details">{recorded.map(renderDetail)}</dl> : untouchedMeasurements ? <p className="measurement-gap-summary"><strong>{topic.required ? 'Required measurements are missing.' : 'Measurements are not recorded.'}</strong> Height with units, latest measured weight with units, and its measurement date have not been recorded.</p> : <p className="unasked-summary">No answers recorded for this topic yet.</p>}
       {unasked.length > 0 && <details className="unasked-details"><summary>{untouchedMeasurements ? `See all ${unasked.length} measurement details` : `${unasked.length} detail${unasked.length === 1 ? '' : 's'} not yet asked`}{onChange && unasked.some(detail => detail.editable !== false) ? ' · Add an answer' : ''}</summary><dl className="answer-details">{unasked.map(renderDetail)}</dl></details>}
     </>}
+    {topic.stopReason && stopNotes[topic.stopReason] && <p className={`stop-note stop-note--${topic.stopReason}`}>{stopNotes[topic.stopReason]![patient ? 'patient' : 'staff']}</p>}
     {topic.missingDetails.length > 0 && <details className="detail-gaps"><summary>Still to clarify · {topic.missingDetails.length} detail{topic.missingDetails.length === 1 ? '' : 's'}</summary><ul>{topic.missingDetails.map((detail, index) => <li key={`${index}:${detail}`}>{detail}</li>)}</ul></details>}
     <div className="answer-footer"><span className={`topic-status topic-status--${topic.status}`}>{topicLabels[topic.status]}</span>{!hasDetails && topic.answer && <Button variant="text" onClick={event => onSource({ topicId: topic.id, title: topic.title, ids: topic.answer!.sourceIds }, event.currentTarget)}><FileText size={16} aria-hidden="true" />{patient ? 'See what you said' : `View original answer${topic.answer.sourceIds.length > 1 ? 's' : ''}`}</Button>}</div>
   </>;

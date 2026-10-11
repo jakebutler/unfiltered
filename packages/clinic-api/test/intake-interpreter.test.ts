@@ -158,12 +158,32 @@ describe('intake-interpreter-v1 per-fact validation', () => {
     expect(outcome.clarifications).toEqual([]);
   });
 
-  it('stops the displayed topic when the patient asks to move on', () => {
-    const ctx = context('I’d rather not talk about that.', ['Q17', 'Q18']);
+  it('records topic avoidance explicitly: the displayed detail is declined with the patient\'s words and the topic stops as patient-declines', () => {
+    const base = context('I’d rather not talk about that.', ['Q17', 'Q18']);
+    const ctx = { ...base, displayed: { ...base.displayed!, targetPaths: ['substances'] } };
     const outcome = interpretIntakeResponse({ ...empty, moveOn: { quote: "I'd rather not talk about that" } }, ctx);
-    expect(outcome.responses.Q17).toMatchObject({ stopped: 'patient-moves-on' });
+    expect(outcome.responses.Q17).toMatchObject({ stopped: 'patient-declines' });
+    expect(outcome.responses.Q17?.answers.substances).toMatchObject({ state: 'declined', sourceIds: [ctx.source.id] });
+    expect(outcome.provenance).toEqual([expect.objectContaining({ topicId: 'Q17', path: 'substances', sourceText: ['I’d rather not talk about that'] })]);
     expect(outcome.acts).toEqual([expect.objectContaining({ kind: 'move-on', targetTopicId: 'Q17' })]);
     expect(outcome.hasUnresolvedInterpretation).toBe(false);
+  });
+
+  it('a plain skip moves on without recording a decline', () => {
+    const ctx = context('Can we skip this one?', ['Q17', 'Q18']);
+    const outcome = interpretIntakeResponse({ ...empty, moveOn: { quote: 'Can we skip this one?' } }, ctx);
+    expect(outcome.responses.Q17).toMatchObject({ stopped: 'patient-moves-on' });
+    expect(outcome.updates).toEqual([]);
+  });
+
+  it('keeps facts volunteered in the same message as the avoidance', () => {
+    const base = context("I'd rather not get into my childhood. Over the last five years I've gained about 30 pounds.", ['Q03', 'Q04']);
+    const ctx = { ...base, displayed: { ...base.displayed!, targetPaths: ['childhood'] } };
+    const outcome = interpretIntakeResponse({ ...empty, moveOn: { quote: "I'd rather not get into my childhood" },
+      facts: [{ topic: 'Q03', field: 'lastFiveYears', state: 'known', value: 'gained about 30 pounds', quote: "Over the last five years I've gained about 30 pounds" }] }, ctx);
+    expect(outcome.responses.Q03).toMatchObject({ stopped: 'patient-declines' });
+    expect(outcome.responses.Q03?.answers.childhood).toMatchObject({ state: 'declined' });
+    expect(outcome.responses.Q03?.answers.lastFiveYears).toMatchObject({ state: 'known', value: 'gained about 30 pounds' });
   });
 
   it('does not open the diabetes branch on explicit negatives and ignores branch facts there', () => {
@@ -346,5 +366,22 @@ describe('intake-interpreter-v1 weight estimate applicability', () => {
     expect(q04['currentWeightEstimate.value']).toMatchObject({ state: 'known', value: 200 });
     expect(q04['lastMeasuredWeight.representsCurrent']).toMatchObject({ state: 'known', value: false });
     expect(q04['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 196 });
+  });
+});
+
+describe('intake-interpreter-v1 topic avoidance through the clinic handler', () => {
+  it('shows staff-relevant avoidance in review: declined detail with source and stopReason patient-declines', async () => {
+    const f = handlerFixture({ interpret: async ctx => ({ outcome: interpretIntakeResponse({ ...empty, moveOn: { quote: "I'd rather not talk about that" } }, ctx), receipt: { requestId: 'p1', model: 'qwen3.8-max', evidenceProtocol: 'intake-interpreter-v1' as const } }) });
+    await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
+    const session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
+    const topicId = session.currentPrompt!.topicId;
+    const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text: "I'd rather not talk about that right now.", channel: 'text' });
+    const applied = await f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+    expect(applied.body.operation.status).toBe('applied');
+    expect(applied.body.session.currentPrompt?.topicId).not.toBe(topicId);
+    const review = await f.request<ReviewPreview>('/api/clinic/review', { expectedRevision: applied.body.session.revision });
+    const topic = review.body.session.topics.find(entry => entry.id === topicId)!;
+    expect(topic.stopReason).toBe('patient-declines');
+    expect(topic.details?.some(detail => detail.state === 'declined' && detail.sourceIds.length === 1)).toBe(true);
   });
 });

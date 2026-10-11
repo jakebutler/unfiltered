@@ -49,7 +49,7 @@ RULES
    Weight: a remembered scale reading is lastMeasuredWeight; a guess about their weight now is currentWeightEstimate.
 10. Corrections: if the patient changes something in KNOWN ANSWERS, output the new value with "corrects" set to that answer's number.
 11. A question the patient asks goes in "questions" with its exact quote. Do not answer it.
-12. moveOn: only when the patient asks to skip / move on / not talk about the current question.
+12. moveOn: only when the patient asks to skip / move on / not talk about the current question. Still extract every other fact in the same message.
 13. Never diagnose or give advice. Never fill MH01-MH04 or any field not in the FIELD CATALOG.
 14. ack (optional): one short neutral sentence saying what you noted (max 20 words). No advice, no opinion, no question.
 15. Patients often volunteer things beyond the current question. Record each one in whichever catalog field fits best (any topic), e.g. a concern or kind of help they want goes in the matching concern/request field.
@@ -285,6 +285,7 @@ const thirdPerson = /\b(?:she|he|they)\b/i;
 const firstPerson = /\b(?:i|i'm|i've|i'd|i was|me)\b/i;
 const correctionCue = /\b(?:actually|correction|correct that|i meant|i mean|sorry|wrong|mistake|changed|now it's|now it is|update|not\b[^.!?;]{0,40}\bbut)\b/i;
 const completionWords = /\b(?:that's all|that is all|that's it|that is it|that's everything|nothing else|no others?|only (?:those|these|that|this|one|two|three)|just (?:those|these|that|this|the one)|none other|all of them|no more|that's the lot)\b/i;
+const avoidanceWords = /\b(?:rather not|prefer not|(?:don't|do not|dont) (?:want|wish|like) to|not comfortable|uncomfortable|not ready|too personal|private|off limits)\b/i;
 const moveOnWords = /\b(?:skip|move on|next question|rather not|prefer not|(?:don't|do not) want to|not comfortable|pass)\b/i;
 const ackForbidden = /\b(?:dose|dosing|diagnos\w*|prescri\w*|eligib\w*|should take|should stop|recommend\w*|stop taking|normal|healthy|risk|safe|unsafe|treat\w*|cure)\b|\?/i;
 const vagueValue = /^(?:fine|normal|normally|okay|ok|good|unknown|not sure|no|none|n\/a|not applicable|null|undefined|yes|true|false|i don't know|i do not know)$/;
@@ -379,12 +380,13 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
 
   // --- move-on and questions first: they scope which topics can still change ---
   const stopTopics = new Set<string>();
+  let moveOnSpans: EvidenceSpan[] | undefined;
   const moveOn = wire.moveOn && typeof wire.moveOn === 'object' ? quoteWire.safeParse(wire.moveOn) : undefined;
   if (moveOn?.success) {
     const spans = locateQuote(context, moveOn.data.quote);
     const target = context.displayed?.topicId;
     if (spans && target && moveOnWords.test(norm(quoteOf(spans).join(' ')))) {
-      stopTopics.add(target);
+      stopTopics.add(target); moveOnSpans = spans;
       outcome.acts.push({ kind: 'move-on', targetTopicId: target, evidence: spans });
     } else reject({ kind: 'move-on', reason: spans ? 'unsupported-move-on' : 'quote-not-found', quote: String(moveOn.data.quote).slice(0, 400), ...(spans ? { evidence: spans } : {}) });
   }
@@ -524,7 +526,7 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     const problem = lexicalProblem(candidate, definition, spans);
     if (problem) { reject({ kind: 'fact', topicId: t.id, path: candidate.path, reason: problem, evidence: spans, state: candidate.state }); return false; }
     const clarify = (reason: AdaptiveClarification['reason'], proposed?: SlotAnswer) => outcome.clarifications.push({ topicId: t.id, path: candidate.path, reason, evidence: spans, ...(resolved.answer ? { previous: resolved.answer } : {}), ...(proposed ? { proposed } : {}) });
-    if (current.stopped || stopTopics.has(t.id)) { clarify('stopped-topic'); return false; }
+    if (current.stopped) { clarify('stopped-topic'); return false; }
     if ((t.presentation === 'C' && current.applicability !== 'applicable') || !conditionalReady(definition, resolved.siblings, resolved.definitions, context)) { clarify('condition-unresolved'); return false; }
     const derived = derive(candidate, definition, spans);
     if ('problem' in derived) {
@@ -626,8 +628,8 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     if (!usable.length) return;
     const allSpans = usable.flatMap(entry => entry.spans).slice(0, 4);
     const current = response(t.id);
-    if (current.stopped || stopTopics.has(t.id) || t.presentation === 'C' && current.applicability !== 'applicable') {
-      outcome.clarifications.push({ topicId: t.id, path: listPath, reason: current.stopped || stopTopics.has(t.id) ? 'stopped-topic' : 'condition-unresolved', evidence: allSpans }); return;
+    if (current.stopped || t.presentation === 'C' && current.applicability !== 'applicable') {
+      outcome.clarifications.push({ topicId: t.id, path: listPath, reason: current.stopped ? 'stopped-topic' : 'condition-unresolved', evidence: allSpans }); return;
     }
     // Existing item: explicit id from KNOWN ANSWERS, else exact key-field equality to avoid duplicates.
     const collection = current.answers[listPath];
@@ -677,7 +679,7 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     if (!t || !spans) { reject({ kind: 'list-done', topicId: parsed.data.topic, path: listPath, reason: t ? 'quote-not-found' : 'unknown-topic', quote: parsed.data.quote.slice(0, 400) }); continue; }
     const quote = norm(quoteOf(spans).join(' ')), sentence = norm(covering(sourceText, spans));
     if (!completionWords.test(quote) || /[?]|\b(?:not all|isn't all|there (?:are|is) (?:other|more)|there's more|maybe|not sure|can't remember|cannot remember)\b/.test(sentence)) { reject({ kind: 'list-done', topicId: t.id, path: listPath, reason: 'no-completion-wording', evidence: spans }); continue; }
-    if (response(t.id).stopped || stopTopics.has(t.id)) continue;
+    if (response(t.id).stopped) continue;
     let answer: SlotAnswer | undefined;
     try { answer = adaptiveSlot(t, response(t.id), listPath).answer; } catch { reject({ kind: 'list-done', topicId: t.id, path: listPath, reason: 'unknown-field', evidence: spans }); continue; }
     if (answer?.state !== 'known' || !answer.items?.length) { reject({ kind: 'list-done', topicId: t.id, path: listPath, reason: 'empty-list', evidence: spans }); continue; }
@@ -686,7 +688,25 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     outcome.updates.push({ topicId: t.id, path: listPath, answer: response(t.id).answers[listPath]! });
     outcome.provenance.push({ topicId: t.id, path: listPath, evidence: spans, transform: 'explicit-list-completion', sourceText: quoteOf(spans) });
   }
-  for (const id of stopTopics) responses[id] = { ...response(id), presented: true, stopped: 'patient-moves-on' };
+  // Avoidance is clinically meaningful: record the displayed detail as declined with the patient's words, as guided
+  // "I'd rather not say" does, and stop the topic as patient-declines. A plain skip only moves on.
+  for (const id of stopTopics) {
+    const t = topic(id), spans = moveOnSpans!;
+    const avoids = avoidanceWords.test(norm(quoteOf(spans).join(' ')));
+    if (t && avoids) {
+      const declined: SlotAnswer = { state: 'declined', sourceIds: [sourceId] };
+      for (const path of context.displayed?.targetPaths ?? []) {
+        let existing: SlotAnswer | undefined;
+        try { existing = adaptiveSlot(t, response(id), path).answer; } catch { continue; }
+        if (existing && existing.state !== 'not-asked') continue;
+        try { responses[id] = applyGuidedAnswer(t, response(id), { path, answer: declined }, evidence); } catch { continue; }
+        outcome.updates.push({ topicId: id, path, answer: declined });
+        outcome.provenance.push({ topicId: id, path, evidence: spans, transform: 'verbatim', sourceText: quoteOf(spans) });
+        break;
+      }
+    }
+    responses[id] = { ...response(id), presented: true, stopped: avoids ? 'patient-declines' : 'patient-moves-on' };
+  }
 
   // --- final composite-height consistency: undo rather than fail the turn ---
   const q04 = responses.Q04;
