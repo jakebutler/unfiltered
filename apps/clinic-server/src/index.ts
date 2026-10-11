@@ -1,31 +1,24 @@
 import { createServer } from 'node:http';
 import { readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Readable } from 'node:stream';
 import { createClinicHandler } from '../../../packages/clinic-api/src/handler.js';
+import { runtimeProvider } from '../../../packages/clinic-api/src/runtime.js';
+import { configuredProviders } from './providers.js';
+import { createSpeechAccess } from '../../../packages/clinic-api/src/speech-access.js';
+import { createNodeSpeechTransport } from './speech.js';
+import { nodeHttpHandler } from './http.js';
 import type { ClinicApiConfig } from '../../../packages/clinic-api/src/types.js';
 const path = resolve(process.env.CLINIC_CONFIG_PATH ?? 'infra/local/.clinic-config.json');
 if (statSync(path).mode & 0o077)
     throw new Error('clinic-configuration-must-be-private');
 const config = JSON.parse(readFileSync(path, 'utf8')) as ClinicApiConfig;
-const handler = createClinicHandler(config);
-const server = createServer(async (req, res) => { try {
-    const headers = new Headers();
-    for (const [key, value] of Object.entries(req.headers))
-        if (value !== undefined)
-            headers.set(key, Array.isArray(value) ? value.join(',') : value);
-    const request = new Request(`http://127.0.0.1:8787${req.url}`, { method: req.method, headers, ...(req.method !== 'GET' && req.method !== 'HEAD' ? { body: Readable.toWeb(req) as ReadableStream, duplex: 'half' } : {}) } as RequestInit);
-    const response = await handler(request);
-    res.writeHead(response.status, Object.fromEntries(response.headers));
-    if (response.body)
-        Readable.fromWeb(response.body as import('node:stream/web').ReadableStream).pipe(res);
-    else
-        res.end();
-}
-catch {
-    res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify({ error: { code: 'server-error', message: 'The request could not be completed.', retryable: true } }));
-} });
+const runtime = runtimeProvider(config, fetch);
+const providers = configuredProviders(runtime);
+const speech = providers.speech ? createNodeSpeechTransport({ ...providers.speech, access: createSpeechAccess(config, { runtime, enabled: true, adaptiveAvailable: !!(providers.adaptiveProposer || providers.adaptiveInterpreter || providers.adaptiveGroupedExtractor) }) }) : undefined;
+const handler = createClinicHandler(config, { runtime, adaptiveProposer: providers.adaptiveProposer, adaptiveInterpreter: providers.adaptiveInterpreter, adaptiveGroupedExtractor: providers.adaptiveGroupedExtractor, adaptiveFullCapture: providers.adaptiveFullCapture, adaptiveTimeoutMs: providers.adaptiveTimeoutMs, provisionalQualification: providers.provisionalQualification, finalRepresentationQualification: providers.finalRepresentationQualification, speechEnabled: !!speech });
+const server = createServer(nodeHttpHandler(async request => await speech?.handle(request) ?? await handler(request)));
+server.on('upgrade', (req, socket, head) => { if (speech) void speech.upgrade(req, socket, head).catch(() => socket.destroy()); else { socket.end('HTTP/1.1 503 Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); socket.destroy(); } });
+server.once('close', () => speech?.close());
 server.requestTimeout = 15000;
 server.headersTimeout = 10000;
 server.listen(8787, '127.0.0.1', () => console.log('Corvo Clinic API listening on http://127.0.0.1:8787 (synthetic local data only)'));
