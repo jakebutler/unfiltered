@@ -124,7 +124,7 @@ it.each(scenarios)('%s projects sufficient self-report into one frozen review/ha
   const review = { ...saved, phase: 'review' as const, preview }; const final = await f.content.finalize(review);
   expect(final.topics).toEqual(preview.topics); expect(final.previewDigest).toBe(preview.digest);
   if (scenario === 'first-intake') expect(view.topics.find(topic => topic.id === 'Q16')!.screening?.scores).toEqual({ gad2: 0, phq2: 0, phq4: 0 });
-});
+}, 15000); // A full-intake journey: about 3 s alone, close to the 5 s default under the parallel suite.
 
 it.each(scenarios)('%s preserves partial unknown source and allows explicit Stop/review recovery without retry', async scenario => {
   const f = fixture(scenario);

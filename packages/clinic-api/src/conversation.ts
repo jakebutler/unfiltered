@@ -10,8 +10,8 @@ import { scorePhq4, scenarioTopics, guidedFieldForPath, aggregateTargets, applyG
 import { canonicalJson, digest, confirmSubmission, unresolvedRecognitionSourceIds, type ContentContract, type Submission, type SufficiencyAssessment } from '../../clinical-core/src/domain.js';
 import { conversationSpeech } from '../../clinic-contract/src/index.js';
 import type { ClinicSessionView, PromptView, TopicView, TurnInput, ScenarioId, SourceSpan } from '../../clinic-contract/src/index.js';
-import { escalation, escalationCopy } from './safety.js';
-import { screenSafety } from './safety-screen.js';
+import { escalation, escalationCopy, safetyVersion } from './safety.js';
+import { safetySignalSeed } from './safety-screen.js';
 import { ApiFailure, type Draft, type ClinicApiConfig } from './types.js';
 import { adaptiveView, requireNoPendingInterpretation } from './adaptive-session.js';
 import { scopedQuestion } from './dialogue.js';
@@ -245,7 +245,7 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
                 }
             } catch { exchange = undefined; }
         }
-        const natural = adaptiveAvailable && d.adaptive?.mode === 'adaptive' && !d.activeSlot && d.phase === 'conversation' && !d.safety?.paused; const currentPrompt: PromptView | undefined = natural ? exchange ? exchange.kind === 'instrument' ? prompt(d) : { id: `${exchange.topicId}:${exchange.promptId}`, topicId: exchange.topicId, text: exchange.text, purpose: exchange.labels.join('; '), mode: 'adaptive' } : prompt(d) : prompt(d); return { id: d.id, scenario: d.scenario, title: scenarioTitles[d.scenario], persona: { displayName: config.patients[d.scenario].displayName, description: config.patients[d.scenario].description }, phase: identity ? d.phase : 'identity', revision: d.revision, savedAt: d.savedAt, completeness: identity ? d.confirmed?.confirmation.submission.completeness ?? d.preview?.confirmation.submission.completeness ?? (complete(d) ? 'complete' : 'partial') : 'partial', topics: identity ? (d.phase === 'review' && d.preview ? d.preview.topics : d.confirmed ? d.confirmed.topics : topics(d)) : [], turns: identity ? d.turns : [], ...(identity ? { speechScopeDigest: streamSpeechScopeDigest(d), currentPrompt, ...(d.safetySignals?.some(signal => !signal.review) && !d.confirmed ? { safetyReview: { pendingSignalIds: d.safetySignals.filter(signal => !signal.review).map(signal => signal.id) } } : {}), adaptive: adaptiveView(d, adaptiveAvailable), delivery: d.delivery, previousDelivery: d.previousDelivery, notice: d.safety ? { tone: d.safety.rule === 'E05' ? 'attention' as const : 'urgent' as const, text: d.safety.text + (d.delivery?.state === 'received' ? ' Your confirmed handoff was received. See the actual staff work below; receipt does not mean care was provided.' : d.confirmed ? ' Delivery is not confirmed. Help does not depend on sending this handoff.' : ' Your draft has not been sent. You can review and send a partial handoff, or leave now.') } : d.notice ?? { tone: 'info' as const, text: config.patients[d.scenario].context ?? 'This conversation is saved for your review. It does not replace urgent care.' } } : {}) }; }
+        const natural = adaptiveAvailable && d.adaptive?.mode === 'adaptive' && !d.activeSlot && d.phase === 'conversation' && !d.safety?.paused; const currentPrompt: PromptView | undefined = natural ? exchange ? exchange.kind === 'instrument' ? prompt(d) : { id: `${exchange.topicId}:${exchange.promptId}`, topicId: exchange.topicId, text: exchange.text, purpose: exchange.labels.join('; '), mode: 'adaptive' } : prompt(d) : prompt(d); return { id: d.id, scenario: d.scenario, title: scenarioTitles[d.scenario], persona: { displayName: config.patients[d.scenario].displayName, description: config.patients[d.scenario].description }, phase: identity ? d.phase : 'identity', revision: d.revision, savedAt: d.savedAt, completeness: identity ? d.confirmed?.confirmation.submission.completeness ?? d.preview?.confirmation.submission.completeness ?? (complete(d) ? 'complete' : 'partial') : 'partial', topics: identity ? (d.phase === 'review' && d.preview ? d.preview.topics : d.confirmed ? d.confirmed.topics : topics(d)) : [], turns: identity ? d.turns : [], ...(identity ? { speechScopeDigest: streamSpeechScopeDigest(d), currentPrompt, ...(d.safetySignals?.some(signal => !signal.review) && !d.confirmed ? { safetyReview: { pendingSignalIds: d.safetySignals.filter(signal => !signal.review).map(signal => signal.id) } } : {}), adaptive: adaptiveView(d, adaptiveAvailable), delivery: d.delivery, previousDelivery: d.previousDelivery, notice: d.safety ? { tone: d.safety.rule === 'E05' ? 'attention' as const : 'urgent' as const, text: d.safety.text + (d.delivery?.state === 'received' ? ' Your confirmed handoff was received. See the actual staff work below; receipt does not mean care was provided.' : d.confirmed ? ' Delivery is not confirmed. Help does not depend on sending this handoff.' : ' Your draft has not been sent. You can review and send a partial handoff, or leave now.') } : d.safetyBanner && !d.confirmed ? { tone: 'attention' as const, text: `${escalationCopy[d.safetyBanner.rule]} You can keep going with the intake; this message will be flagged for clinician review.` } : d.notice ?? { tone: 'info' as const, text: config.patients[d.scenario].context ?? 'This conversation is saved for your review. It does not replace urgent care.' } } : {}) }; }
     function change(d: Draft) { const n = structuredClone(d); if (n.confirmed) {
         n.questionnaireHistory = structuredClone(n.confirmed.confirmation.submission.questionnaireCapture?.inactiveHistory ?? []);
         n.prior = { version: n.version, digest: n.confirmed.digest };
@@ -312,16 +312,16 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
             if (input.priorChoiceTranscript) n.turns.push({ id: `initial-${id}`, role: 'patient', text: input.priorChoiceTranscript, at: now, channel: 'unreviewed-transcript', displayedPromptId: p.id });
             const candidateRule = escalation(input.text!);
             if (candidateRule) {
-                n.safety = { rule: candidateRule, version: 'E-0.1', sourceId: id, text: escalationCopy[candidateRule], at: now, paused: true };
+                n.safety = { rule: candidateRule, version: safetyVersion, sourceId: id, text: escalationCopy[candidateRule], at: now, paused: true };
                 r = { ...r, stopped: 'safety-interruption' };
             }
             n.topics[c.topic.id] = r;
             delete n.preview; n.phase = 'conversation';
             return synchronize(n);
         }
-        // Tier 1: typed or spoken free text (never a selected choice) queues a background model review.
-        const screen = !rule && input.action === 'answer' && !selected && !text.startsWith('__') ? screenSafety(input.text ?? text) : undefined;
-        if (screen) n.safetySignals = [...(n.safetySignals ?? []), { id: crypto.randomUUID(), sourceId: id, categories: screen.categories, terms: screen.terms, at: now, version: screen.version }];
+        // Tier 1 and scoped floor hits on free text (never a selected choice) become a signal for the model gate.
+        const screen = !rule && input.action === 'answer' && !selected && !text.startsWith('__') ? safetySignalSeed(input.text ?? text) : undefined;
+        if (screen) n.safetySignals = [...(n.safetySignals ?? []), { id: crypto.randomUUID(), sourceId: id, categories: screen.categories, terms: screen.terms, at: now, version: screen.version, ...(screen.floor ? { floor: screen.floor } : {}) }];
         if (rule)
             r = { ...r, stopped: 'safety-interruption' };
         else if (c.field.path === '__applicability')
@@ -351,7 +351,7 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         if (input.action === 'decline')
             r = { ...r, stopped: 'patient-declines' };
         if (rule) {
-            n.safety = { rule, version: 'E-0.1', sourceId: id, text: escalationCopy[rule], at: now, paused: true };
+            n.safety = { rule, version: safetyVersion, sourceId: id, text: escalationCopy[rule], at: now, paused: true };
             n.notice = { tone: rule === 'E05' ? 'attention' : 'urgent', text: escalationCopy[rule] + ' Your draft has not been sent. You can review and send a partial handoff, or leave now.' };
             r = { ...r, stopped: 'safety-interruption' };
         }

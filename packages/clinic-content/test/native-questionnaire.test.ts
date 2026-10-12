@@ -25,8 +25,8 @@ describe("fixed authored native Questionnaire", () => {
   it("compiles every fixed prompt with unique reachable acyclic link IDs and binds all semantics", async () => {
     const d = await getNativeQuestionnaireDefinition();
     expect(d.binding.digest).toMatch(/^[a-f0-9]{64}$/);
-    // Pinned to the deployed binding; extraction-only slot hints must not change it.
-    expect(d.binding.digest).toBe("d787950f0f0cbc0a1962e14a6a03f96d3adfc669bb47312776373913339f7c5b");
+    // Pinned; extraction-only slot hints must not change it. E-0.2 safety (D1 re-qualification, published with stage8).
+    expect(d.binding.digest).toBe("42b52a96007c176179943b57edcad9a3b39b3e35002f0f123e124b9e9ba65902");
     expect(d.questionnaire.url).toBe(d.binding.canonical);
     validateNativeDefinitionStructure(d.questionnaire.item);
     expect(d.promptTargets["MH.unscored"]).toBeUndefined();
@@ -530,25 +530,33 @@ it("proposed repeat sibling conditions permit only the exact item's navigation w
     repeatResolutionTopics: { Q06: topic({ "conditions.diabetes": known(true) }) } }, evidence)).toThrow();
 });
 
-describe("retained E-0.1 semantics", () => {
-  it("retains exact approved copy and classifier precedence, history and negation behavior", async () => {
+describe("E-0.2 safety floor", () => {
+  it("keeps the approved copy and pauses only explicit, current, first-person hard stops", async () => {
     const old =
       await import("../../../docs/implementation/evidence/native-questionnaire-pre-edit/clinic-api-safety.js");
     const current = await import("../src/safety.js");
     expect(current.escalationCopy).toEqual(old.escalationCopy);
-    for (const text of [
-      "I cannot breathe now",
-      "I cannot breathe years ago",
-      "I hurt myself now",
-      "I do not have suicidal thoughts",
-      "I took an extra dose",
-      "I took an extra dose and cannot breathe",
-      "I cannot keep fluids down",
-      "I am purging",
-      "I was purging in the past",
-      "I am unsure whether I took a dose",
-      "I am snoring",
-    ])
-      expect(current.escalation(text), text).toBe(old.escalation(text));
+    const expected: Record<string, string | undefined> = {
+      "I cannot breathe now": "E01",
+      "I cannot breathe years ago": undefined,
+      "I may hurt myself tonight": "E04",
+      "I do not have suicidal thoughts": undefined,
+      "I have never had suicidal thoughts": undefined,
+      "I'm not suicidal but I do want to kill myself": "E04",
+      "My brother overdosed last year": undefined,
+      "I'd kill myself if I gained it back": undefined,
+      "Is it normal to want to hurt myself?": undefined,
+      "I took an extra dose and cannot breathe": "E01",
+      "I cannot keep fluids down": "E02",
+      "I am purging": "E05",
+      "I was purging in the past": undefined,
+      "I am unsure whether I took a dose": undefined,
+      "I binge on chips at night": undefined,
+      "I hurt myself running last month": undefined,
+      "I am snoring": undefined,
+    };
+    for (const [text, rule] of Object.entries(expected)) expect(current.escalation(text), text).toBe(rule);
+    // A scoped hit is never silently dropped: it is reported for the model gate.
+    expect(current.safetyFloorHits("I have never had suicidal thoughts")).toEqual([{ rule: "E04", scope: "negated", term: "suicidal" }]);
   });
 });

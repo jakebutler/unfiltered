@@ -102,24 +102,29 @@ export interface Draft {
     questionnaireHistory?: import('../../clinic-content/src/native-questionnaire.js').NativeInactiveAnswer[];
     safety?: {
         rule: import('./safety.js').EscalationRule;
-        version: 'E-0.1';
+        version: 'E-0.1' | 'E-0.2';
         sourceId: string;
         text: string;
         at: string;
         paused: boolean;
-        /** Set when a tier-2 model review (not the E-0.1 predicates) found high or imminent risk. */
+        /** Set when the model gate (not the deterministic floor) found high or imminent risk. */
         via?: 'model-review';
     };
-    /** Tier-1 screen hits (S1-0.1). Each queues one tier-2 review; terminal outcomes are copied in at review time. */
+    /** Tier-1 screen hits and scoped floor hits. Each gets one model review, normally on the same turn; terminal outcomes are copied in. */
     safetySignals?: Array<{
         id: string;
         sourceId: string;
         categories: import('./safety-screen.js').SafetyCategory[];
         terms: string[];
         at: string;
-        version: 'S1-0.1';
+        /** S1-0.x: liberal screen or scoped floor hit; safety-gate-v1: a concern the model gate found on an unflagged turn. */
+        version: 'S1-0.1' | 'S1-0.2' | 'safety-gate-v1';
+        /** Hard-stop wording the floor downgraded (negated, someone else's, historical, hypothetical, question, media). */
+        floor?: { rule: import('./safety.js').EscalationRule; scope: Exclude<import('./safety.js').SafetyScope, 'direct'> }[];
         review?: { status: 'cleared' | 'needs-human-review'; level: 'none' | 'low' | 'moderate' | 'high' | 'imminent' };
     }>;
+    /** Fail-safe: the model gate could not decide on an urgent flag, so authored help copy is shown without pausing. */
+    safetyBanner?: { rule: import('./safety.js').EscalationRule; sourceId: string; at: string };
     topics: Record<string, TopicResponse>;
     requests: Record<string, {
         fingerprint: string;

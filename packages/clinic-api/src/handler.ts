@@ -17,7 +17,7 @@ import { trackDirectAdaptiveEdits, type AdaptiveStreamProposer } from './adaptiv
 import type { AdaptiveProposer } from './adaptive.js';
 import type { GroupedExtractionProposer } from './adaptive-extraction-grouped-session-v2.js';
 import type { IngressAdmission } from './ingress-admission.js';
-import { safetyActionOutcomes, safetyReviews, staffSafety, type SafetyReviewer } from './safety-review.js';
+import { applyGateOutcome, safetyActionOutcomes, safetyReviews, staffSafety, type SafetyReviewer } from './safety-review.js';
 const revision = z.number().int().nonnegative();
 const schemas = {
     sessions: z.object({ scenario: z.enum(['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill']), syntheticAcknowledged: z.literal(true) }).strict(),
@@ -94,7 +94,7 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
     const adaptive = adaptiveSession(content, options.adaptiveProposer, { now: options.adaptiveNow, timeoutMs: options.adaptiveTimeoutMs, streamProposer: options.adaptiveStreamProposer, groupedExtractor: options.adaptiveGroupedExtractor, fullCapture: options.adaptiveFullCapture, interpreter: options.adaptiveInterpreter });
     const view = (d: Draft, identity = true) => content.view(d, identity, adaptive.available);
     const safety = safetyReviews({ reviewer: options.safetyReviewer }), staffSafetyApi = staffSafety(reference => Object.values(config.patients).find(fixture => fixture.reference === reference)?.displayName);
-    function adaptiveStore(p: { r: Runtime; claims: PatientClaims }): AdaptiveDraftStore { return { read: () => readDraft(p.r.client, p.claims.sessionId, p.claims.patient), save: (previous, next) => saveDraft(p.r.client, previous, next) }; }
+    function adaptiveStore(p: { r: Runtime; claims: PatientClaims }): AdaptiveDraftStore { return { read: () => readDraft(p.r.client, p.claims.sessionId, p.claims.patient), save: (previous, next) => saveDraft(p.r.client, previous, next), safetyGate: (draft, sourceId) => safety.gate(p.r.client, draft, sourceId) }; }
     const adaptiveReply = (result: Awaited<ReturnType<typeof adaptive.accept>>, status = 200) => reply({ session: view(result.draft), operation: operationView(result.operation) }, status);
     const rate = new Map<string, {
         at: number;
@@ -224,6 +224,11 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 const guidedDraft = !adaptive.available && d.adaptive ? { ...d, adaptive: { ...d.adaptive, mode: 'guided' as const } } : d;
                 const next = adaptive.dialogue(content.turn(guidedDraft, input as TurnInput));
                 next.requests[input.requestId] = { fingerprint, revision: d.revision + 1 };
+                // Guided free text gets the same synchronous safety gate before the next question is shown.
+                const source = next.turns.find(turn => turn.role === 'patient' && !d.turns.some(prior => prior.id === turn.id));
+                const freeText = input.action === 'answer' && !!input.text?.trim() && !input.text.startsWith('__') && !input.choiceTranscriptOnly && !content.view(guidedDraft).currentPrompt?.choices?.some(choice => choice.value === input.text);
+                const gated = source && freeText && !next.safety ? await safety.gate(p.r.client, next, source.id).catch(() => undefined) : undefined;
+                if (gated) applyGateOutcome(next, gated.entry, gated.signal);
                 return reply(view(await persist(p.r, p.stored, next)));
             }
             if (path === '/api/clinic/topics' && request.method === 'POST') {

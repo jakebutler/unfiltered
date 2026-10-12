@@ -5,8 +5,9 @@ import { AdaptiveError, applyValidatedTurn, validateAdaptiveProposal, type Adapt
 import { AdaptiveProposalFailure, buildAdaptiveMessages, type AdaptiveProposer, type AdaptiveProposalReceipt } from './adaptive.js';
 import { eligibleAdaptiveProbes, selectAdaptiveDialogue } from './dialogue.js';
 import type { conversation } from './conversation.js';
-import { escalation, escalationCopy } from './safety.js';
-import { screenSafety } from './safety-screen.js';
+import { escalation, escalationCopy, safetyVersion } from './safety.js';
+import { safetySignalSeed } from './safety-screen.js';
+import { applyGateOutcome, type SafetyReviewEntry } from './safety-review.js';
 import { ApiFailure, type AdaptiveOperation, type AdaptiveRawProposalAudit, type Draft, type StoredDraft } from './types.js';
 import { runAdaptiveStreamOperation, type AdaptiveStreamProposer } from './adaptive-stream-session.js';
 import { runGroupedExtractionOperation, type GroupedExtractionProposer } from './adaptive-extraction-grouped-session-v2.js';
@@ -85,6 +86,8 @@ type Content = ReturnType<typeof conversation>;
 export interface AdaptiveDraftStore {
     read(): Promise<StoredDraft>;
     save(previous: StoredDraft, next: Draft): Promise<StoredDraft>;
+    /** Model safety gate for one free-text turn, run beside interpretation. Undefined: nothing to record. */
+    safetyGate?(draft: Draft, sourceId: string): Promise<{ signal?: NonNullable<Draft['safetySignals']>[number]; entry: SafetyReviewEntry } | undefined>;
 }
 const pending = (op: AdaptiveOperation) => op.status === 'accepted' || op.status === 'processing';
 export function requireNoPendingInterpretation(d: Draft, allowDirectCorrection = false) {
@@ -235,12 +238,12 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
                     // Revoking admission does not assert provider termination.
                 }
             }
-            if (rule) n.safety = { rule, version: 'E-0.1', sourceId, text: escalationCopy[rule], at: time, paused: true };
+            if (rule) n.safety = { rule, version: safetyVersion, sourceId, text: escalationCopy[rule], at: time, paused: true };
             if (displayed) n.topics[displayed.topicId] = { ...(n.topics[displayed.topicId] ?? { presented: true, answers: {} }), stopped: 'safety-interruption' };
         }
-        // Tier 1: a liberal screen queues a background model review in this same commit; it never pauses the intake.
-        const screen = rule ? undefined : screenSafety(input.text);
-        if (screen) n.safetySignals = [...(n.safetySignals ?? []), { id: crypto.randomUUID(), sourceId, categories: screen.categories, terms: screen.terms, at: time, version: screen.version }];
+        // Tier 1 and scoped floor hits become a signal in this same commit; interpretation runs the model gate on it.
+        const screen = rule ? undefined : safetySignalSeed(input.text);
+        if (screen) n.safetySignals = [...(n.safetySignals ?? []), { id: crypto.randomUUID(), sourceId, categories: screen.categories, terms: screen.terms, at: time, version: screen.version, ...(screen.floor ? { floor: screen.floor } : {}) }];
         op.binding.snapshotDigest = await snapshotDigest(baseContext(n, op));
         // Leave 64KiB inside the existing 500KiB document ceiling for a claim,
         // bounded provisional result, receipt and terminal/queued settlement.
@@ -325,6 +328,8 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         // The interpreter validates per fact and returns an outcome; the legacy proposer is validated here, unchanged.
         type Candidate = { receipt?: AdaptiveProposalReceipt; rawProposal?: unknown; proposal?: unknown; outcome?: AdaptiveOutcome };
         const proposal = Promise.resolve().then((): Promise<Candidate> => interpreter ? interpreter.interpret(context) : proposer!.propose(context));
+        // The safety gate runs beside interpretation on every turn, so risk is decided before the next question is shown.
+        const gate = store.safetyGate ? store.safetyGate(stored.draft, op.sourceId).catch(() => undefined) : undefined;
         try {
             const candidate = await Promise.race([proposal, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('adaptive-deadline')), timeoutMs); })]);
             receipt = candidate.receipt;
@@ -344,6 +349,7 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             errorCode = error instanceof AdaptiveError ? error.code : 'provider-outcome-unknown';
             if (status === 'unresolved') void proposal.then(result => lateReceipt(store, id, attemptId, op, result.receipt, auditAdaptiveRawProposal(result.rawProposal)), failure => failure instanceof AdaptiveProposalFailure ? lateReceipt(store, id, attemptId, op, failure.receipt, auditAdaptiveRawProposal(failure.rawProposal)) : undefined);
         } finally { if (timer) clearTimeout(timer); }
+        const gated = gate ? await gate : undefined;
         let fresh: StoredDraft;
         try { fresh = await store.read(); }
         catch (error) { await lateReceipt(store, id, attemptId, op, receipt, rawProposalAudit); throw error; }
@@ -388,6 +394,7 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
                 n.adaptive!.exchange.reply = { id: `ack-${outcome.sourceId}`, text: outcome.acknowledgement };
             delete n.activeTopic; delete n.activeSlot; delete n.preview;
         }
+        if (gated) applyGateOutcome(n, gated.entry, gated.signal);
         try {
             const saved = await commit(store, fresh, n);
             return { draft: saved.draft, operation: operation(saved.draft, id) };
