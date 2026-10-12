@@ -1,5 +1,31 @@
 # Clinic adaptive intake — handoff (2026-10-11)
 
+> **Late on 2026-10-11 (stage7, `dpl_6b2TqHBsfQXC375jGsuxQtgqUkKw`):**
+> - **All open issues closed:**
+>   - Test suites: foundation 1664, hosting 25 and clinic app 148, all passing (`tsc` clean).
+>     - Some fixes are real behaviour fixes: a patient's direct edit inside a provisional list item is no longer dropped, and coordinated unknowns ("I don't remember the oatmeal portion or what was added to the coffee") are admitted.
+>     - Two fixes re-pin historical receipts honestly: the AF37 schema no longer matches the current code, and the test now says so.
+>   - The guided-choice repeat on free text is fixed: free text answers the question actually shown, and a guided fallback shown twice parks its topic.
+>   - Approximate numbers ("around 6") are recorded as uncertain, never exact.
+>   - PHQ-4 was exercised live (`infra/cloud/.private/local-cloud-dev/phq-safety-live.cjs`, 3 DigitalOcean calls) against real Medplum: exact wording, button answers, scores gad2=1 / phq2=2 / phq4=3 with clinician review, delivery `received`, and physician and RD staff views show the screening.
+> - **Tiered safety** (see `DEMO-TESTING-GUIDE.md`):
+>   - Tier 0: E-0.1 rules, unchanged and digest-pinned.
+>   - Tier 1: liberal lexical screen `safety-screen.ts` (S1-0.1). It never interrupts.
+>   - Tier 2: background DigitalOcean review `safety-review.ts` (safety-review-v1), on its own admission session. Results are stored in a separate `urn:corvo:clinic:safety-review` document so reviews never make the patient's turn stale. Anything not explicitly cleared fails closed to human review. High or imminent risk pauses with the authored copy (`via: 'model-review'`).
+>   - Tier 3: a clinician-only staff safety queue, detail and actions. RD and admin get 404.
+>   - Live check: "chest pain right now and my left arm feels numb" was missed by tier 0 and escalated to E01 by tier 2. "My father had a stroke" was cleared. "Hopeless most days" was routed to a clinician at moderate.
+> - **Voice (hosted push-to-talk):**
+>   - The browser records one clip and `POST /api/clinic/speech/transcriptions` calls Deepgram `nova-3-medical` REST once (about 0.8 s on hosted). The words land in the answer box for review.
+>   - The browser `speechSynthesis` reads questions aloud.
+>   - PHQ and other exact-choice prompts stay button-only.
+>   - Enabled by `CLINIC_SPEECH_INPUT=deepgram-rest` + `DEEPGRAM_API_KEY` (sensitive) + provider policy `clinic-demo-intake-v1-20261011c`. That policy adds a Deepgram budget of 300 requests / 3600 s per account and 80 requests / 1200 s per session.
+>   - The UI has been checked on hosted. A real microphone was not exercised in automation.
+> - **Still open:**
+>   - Tier 0 still pauses on "I have never had suicidal thoughts" (false positive). Fixing it changes the qualified digest.
+>   - The staff safety screen was verified through its API, not visually.
+>   - In the live run, one adaptive turn ("feeling hopeless…") repeated the previous question and filed the words under Q16 "current stress".
+
+
 > **Later the same day:**
 > - All work is committed on `codex/unfiltered-foundation` and open as draft PR #7.
 > - Hosted now runs deployment `dpl_HzkFg758m1Kx3Pjx4TBuRMAkLXQb` (stage6).
