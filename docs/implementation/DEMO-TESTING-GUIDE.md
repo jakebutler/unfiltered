@@ -15,6 +15,7 @@ The intake is **text chat only** right now. Voice is built but switched off, so 
    - You can pack several facts, a question, or a correction into one message.
    - **I don't know**, **I'd rather not say** and **Skip for now** are always available.
 5. The PHQ-4 mood questions are fixed multiple-choice items. That is intentional: the exact wording is required and is never inferred.
+   When a question shows answer buttons, use the buttons; typed text there can bring the same question back.
 6. Click **Review my answers** at any time to see each answer, with **Your words** showing exactly what it came from. Use **Change** to fix anything.
 7. Click **Confirm and send to Corvo Clinic**. A partial intake is fine; gaps stay visible.
 8. Staff view: go to **Staff sign in** (`/staff`) and use the named demo accounts from the private users file. Ask Claude or check `infra/cloud/.private/clinic-cloud-q4f-20261010/clinic-users.json` locally; never share these accounts.

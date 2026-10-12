@@ -2,12 +2,26 @@
 
 > **Later the same day:**
 > - All work is committed on `codex/unfiltered-foundation` and open as draft PR #7.
-> - Hosted now runs deployment `dpl_2F9eveSeA6PSk2GDw6ew53DQbCXs`.
+> - Hosted now runs deployment `dpl_HzkFg758m1Kx3Pjx4TBuRMAkLXQb` (stage6).
 > - **Topic avoidance is recorded explicitly.** The displayed detail is declined, with the patient's words, and the topic stops as `patient-declines`. Staff see "Patient preferred not to discuss this topic. Consider a gentle follow-up." A plain skip is `patient-moves-on`. Facts in the same message are kept.
 > - **Conflict loop fixed.** A compound answer no longer becomes a conflict, and any answer to a conflicting field resolves it.
 > - **"Move on or come back" can no longer loop.**
 > - **Tests:** 23 of the 35 pre-existing failures were fixed. 12 remain in experimental extraction paths and need product/safety decisions (see commit `b96f401`).
 > - Tester instructions are in `DEMO-TESTING-GUIDE.md`.
+> - **Full live journey passes** (run 8, 54 interpreter calls, local build = stage6): intake through Q22 and the diabetes branch, then review, then confirm (`received`). Physician and RD see the handoff; admin gets 404. Checks passed:
+>   - metformin label vs actual use;
+>   - lisinopril correction to 20 mg with no stale 10 mg;
+>   - father's diabetes under family history;
+>   - estimate labelled;
+>   - Q03 and Q17 avoidance as `patient-declines`.
+> - **Fixed after run 6:**
+>   - Review 503 `questionnaire-inactive-answer-is-active`: the capture projection is now repeated until stable, because an unreviewed routing anchor changed DM sources between passes.
+>   - Corrections quoted with a small unmarked word gap are no longer rejected.
+>   - A question is never shown a third time for the same topic in a session.
+> - **Still open:**
+>   - The script never reached PHQ-4 within its 55-call cap; PHQ-4 is covered by unit tests only.
+>   - Typing free text at a guided yes/no choice can repeat that choice. Use the buttons.
+>   - 12 known test failures remain (see `b96f401`).
 > - **Known safety gap:** the authored crisis keyword list misses phrasings such as "don't want to be here anymore". Widening it changes the qualified definition digest.
 
 ## What you can test now (hosted)
@@ -106,8 +120,8 @@ A good script, exercised on hosted on 2026-10-11:
   - concurrency 3.
   - When it is exhausted, turns fail visibly; there is no silent fallback.
 - **Deployments:**
-  - Current: `dpl_fsBYWiKqd6ctyDF8SHzDewYBtZ3w`, built from the working tree by `infra/cloud/.private/clinic-intake-v1-20261011/build.mjs`, then `vercel build`, then the reused `prepare-api-routing.mjs` (prepared routing hash matches the previous deployment), then `deploy.py deploy`.
-  - Rollback: promote the previous deployment `dpl_CxDXSoWkB7RjtqAgQBuG7bkMba1B` (guided only), or remove the `CLINIC_ADAPTIVE_INTERPRETER` env var and redeploy.
+  - Current: `dpl_HzkFg758m1Kx3Pjx4TBuRMAkLXQb` (stage6), built from the working tree by `infra/cloud/.private/clinic-intake-v1-20261011/build.mjs`, then `vercel build`, then the reused `prepare-api-routing.mjs` (prepared routing hash matches the previous deployment), then `deploy.py deploy`.
+  - Rollback: promote `dpl_2F9eveSeA6PSk2GDw6ew53DQbCXs` (stage4) or `dpl_CxDXSoWkB7RjtqAgQBuG7bkMba1B` (guided only), or remove the `CLINIC_ADAPTIVE_INTERPRETER` env var and redeploy.
 - **Expiry:** the storage qualification seal expires **2026-10-17T20:25:41Z**. After that the runtime refuses to start, locally too. Renew with `scripts/qualification/qualify-clinic-deployment.ts`.
 
 ## Checks performed, and their limits
