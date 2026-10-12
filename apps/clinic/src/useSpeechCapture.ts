@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createVoiceDraft, reduceVoiceDraft, type VoiceDraft, type RecognitionSegment, type SpeechInputEvent } from '../../../packages/speech/src/index';
 import type { CaptureEvent } from './voice-conversation';
 import { appendTranscript, CaptureEpoch, CaptureResources, captureWorkletUrl, LocalVoiceActivity, PcmTransport, voiceCaptureLimits, type CaptureScope } from './voice-capture';
+import { UploadSpeechSocket } from './upload-socket';
 
+/** Upload transcription starts only after Finish, so it gets the provider timeout plus margin. */
+const uploadDrainMs = 35_000;
 type CaptureStatus = 'idle' | 'permission' | 'connecting' | 'listening' | 'finishing' | 'review' | 'interrupted' | 'unavailable';
 /** Explicit source seam for the isolated development fixture; normal callers use microphone capture. */
 export type CaptureMediaSource = (context: AudioContext) => Promise<{ stream: MediaStream; dispose?: () => void }>;
@@ -14,10 +17,11 @@ function recognition(value: unknown): RecognitionSegment {
   return { text: v.text, start: v.start, duration: v.duration, isFinal: v.isFinal, speechFinal: v.speechFinal };
 }
 
-export function useSpeechCapture({ getScope, getText, onText, onInterruptPlayback, onEvent, scopeKey, mediaSource }: {
-  getScope: () => CaptureScope | undefined; getText: () => string; onText: (text: string, hasTranscript: boolean, conversation?: boolean) => void; onInterruptPlayback: () => void; onEvent?: (event: CaptureEvent) => void; scopeKey: string; mediaSource?: CaptureMediaSource;
+/** `upload` posts one recording on finish for hosted deployments without WebSocket support. */
+export function useSpeechCapture({ getScope, getText, onText, onInterruptPlayback, onEvent, scopeKey, mediaSource, input }: {
+  getScope: () => CaptureScope | undefined; getText: () => string; onText: (text: string, hasTranscript: boolean, conversation?: boolean) => void; onInterruptPlayback: () => void; onEvent?: (event: CaptureEvent) => void; scopeKey: string; mediaSource?: CaptureMediaSource; input?: 'stream' | 'upload';
 }) {
-  const callbacks = useRef({ getScope, getText, onText, onInterruptPlayback, onEvent, mediaSource }); callbacks.current = { getScope, getText, onText, onInterruptPlayback, onEvent, mediaSource };
+  const callbacks = useRef({ getScope, getText, onText, onInterruptPlayback, onEvent, mediaSource, input }); callbacks.current = { getScope, getText, onText, onInterruptPlayback, onEvent, mediaSource, input };
   const epoch = useRef(new CaptureEpoch()), run = useRef<CaptureRun | undefined>(undefined);
   const [status, setStatus] = useState<CaptureStatus>('idle');
   const [interim, setInterim] = useState('');
@@ -65,7 +69,7 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
     setStatus('finishing'); setMessage('Microphone off. Finishing the last words…');
     try { capture.flush?.(); }
     catch { stop('The connection ended before transcription finished. Check the words below; the last words may be missing.'); return; }
-    capture.finishTimer = window.setTimeout(() => stop('Transcription did not finish in time. Your draft is here; check for missing words before sending.'), voiceCaptureLimits.drainMs);
+    capture.finishTimer = window.setTimeout(() => stop('Transcription did not finish in time. Your draft is here; check for missing words before sending.'), callbacks.current.input === 'upload' ? uploadDrainMs : voiceCaptureLimits.drainMs);
     capture.flushTimer = window.setTimeout(() => stop('Recording stopped before its last audio frame could finish. Check the transcript; the last words may be missing.'), 200);
   }, [stop]);
 
@@ -103,7 +107,8 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
       const suspended = () => { if (current(capture) && context.state !== 'running') lost(); };
       context.addEventListener('statechange', suspended); capture.hardware.own(() => context.removeEventListener('statechange', suspended));
       const socketUrl = new URL('/api/clinic/speech/input', window.location.href); socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-      const socket = new WebSocket(socketUrl); socket.binaryType = 'arraybuffer';
+      const upload = callbacks.current.input === 'upload';
+      const socket = upload ? new UploadSpeechSocket(socketUrl) as unknown as WebSocket : new WebSocket(socketUrl); socket.binaryType = 'arraybuffer';
       capture.resources.own(() => { if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close(1000, 'capture-ended'); });
       capture.transport = new PcmTransport(socket, context.sampleRate);
       capture.flush = () => processor.port.postMessage('finish');
@@ -134,7 +139,7 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
           if (value.type === 'ready') {
             capture.transport!.ready(value); ready = true;
             window.clearTimeout(capture.setupTimer); capture.captureTimer = window.setTimeout(() => capture.conversation ? stop('This recording reached its limit. Check the words before continuing.') : finish(), value.maxCaptureMs);
-            setStatus('listening'); setMessage(capture.conversation ? 'Listening. A brief pause lets the conversation continue.' : 'Listening. Finish when you’re ready to check the transcript.');
+            setStatus('listening'); setMessage(capture.conversation ? 'Listening. A brief pause lets the conversation continue.' : upload ? 'Recording. Press Finish recording when you are done, then check the words.' : 'Listening. Finish when you’re ready to check the transcript.');
             if (capture.conversation) callbacks.current.onEvent?.({ type: 'ready', scope });
           } else if (value.type === 'recognition' && ready) {
             const next = reduceVoiceDraft(capture.draft, { type: 'recognition', generation: capture.draft.generation, segment: recognition(value.segment) });

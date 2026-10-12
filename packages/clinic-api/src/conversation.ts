@@ -83,26 +83,27 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         // A direct edit inside a provisional list item is routed with that item's provisional anchors
         // (foods enables foodAmounts); the borrowed anchors are removed again and never become direct answers.
         const borrowed: { topicId: string; collection: string; itemId: string; field: string }[] = [];
-        const routed = structuredClone(d.topics);
-        if (Object.values(d.topics).some(topic => Object.values(topic?.answers ?? {}).some(answer => answer.state === 'known' && answer.items?.length))) {
-            const provisional = effective(d).responses;
-            for (const [topicId, topic] of Object.entries(routed)) for (const [collection, answer] of Object.entries(topic?.answers ?? {})) {
-                if (answer.state !== 'known' || !answer.items) continue;
+        type ListView = { state: string; items?: { id: string; answers: Record<string, unknown> }[] } | undefined;
+        const routed = structuredClone(d.topics) as unknown as Record<string, { answers: Record<string, ListView> } | undefined>;
+        const lists = (topics: typeof routed) => Object.entries(topics).flatMap(([topicId, topic]) => Object.entries(topic?.answers ?? {}).flatMap(([collection, answer]) => answer?.state === 'known' && answer.items?.length ? [{ topicId, collection, items: answer.items }] : []));
+        if (lists(routed).length) {
+            const provisional = effective(d).responses as unknown as typeof routed;
+            for (const { topicId, collection, items } of lists(routed)) {
                 const projectedList = provisional[topicId]?.answers[collection];
-                for (const item of answer.items) {
+                for (const item of items) {
                     const source = projectedList?.state === 'known' ? projectedList.items?.find(candidate => candidate.id === item.id) : undefined;
                     for (const [field, value] of Object.entries(source?.answers ?? {})) if (!item.answers[field]) {
-                        item.answers = { ...item.answers, [field]: value };
+                        item.answers[field] = value;
                         borrowed.push({ topicId, collection, itemId: item.id, field });
                     }
                 }
             }
         }
-        const projected = projectNativeQuestionnaireState({ topics: borrowed.length ? routed : d.topics, context: nativeContext(d), inactiveHistory: d.questionnaireHistory, unreviewedSourceIds: unresolvedRecognitionSourceIds(d.turns.filter(turn => turn.role === 'patient').map(turn => ({ id: turn.id, patient: d.patient, kind: turn.corrects ? 'patient-correction' as const : 'patient-statement' as const, text: turn.text, capturedAt: turn.at, ...(turn.channel ? { channel: turn.channel } : {}), ...(turn.corrects ? { corrects: turn.corrects } : {}), ...(turn.displayedPromptId ? { displayedPromptId: turn.displayedPromptId } : {}) })), d.topics) }, evidence(d).validSourceIds);
+        const projected = projectNativeQuestionnaireState({ topics: borrowed.length ? routed as unknown as Draft['topics'] : d.topics, context: nativeContext(d), inactiveHistory: d.questionnaireHistory, unreviewedSourceIds: unresolvedRecognitionSourceIds(d.turns.filter(turn => turn.role === 'patient').map(turn => ({ id: turn.id, patient: d.patient, kind: turn.corrects ? 'patient-correction' as const : 'patient-statement' as const, text: turn.text, capturedAt: turn.at, ...(turn.channel ? { channel: turn.channel } : {}), ...(turn.corrects ? { corrects: turn.corrects } : {}), ...(turn.displayedPromptId ? { displayedPromptId: turn.displayedPromptId } : {}) })), d.topics) }, evidence(d).validSourceIds);
         const isBorrowed = (topicId: string, path: string) => borrowed.some(b => b.topicId === topicId && path === `${b.collection}[${b.itemId}].${b.field}`);
         for (const b of borrowed) {
-            const list = projected.topics[b.topicId]?.answers[b.collection], item = list?.state === 'known' ? list.items?.find(candidate => candidate.id === b.itemId) : undefined;
-            if (item) { const answers = { ...item.answers }; delete answers[b.field]; item.answers = answers; }
+            const list = (projected.topics as unknown as typeof routed)[b.topicId]?.answers[b.collection], item = list?.state === 'known' ? list.items?.find(candidate => candidate.id === b.itemId) : undefined;
+            if (item) delete item.answers[b.field];
         }
         d.topics = projected.topics; d.questionnaireHistory = projected.inactiveHistory.filter(entry => !isBorrowed(entry.topicId, entry.path));
         return d;

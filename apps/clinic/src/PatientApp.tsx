@@ -47,6 +47,7 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
   const [topicOutline, setTopicOutline] = useState(false);
   const [returnToReview, setReturnToReview] = useState(false);
   const [reviewTopic, setReviewTopic] = useState('');
+  const [readAloud, setReadAloud] = useState(false);
   const questionRef = useRef<HTMLHeadingElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const outlineTrigger = useRef<HTMLButtonElement>(null);
@@ -82,10 +83,12 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
   });
   const capture = useSpeechCapture({
     mediaSource: captureMediaSource,
-    scopeKey: voiceScopeKey, getScope: currentCaptureScope, getText: () => textRef.current,
+    scopeKey: voiceScopeKey, getScope: currentCaptureScope, getText: () => textRef.current, input: config?.voice.input,
     onText: (value, hasTranscript, conversationCapture) => { textRef.current = value; setText(value); if (hasTranscript) setAnswerChannel(conversationCapture ? 'unreviewed-transcript' : 'confirmed-transcript'); },
     onInterruptPlayback: playback.stop, onEvent: event => voice.controller.event(event),
   });
+  // Hosted upload voice is dictation only: no continuous conversation, and exact choices stay buttons.
+  const uploadVoice = config?.voice.input === 'upload';
   const hasComposerDraft = Boolean(text.trim() || Object.values(fields).some(value => value.trim()) || pendingTurn || pendingAdaptive || capture.active);
   const hasDraft = hasComposerDraft || voice.active;
   const draftRef = useRef(hasComposerDraft);
@@ -101,11 +104,31 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     setSession(next);
   }, [setSession]);
   const adaptive = useAdaptiveConversation({ session, getSession, onSession: acceptAdaptiveSession, onOperation: result => voice.controller.operation(result) });
+  /** Browser output reads the same words the provider path would, resolved on the client. */
+  const browserSpeechText = (sourceId: string, choiceValue?: string): string | undefined => {
+    const adaptive = sessionRef.current?.adaptive;
+    if (choiceValue !== undefined) return activePrompt && choiceConfirmationSpeech(activePrompt, choiceValue);
+    if (adaptive?.reply && sourceId === adaptive.reply.id) return adaptive.reply.text;
+    const speech = conversationSpeech({ currentPrompt: activePrompt, adaptive });
+    if (speech?.id === sourceId) return speech.text;
+    return activePrompt && sourceId === activePrompt.id ? conversationSpeech({ currentPrompt: activePrompt })?.text : undefined;
+  };
   const listen = (sourceId: string, choiceValue?: string) => {
     const current = sessionRef.current;
     if (!current || !verified || config?.voice.available !== true) return;
+    if (config?.voice.output === 'browser') {
+      const text = browserSpeechText(sourceId, choiceValue);
+      if (text) playback.speakText(text);
+      return;
+    }
     void playback.start({ requestId: crypto.randomUUID(), sessionId: current.id, expectedRevision: current.revision, sourceId, ...(choiceValue !== undefined ? { choiceConfirmation: { value: choiceValue } } : {}) });
   };
+  // Read-aloud speaks each newly displayed question once; it never talks over an active capture or conversation.
+  useEffect(() => {
+    const speech = activePrompt && conversationSpeech({ currentPrompt: activePrompt });
+    if (!readAloud || config?.voice.output !== 'browser' || config.voice.available !== true || !speech || capture.active || voice.active) return;
+    playback.speakText(speech.text);
+  }, [activePrompt?.id]);
   useEffect(() => { voice.controller.playback(playback.status); }, [playback.status, voice.controller]);
   // Run after capture/playback scope cleanup, so a newly acknowledged turn cannot cancel its own next capture.
   useEffect(() => { voice.controller.reconcile(); });
@@ -372,7 +395,8 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
           {heldPrompt && <Notice tone="attention">The saved conversation has moved on. Your unsent answer for the earlier question is still shown below. Copy any text you need, then clear it to continue.</Notice>}
           {activePrompt ? <form className="answer-form" onSubmit={event => { event.preventDefault(); void (naturalAnswer ? updateAdaptive() : updateTurn('answer')); }}>
             <div className="question-block"><h2 ref={questionRef} tabIndex={-1}>{activePrompt.text}</h2><p className="current-topic">{session.topics.find(topic => topic.id === activePrompt.topicId)?.title}</p>{activePrompt.purpose && <details className="question-purpose"><summary><CircleHelp size={15} aria-hidden="true" />Why we’re asking</summary><p>{activePrompt.purpose}</p></details>}</div>
-            <VoiceControls available={config.voice.available} explanation={config.voice.explanation} conversation={voice} conversationAllowed={Boolean(exactChoicePrompt || naturalAnswer && session.adaptive?.available)} exactChoices={Boolean(exactChoicePrompt)} captureAllowed={canCaptureAnswer} disabled={Boolean(busy || pendingTurn || pendingAdaptive || heldPrompt) || stale || adaptive.answerBlocked || (naturalAnswer && !session.adaptive?.available)} capture={capture} playback={playback} onListen={() => listen(activePrompt.id)} onListenReply={session.adaptive?.reply ? () => listen(session.adaptive!.reply!.id) : undefined} questionTooLong={(conversationSpeech({ currentPrompt: activePrompt })?.text.length ?? 0) > 1200} replyTooLong={(session.adaptive?.reply?.text.length ?? 0) > 1200} />
+            <VoiceControls available={config.voice.available} explanation={config.voice.explanation} conversation={voice} conversationAllowed={!uploadVoice && Boolean(exactChoicePrompt || naturalAnswer && session.adaptive?.available)} exactChoices={Boolean(exactChoicePrompt)} captureAllowed={uploadVoice ? canCaptureAnswer && !exactChoicePrompt : canCaptureAnswer} disabled={Boolean(busy || pendingTurn || pendingAdaptive || heldPrompt) || stale || adaptive.answerBlocked || (naturalAnswer && !session.adaptive?.available)} capture={capture} playback={playback} onListen={() => listen(activePrompt.id)} onListenReply={session.adaptive?.reply ? () => listen(session.adaptive!.reply!.id) : undefined} questionTooLong={(conversationSpeech({ currentPrompt: activePrompt })?.text.length ?? 0) > 1200} replyTooLong={(session.adaptive?.reply?.text.length ?? 0) > 1200} />
+            {config.voice.available && config.voice.output === 'browser' && <label className="voice-consent"><input type="checkbox" checked={readAloud} onChange={event => { setReadAloud(event.target.checked); if (!event.target.checked) playback.stop(); }} /><span>Read new questions aloud</span></label>}
             {exactChoicePrompt && voice.choice && <section className="voice-choice-confirmation" aria-label="Confirm recognized choice"><p>{choiceConfirmationSpeech(exactChoicePrompt, voice.choice.value)}</p><p className="metadata">Recognized answer: {voice.choice.optionTranscript}</p><Button disabled={Boolean(busy) || stale || voice.status === 'saving'} onClick={() => void voice.controller.confirmChoice('control')}>Confirm choice</Button><Button disabled={Boolean(busy) || voice.status === 'saving'} onClick={() => voice.controller.retryChoice()}>Choose again</Button></section>}
             {exactChoicePrompt && text && !voice.choice && <Notice tone="attention">Recognized words: {text}. No choice has been recorded. Clear these words to try again, or choose an exact answer below.</Notice>}
             <fieldset disabled={Boolean(busy) || Boolean(pendingTurn || pendingAdaptive) || capture.active || voice.active} className="composer-fields"><legend className="sr-only">Answer the current question</legend>

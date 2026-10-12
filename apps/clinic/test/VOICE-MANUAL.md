@@ -52,3 +52,14 @@ Twenty-four event-clock/presentation tests cover these transitions, including st
 An isolated development page is available at `/voice-fixture.html` on the existing Vite server. It refuses production mode, is not imported by the clinic or included in the production build, and contains no clinic/provider fetch or WebSocket path. Its explicit Run button sends an oscillator through the actual AudioContext → clinic AudioWorklet → PCM resampler → in-memory sink, reports real input rate/counts and exact expected PCM bytes, then closes resources. It asks for no microphone. This fixture has been typechecked but **has not been run in a browser by this agent**. It validates the audio graph only, not the authenticated socket/model/handoff flow; the coordinator's separate synthetic integration fixture and real-device matrix remain required.
 
 Still to qualify on a real device: reopening/resuming capture automatically under retained browser activation; real endpoint and drain accuracy; recognition of negation/medical values; prevention of speaker echo being saved as patient speech; local barge-in; actual browser MPEG append/decode; microphone revocation/background/Bluetooth; and the complete five-second latency target including next-capture readiness. A stalled natural capture startup pauses after a bounded setup wait, with typing available. No microphone grant, browser audio fixture execution, provider call, runtime configuration change or server restart was performed for this addition.
+
+## Hosted push-to-talk
+
+Use this checklist when the deployment reports `voice.input: 'upload'` (one recording posted on finish, no WebSocket). Use synthetic content only.
+
+1. Consent: with voice available, the microphone is not requested until the consent checkbox is ticked and Dictate one answer is pressed.
+2. Dictate: the status reads “Recording. Press Finish recording when you are done, then check the words.” Speak one answer and press Finish recording.
+3. Finish: the status shows “Finishing the last words”, then the transcript appears in the answer box. Stop waiting or a failed upload leaves the typed draft unchanged and says voice is unavailable.
+4. Words appear in the answer box for editing; correct names, amounts, units and “not” before pressing Send answer. Nothing is saved until you send.
+5. Read-aloud: with browser output, tick “Read new questions aloud”; each new question is spoken once. Stop audio and changing the question both silence it. Unticking stops speech.
+6. PHQ and other exact-choice questions stay buttons: no Dictate button, no voice conversation, and the answer choices are selected directly.

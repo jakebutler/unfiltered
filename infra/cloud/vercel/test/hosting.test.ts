@@ -8,6 +8,7 @@ import WebSocket from 'ws';
 import { hostedClinicConfig } from '../hosted-config.js';
 import { createHostedClinicServer } from '../application.js';
 import { loadClinicAssets, serveClinicAsset, type ClinicAssets } from '../static-assets.js';
+import { hostedInterpreterProviders } from '../../../../apps/clinic-server/src/providers.js';
 
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
@@ -101,5 +102,40 @@ describe('single hosted server composition', () => {
     socket.on('error', () => undefined); cleanups.push(() => socket.terminate());
     await expect(once(socket, 'open')).rejects.toThrow();
     expect(app.reserve).not.toHaveBeenCalled(); expect(app.connect).not.toHaveBeenCalled(); expect(app.runtime).not.toHaveBeenCalled();
+  });
+});
+
+describe('hosted push-to-talk upload composition', () => {
+  it('advertises browser-read upload voice and refuses unauthenticated transcription before admission', async () => {
+    const runtime = vi.fn(async () => { throw new Error('must-not-contact-medplum'); });
+    const reserve = vi.fn(async () => { throw new Error('must-not-dispatch-provider'); });
+    const application = createHostedClinicServer({ config: hostedClinicConfig({ CLINIC_CONFIG_JSON: JSON.stringify(fixture()) }), assets: assets(), runtime, providers: { speechUpload: { deepgramApiKey: 'synthetic-deepgram-key', admission: { reserve } } } });
+    application.server.listen(0, '127.0.0.1'); await once(application.server, 'listening');
+    const url = `http://127.0.0.1:${(application.server.address() as { port: number }).port}`;
+    cleanups.push(async () => { application.server.closeAllConnections(); application.close(); if (application.server.listening) await once(application.server, 'close'); });
+    const config = await (await fetch(url + '/api/clinic/config')).json();
+    expect(config.voice).toMatchObject({ available: true, input: 'upload', output: 'browser' });
+    const denied = await fetch(url + '/api/clinic/speech/transcriptions?sessionId=6f1f3d3e-2d4b-4c1e-9a53-3c1b2a4d5e6f&promptId=p&expectedRevision=0&requestId=0b8f6a4e-7c2d-4e91-8f3a-1d2c3b4a5e6f', { method: 'POST', headers: { origin, 'content-type': 'application/octet-stream' }, body: new Uint8Array([1, 2]) });
+    expect(denied.status).toBeGreaterThanOrEqual(400); expect(denied.headers.get('content-type')).toContain('json');
+    expect(reserve).not.toHaveBeenCalled(); expect(runtime).not.toHaveBeenCalled();
+  });
+});
+
+const policy = { id: 'synthetic-hosted', limits: Object.fromEntries(['digitalocean', 'deepgram', 'elevenlabs'].map(provider => [provider, { account: { requests: 3, inputBytes: 180000, outputTokens: 12288, characters: 3000, audioSeconds: 180 }, session: { requests: 2, inputBytes: 120000, outputTokens: 8192, characters: 2000, audioSeconds: 120 }, concurrency: 1, leaseMs: provider === 'digitalocean' ? 20000 : provider === 'deepgram' ? 70000 : 35000 }])) };
+const hostedEnv = (extra: Record<string, string | undefined> = {}): Record<string, string | undefined> => ({ CLINIC_ADAPTIVE_INTERPRETER: 'intake-v1', DIGITALOCEAN_MODEL_ACCESS_KEY: 'synthetic-do-key', CLINIC_PROVIDER_POLICY_JSON: JSON.stringify(policy), ...extra });
+describe('hosted provider wiring for speech upload', () => {
+  it('builds a lazy Deepgram upload admission only when explicitly configured', () => {
+    const runtime = vi.fn(async () => { throw new Error('must-not-contact-medplum'); });
+    const providers = hostedInterpreterProviders(runtime, hostedEnv({ CLINIC_SPEECH_INPUT: 'deepgram-rest', DEEPGRAM_API_KEY: 'synthetic-deepgram-key' }));
+    expect(providers.speechUpload?.deepgramApiKey).toBe('synthetic-deepgram-key');
+    expect(typeof providers.speechUpload?.admission.reserve).toBe('function');
+    expect(runtime).not.toHaveBeenCalled();
+    expect(hostedInterpreterProviders(runtime, hostedEnv()).speechUpload).toBeUndefined();
+  });
+  it('fails closed on missing credentials, unknown speech modes, and speech without the interpreter', () => {
+    const runtime = async () => { throw new Error('must-not-contact-medplum'); };
+    expect(() => hostedInterpreterProviders(runtime, hostedEnv({ CLINIC_SPEECH_INPUT: 'deepgram-rest' }))).toThrow('speech-credentials-required');
+    expect(() => hostedInterpreterProviders(runtime, hostedEnv({ CLINIC_SPEECH_INPUT: 'other', DEEPGRAM_API_KEY: 'synthetic-deepgram-key' }))).toThrow('unknown-speech-input');
+    expect(() => hostedInterpreterProviders(runtime, { CLINIC_SPEECH_INPUT: 'deepgram-rest', DEEPGRAM_API_KEY: 'synthetic-deepgram-key' })).toThrow('speech-input-requires-interpreter');
   });
 });

@@ -17,6 +17,8 @@ export interface ClinicProviderWiring {
   provisionalQualification?: import('../../../packages/clinic-api/src/provisional-projection.js').ProvisionalQualification;
   finalRepresentationQualification?: import('../../../packages/clinic-api/src/final-representation.js').FinalRepresentationQualification;
   speech?: Omit<import('./speech.js').NodeSpeechOptions, 'access' | 'ingress'>;
+  /** Hosted push-to-talk: one-shot REST transcription. Mutually exclusive with streaming speech. */
+  speechUpload?: { deepgramApiKey: string; admission: import('../../../packages/speech/src/server.js').SpeechAdmission };
 }
 
 /** Default chosen from the bounded live eval (scripts/dev/intake-interpreter-eval.mts). */
@@ -77,11 +79,24 @@ export function configuredProviders(runtime: () => Promise<Runtime>): ClinicProv
 
 /** Hosted wiring: the interpreter only, always behind the shared Medplum budget ledger. */
 export function hostedInterpreterProviders(runtime: () => Promise<Runtime>, env: Record<string, string | undefined> = process.env): ClinicProviderWiring {
-  if (!env.CLINIC_ADAPTIVE_INTERPRETER) return {};
+  // Validated before the interpreter gate so a misspelled speech mode can never be silently ignored.
+  const speechInput = env.CLINIC_SPEECH_INPUT || undefined;
+  if (speechInput !== undefined && speechInput !== 'deepgram-rest') throw new Error('unknown-speech-input');
+  if (!env.CLINIC_ADAPTIVE_INTERPRETER) {
+    // Speech upload is budgeted through the same ledger, which only exists with the interpreter policy.
+    if (speechInput) throw new Error('speech-input-requires-interpreter');
+    return {};
+  }
   if (env.CLINIC_ADAPTIVE_INTERPRETER !== 'intake-v1') throw new Error('unknown-adaptive-interpreter');
   const apiKey = env.DIGITALOCEAN_MODEL_ACCESS_KEY;
   if (!apiKey?.trim()) throw new Error('digitalocean-model-access-key-required');
   if (!env.CLINIC_PROVIDER_POLICY_JSON) throw new Error('provider-budget-policy-required');
   const admission = createProviderAdmission(async () => (await runtime()).client, JSON.parse(env.CLINIC_PROVIDER_POLICY_JSON) as ProviderBudgetPolicy);
-  return { adaptiveInterpreter: boundedIntakeInterpreter(interpreterConfig(apiKey), admission) };
+  if (!speechInput) return { adaptiveInterpreter: boundedIntakeInterpreter(interpreterConfig(apiKey), admission) };
+  const deepgramApiKey = env.DEEPGRAM_API_KEY?.trim();
+  if (!deepgramApiKey) throw new Error('speech-credentials-required');
+  return {
+    adaptiveInterpreter: boundedIntakeInterpreter(interpreterConfig(apiKey), admission),
+    speechUpload: { deepgramApiKey, admission: speechAdmission(admission) },
+  };
 }

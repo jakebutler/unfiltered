@@ -12,6 +12,7 @@ import type { SpeechOutputRequest, SpeechTurnScope } from '../../speech/src/cont
 
 export const speechInputPath = '/api/clinic/speech/input';
 export const speechOutputPath = '/api/clinic/speech/output';
+export const speechTranscriptionPath = '/api/clinic/speech/transcriptions';
 const common = { requestId: z.string().uuid(), sessionId: z.string().uuid(), expectedRevision: z.number().int().nonnegative() };
 export const speechStartSchema = z.object({ ...common, type: z.literal('start'), promptId: z.string().min(1).max(300) }).strict();
 export const speechOutputSchema = z.object({ ...common, sourceId: z.string().min(1).max(300), choiceConfirmation: z.object({ value: z.string().min(1).max(300) }).strict().optional() }).strict();

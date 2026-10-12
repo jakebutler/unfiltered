@@ -10,7 +10,9 @@ export function useSpeechPlayback(scopeKey: string) {
   const [mode, setMode] = useState<'streaming' | 'buffered'>('buffered');
   const [message, setMessage] = useState('');
   const [slow, setSlow] = useState(false);
-  const stop = useCallback(() => { guard.current.interrupt(); clip.current = undefined; setStatus('idle'); setMessage(''); setSlow(false); }, []);
+  // Browser speech (speakText) has its own generation so late utterance events cannot change a newer state.
+  const browserGeneration = useRef(0), spoken = useRef<string | undefined>(undefined), utterance = useRef<SpeechSynthesisUtterance | undefined>(undefined);
+  const stop = useCallback(() => { guard.current.interrupt(); clip.current = undefined; browserGeneration.current++; spoken.current = undefined; window.speechSynthesis?.cancel(); setStatus('idle'); setMessage(''); setSlow(false); }, []);
   useEffect(() => { stop(); return () => { guard.current.interrupt(); clip.current = undefined; }; }, [scopeKey, stop]);
   useEffect(() => {
     const hidden = () => { if (document.hidden) stop(); };
@@ -30,8 +32,35 @@ export function useSpeechPlayback(scopeKey: string) {
       setStatus('blocked'); setMessage('The audio is ready. Press Play audio to let your browser play it.');
     }
   }, []);
+  /** Reads text already on screen with the browser's own voice; nothing is sent to a provider. */
+  const speakText = useCallback((text: string) => {
+    const generation = ++browserGeneration.current, scope = displayedScope.current;
+    const isCurrent = () => browserGeneration.current === generation && scope === displayedScope.current;
+    const unreadable = 'Your browser could not read this aloud. The same words are on screen.';
+    guard.current.interrupt(); clip.current = undefined; spoken.current = text;
+    const synthesis = window.speechSynthesis;
+    if (!synthesis || typeof SpeechSynthesisUtterance === 'undefined') { setStatus('error'); setMessage(unreadable); setSlow(false); return; }
+    setStatus('loading'); setMessage('Preparing the browser voice…'); setSlow(false);
+    try {
+      synthesis.cancel();
+      const item = new SpeechSynthesisUtterance(text);
+      item.lang = 'en-US'; utterance.current = item;
+      item.onstart = () => { if (isCurrent()) { setStatus('playing'); setMessage(''); } };
+      item.onend = () => { if (isCurrent()) { setStatus('finished'); setMessage('Audio finished.'); } };
+      item.onerror = () => { if (isCurrent()) { setStatus('error'); setMessage(unreadable); } };
+      synthesis.speak(item);
+    } catch {
+      if (isCurrent()) { setStatus('error'); setMessage(unreadable); }
+    }
+  }, []);
+  /** Replays the last browser-read text, or the buffered provider clip when one exists. */
+  const replay = useCallback(() => {
+    if (!clip.current && spoken.current !== undefined) speakText(spoken.current);
+    else void playPrepared();
+  }, [playPrepared, speakText]);
   const start = useCallback(async (input: SpeechOutputRequest) => {
     const begun = guard.current.begin(), scope = displayedScope.current;
+    spoken.current = undefined;
     const ticket = { ...begun, isCurrent: () => begun.isCurrent() && scope === displayedScope.current }, audio = new Audio();
     const current: { audio: HTMLAudioElement; stream?: SpeechAudioStream; ticket: typeof ticket } = { audio, ticket }; clip.current = current;
     // Synchronous pause/detach is attached before constructing the media source or awaiting fetch/play.
@@ -59,5 +88,5 @@ export function useSpeechPlayback(scopeKey: string) {
     } catch (error) { failed(error instanceof Error ? error : new Error('audio-unavailable')); }
     finally { window.clearTimeout(slowTimer); if (ticket.isCurrent()) setSlow(false); }
   }, [playPrepared]);
-  return { status, mode, message, slow, start, stop, playPrepared };
+  return { status, mode, message, slow, start, stop, playPrepared, speakText, replay };
 }

@@ -78,6 +78,8 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
     adaptiveNow?: () => number;
     adaptiveTimeoutMs?: number;
     speechEnabled?: boolean;
+    /** 'upload' = one-shot recording transcribed on the server; browser reads questions aloud. */
+    speechInput?: 'stream' | 'upload';
     ingress?: IngressAdmission;
 } = {}) {
     const origin = new URL(config.origin).origin;
@@ -131,7 +133,7 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
             if ((request.method === 'POST' && suppliedOrigin !== origin) || (suppliedOrigin && suppliedOrigin !== origin))
                 throw new ApiFailure('origin-denied', 403);
             if (path === '/api/clinic/config' && request.method === 'GET')
-                return reply({ clinicName: 'Corvo Clinic', syntheticOnly: true, scenarios: Object.entries(scenarioTitles).map(([id, title]) => ({ id, title, description: content.register.scenarios[id as ScenarioId].patientSummary })), conversation: { mode: adaptive.available ? 'adaptive' : 'guided', explanation: adaptive.available ? 'Natural answers are saved before interpretation. Guided questions remain available; exact screening responses use guided choices.' : 'Adaptive conversation is unavailable. Guided questions record your explicit answers.' }, voice: { available: options.speechEnabled === true, explanation: options.speechEnabled === true ? 'Review recognized words before sending. You can keep typing at any time.' : 'Voice is currently unavailable. Continue by typing.' } });
+                return reply({ clinicName: 'Corvo Clinic', syntheticOnly: true, scenarios: Object.entries(scenarioTitles).map(([id, title]) => ({ id, title, description: content.register.scenarios[id as ScenarioId].patientSummary })), conversation: { mode: adaptive.available ? 'adaptive' : 'guided', explanation: adaptive.available ? 'Natural answers are saved before interpretation. Guided questions remain available; exact screening responses use guided choices.' : 'Adaptive conversation is unavailable. Guided questions record your explicit answers.' }, voice: options.speechEnabled === true ? { available: true, explanation: options.speechInput === 'upload' ? 'Hold a short recording, then review the words before sending. Questions can be read aloud by your browser. You can keep typing at any time.' : 'Review recognized words before sending. You can keep typing at any time.', input: options.speechInput ?? 'stream', output: options.speechInput === 'upload' ? 'browser' : 'provider' } : { available: false, explanation: 'Voice is currently unavailable. Continue by typing.' } });
             if (path === '/api/clinic/sessions' && request.method === 'POST') {
                 const input = await body(request, schemas.sessions);
                 limit('create', 30);
