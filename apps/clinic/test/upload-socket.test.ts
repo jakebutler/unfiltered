@@ -14,7 +14,8 @@ function harness(fetcher: Fetch) {
   const flush = () => tasks.splice(0).forEach(task => task());
   const messages = () => log.filter(event => event.type === 'message').map(event => JSON.parse(event.data ?? 'null') as Record<string, unknown>);
   const settle = () => vi.waitFor(() => { if (!log.some(event => event.type === 'close')) throw new Error('upload still pending'); });
-  return { socket, log, flush, messages, settle };
+  const until = (check: () => boolean) => vi.waitFor(() => { if (!check()) throw new Error('still pending'); });
+  return { socket, log, flush, messages, settle, until };
 }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const bytes = (...values: number[]) => new Uint8Array(values);
@@ -85,21 +86,90 @@ describe('UploadSpeechSocket', () => {
     expect(messages().slice(1)).toEqual([{ type: 'ended', outcome: 'completed' }]);
   });
 
-  it('turns a 409 into an error event and then closes', async () => {
-    const { socket, log, flush, messages, settle } = harness(async () => json({ error: { code: 'stale-revision', message: 'The question changed.', retryable: false } }, 409));
+  it('reports a rejected transcription as retained and keeps the socket open, without retrying', async () => {
+    const fetcher = vi.fn<Fetch>(async () => json({ error: { code: 'stale-session', message: 'The question changed.', retryable: false } }, 409));
+    const { socket, log, flush, messages, until } = harness(fetcher);
     flush(); socket.send(JSON.stringify(scope)); socket.send(bytes(1, 2));
     socket.send(JSON.stringify({ type: 'finish' }));
-    await settle();
-    expect(messages().slice(1)).toEqual([{ type: 'error', code: 'stale-revision', message: 'Voice is unavailable for this question.' }]);
-    expect(log.at(-1)?.type).toBe('close');
+    await until(() => messages().length === 2);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(messages().slice(1)).toEqual([{ type: 'error', code: 'stale-session', message: 'Voice is unavailable for this question.', retained: true }]);
+    expect(socket.readyState).toBe(1);
+    expect(log.some(event => event.type === 'close')).toBe(false);
   });
 
-  it('turns a network failure into an error event and then closes', async () => {
-    const { socket, flush, messages, settle } = harness(async () => { throw new TypeError('network down'); });
+  it('retries a network failure once, then keeps the same recording for a manual retry', async () => {
+    const fetcher = vi.fn<Fetch>(async () => { throw new TypeError('network down'); });
+    const { socket, flush, messages, until } = harness(fetcher);
     flush(); socket.send(JSON.stringify(scope)); socket.send(bytes(1, 2));
     socket.send(JSON.stringify({ type: 'finish' }));
-    await settle();
-    expect(messages().slice(1)).toEqual([{ type: 'error', code: 'transcription-unavailable', message: 'Voice is unavailable for this question.' }]);
+    await until(() => messages().length === 2);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[1][1].body).toEqual(fetcher.mock.calls[0][1].body);
+    expect(messages().slice(1)).toEqual([{ type: 'error', code: 'transcription-unavailable', message: 'Voice is unavailable for this question.', retained: true }]);
+    expect(socket.readyState).toBe(1);
+  });
+
+  it('completes on the automatic retry without reporting an error', async () => {
+    const fetcher = vi.fn<Fetch>().mockRejectedValueOnce(new TypeError('blip')).mockResolvedValueOnce(json({ text: 'Recovered words' }));
+    const { socket, flush, messages, until } = harness(fetcher);
+    flush(); socket.send(JSON.stringify(scope)); socket.send(bytes(1, 2));
+    socket.send(JSON.stringify({ type: 'finish' }));
+    await until(() => messages().length === 3);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(messages().slice(1).map(event => event.type)).toEqual(['recognition', 'ended']);
+    expect(socket.readyState).toBe(3);
+  });
+
+  it('transcribes a kept recording again when asked, and releases it after success', async () => {
+    const fetcher = vi.fn<Fetch>()
+      .mockRejectedValueOnce(new TypeError('down')).mockRejectedValueOnce(new TypeError('down'))
+      .mockResolvedValueOnce(json({ text: 'Second try' }));
+    const { socket, flush, messages, until } = harness(fetcher);
+    flush(); socket.send(JSON.stringify(scope)); socket.send(bytes(1, 2));
+    socket.send(JSON.stringify({ type: 'finish' }));
+    await until(() => messages().length === 2);
+    socket.retry();
+    await until(() => messages().length === 4);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher.mock.calls[2][1].body).toEqual(fetcher.mock.calls[0][1].body);
+    expect(messages()[2]).toMatchObject({ type: 'recognition', segment: { text: 'Second try' } });
+    expect(socket.readyState).toBe(3);
+  });
+
+  it('pause stops an in-flight transcription and keeps the recording for a later retry', async () => {
+    let calls = 0;
+    const fetcher: Fetch = (_, init) => {
+      calls++;
+      if (calls === 2) return Promise.resolve(json({ text: 'Late words' }));
+      return new Promise((_, reject) => { init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))); });
+    };
+    const { socket, flush, messages, until } = harness(fetcher);
+    flush(); socket.send(JSON.stringify(scope)); socket.send(bytes(1, 2));
+    socket.send(JSON.stringify({ type: 'finish' }));
+    await until(() => calls === 1);
+    expect(socket.pause()).toBe(true);
+    await until(() => messages().length === 2);
+    expect(messages().slice(1)).toEqual([{ type: 'error', code: 'transcription-paused', message: 'Voice is unavailable for this question.', retained: true }]);
+    expect(calls).toBe(1);
+    socket.retry();
+    await until(() => messages().length === 4);
+    expect(calls).toBe(2);
+    expect(socket.pause()).toBe(false);
+  });
+
+  it('closing a kept recording drops it, so no later retry can send the audio', async () => {
+    const fetcher = vi.fn<Fetch>(async () => json({ error: { code: 'speech-unavailable', message: 'x', retryable: false } }, 503));
+    const { socket, flush, messages, until } = harness(fetcher);
+    flush(); socket.send(JSON.stringify(scope)); socket.send(bytes(1, 2));
+    socket.send(JSON.stringify({ type: 'finish' }));
+    await until(() => messages().length === 2);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    socket.close();
+    socket.retry();
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(socket.readyState).toBe(3);
   });
 
   it('aborts an in-flight upload on close and suppresses every later event', async () => {

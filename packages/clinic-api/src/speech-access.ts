@@ -55,6 +55,17 @@ export function createSpeechAccess(config: ClinicApiConfig, options: { runtime()
       if (!view.currentPrompt || view.currentPrompt.id !== input.promptId) throw new ApiFailure('stale-prompt', 409);
       return { sessionId: view.id, promptId: view.currentPrompt.id, revision: view.revision };
     },
+    /** Push-to-talk transcription only fills the patient's unsent answer box, so a question that changed during
+     * recording does not invalidate it; the session must still be the patient's own, open and not paused. */
+    async upload(request: Request, input: SpeechTurnScope) {
+      if (!speechStartSchema.safeParse({ type: 'start', ...input }).success) throw new ApiFailure('invalid-speech-request');
+      const claims = await authenticate(request);
+      if (input.sessionId !== claims.sessionId) throw new ApiFailure('session-scope-denied', 403);
+      const { draft } = await readDraft((await options.runtime()).client, claims.sessionId, claims.patient);
+      if (draft.scenario !== claims.scenario || draft.id !== claims.sessionId) throw new ApiFailure('session-scope-denied', 403);
+      if (draft.phase !== 'conversation' || draft.safety?.paused || draft.confirmed) throw new ApiFailure('speech-conversation-required', 409);
+      return { sessionId: draft.id, promptId: input.promptId, revision: draft.revision };
+    },
     async output(request: Request, input: SpeechOutputRequest) {
       if (!speechOutputSchema.safeParse(input).success) throw new ApiFailure('invalid-speech-request');
       const view = await current(request, input);

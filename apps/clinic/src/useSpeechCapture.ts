@@ -6,10 +6,17 @@ import { UploadSpeechSocket } from './upload-socket';
 
 /** Upload transcription starts only after Finish, so it gets the provider timeout plus margin. */
 const uploadDrainMs = 35_000;
-type CaptureStatus = 'idle' | 'permission' | 'connecting' | 'listening' | 'finishing' | 'review' | 'interrupted' | 'unavailable';
+/** Upload recordings stop a little before the one-minute lease so the last frames never reach the limit. */
+const uploadCaptureMs = 59_000;
+type CaptureStatus = 'idle' | 'permission' | 'connecting' | 'listening' | 'finishing' | 'retained' | 'review' | 'interrupted' | 'unavailable';
 /** Explicit source seam for the isolated development fixture; normal callers use microphone capture. */
 export type CaptureMediaSource = (context: AudioContext) => Promise<{ stream: MediaStream; dispose?: () => void }>;
-interface CaptureRun { token: number; scope: CaptureScope; prefix: string; draft: VoiceDraft; resources: CaptureResources; hardware: CaptureResources; transport?: PcmTransport; finishTimer?: number; captureTimer?: number; setupTimer?: number; flushTimer?: number; stopTracks?: () => void; flush?: () => void; finishCapture?: () => void; finishRequested?: boolean; conversation?: boolean; }
+interface CaptureRun { token: number; scope: CaptureScope; prefix: string; draft: VoiceDraft; resources: CaptureResources; hardware: CaptureResources; transport?: PcmTransport; upload?: UploadSpeechSocket; finishTimer?: number; captureTimer?: number; setupTimer?: number; flushTimer?: number; stopTracks?: () => void; flush?: () => void; finishCapture?: () => void; ready?: boolean; finishRequested?: boolean; closing?: boolean; kept?: boolean; notice?: string; conversation?: boolean; }
+const stoppedNotice = 'Recording stopped. We transcribed what you said so far; check it before sending.';
+const questionChangedNotice = 'The question changed while you were recording. Nothing has been sent; check the words below before continuing.';
+const limitNotice = 'Recording stops after about a minute. We transcribed what you said.';
+const keptNotice = 'Transcription did not finish. Your recording is kept until you try again or discard it. Your typed words are unchanged.';
+const noWordsNotice = 'No words were transcribed. Type your answer or dictate again.';
 function recognition(value: unknown): RecognitionSegment {
   if (!value || typeof value !== 'object') throw new Error('invalid-transcript');
   const v = value as RecognitionSegment;
@@ -17,28 +24,35 @@ function recognition(value: unknown): RecognitionSegment {
   return { text: v.text, start: v.start, duration: v.duration, isFinal: v.isFinal, speechFinal: v.speechFinal };
 }
 
-/** `upload` posts one recording on finish for hosted deployments without WebSocket support. */
+/** `upload` posts one recording on finish for hosted deployments without WebSocket support. Upload keeps captured audio when capture ends for any reason other than an explicit discard. */
 export function useSpeechCapture({ getScope, getText, onText, onInterruptPlayback, onEvent, scopeKey, mediaSource, input }: {
   getScope: () => CaptureScope | undefined; getText: () => string; onText: (text: string, hasTranscript: boolean, conversation?: boolean) => void; onInterruptPlayback: () => void; onEvent?: (event: CaptureEvent) => void; scopeKey: string; mediaSource?: CaptureMediaSource; input?: 'stream' | 'upload';
 }) {
   const callbacks = useRef({ getScope, getText, onText, onInterruptPlayback, onEvent, mediaSource, input }); callbacks.current = { getScope, getText, onText, onInterruptPlayback, onEvent, mediaSource, input };
-  const epoch = useRef(new CaptureEpoch()), run = useRef<CaptureRun | undefined>(undefined);
+  const epoch = useRef(new CaptureEpoch()), run = useRef<CaptureRun | undefined>(undefined), kept = useRef<CaptureRun | undefined>(undefined);
   const [status, setStatus] = useState<CaptureStatus>('idle');
   const [interim, setInterim] = useState('');
   const [message, setMessage] = useState('');
   const [slow, setSlow] = useState(false);
   const active = ['permission', 'connecting', 'listening', 'finishing'].includes(status);
-  const current = (capture: CaptureRun) => run.current === capture && epoch.current.current(capture.token, capture.scope, callbacks.current.getScope());
+  // A closing capture keeps its own scope: its audio belongs to the question it was recorded for.
+  const current = (capture: CaptureRun) => (run.current === capture || kept.current === capture) && (capture.closing || epoch.current.current(capture.token, capture.scope, callbacks.current.getScope()));
   const release = (capture: CaptureRun) => {
     window.clearTimeout(capture.finishTimer); window.clearTimeout(capture.captureTimer); window.clearTimeout(capture.setupTimer); window.clearTimeout(capture.flushTimer);
     capture.transport?.interrupt(); capture.hardware.close(); capture.resources.close();
   };
-  const stop = useCallback((reason = 'Recording stopped. Check the words below before sending.', publish = true, preservePlayback = false) => {
-    const capture = run.current;
-    epoch.current.invalidate(); run.current = undefined;
+  const settle = (capture: CaptureRun) => {
+    if (run.current === capture) run.current = undefined;
+    if (kept.current === capture) kept.current = undefined;
+    epoch.current.invalidate(); release(capture);
+  };
+  /** Cancels immediately; audio captured so far is not transcribed. */
+  const end = useCallback((reason: string, publish = true, preservePlayback = false) => {
+    const wasKept = !run.current && Boolean(kept.current), capture = run.current ?? kept.current;
+    epoch.current.invalidate(); run.current = undefined; kept.current = undefined;
     if (!preservePlayback) callbacks.current.onInterruptPlayback();
     if (capture) {
-      if (publish) {
+      if (publish && !wasKept) {
         capture.draft = reduceVoiceDraft(capture.draft, { type: 'interrupt' });
         callbacks.current.onText(appendTranscript(capture.prefix, capture.draft.text), Boolean(capture.draft.text), capture.conversation);
       }
@@ -47,35 +61,70 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
     }
     if (publish) { setInterim(''); setSlow(false); setStatus(capture ? 'interrupted' : 'idle'); setMessage(capture ? reason : ''); }
   }, []);
-  useEffect(() => { stop('The question changed. Your transcript remains unsent; review it before continuing.'); }, [scopeKey, stop]);
-  useEffect(() => {
-    const hidden = () => { if (document.hidden) stop('Recording stopped when this page was hidden. Check the words below before sending.'); };
-    const pagehide = () => stop('Recording stopped when you left this page.');
-    document.addEventListener('visibilitychange', hidden); window.addEventListener('pagehide', pagehide);
-    return () => { document.removeEventListener('visibilitychange', hidden); window.removeEventListener('pagehide', pagehide); stop('', false); };
+  const finish = useCallback(() => {
+    const capture = run.current;
+    if (!capture || !capture.transport || !current(capture) || capture.finishRequested) return;
+    const upload = callbacks.current.input === 'upload';
+    capture.finishRequested = true;
+    callbacks.current.onInterruptPlayback();
+    capture.stopTracks?.(); window.clearTimeout(capture.captureTimer);
+    setStatus('finishing'); setMessage(capture.notice ? 'Microphone off. Transcribing what you said…' : 'Microphone off. Finishing the last words…');
+    try { capture.flush?.(); }
+    catch {
+      if (upload) capture.finishCapture?.();
+      else end('The connection ended before transcription finished. Check the words below; the last words may be missing.');
+      return;
+    }
+    capture.finishTimer = window.setTimeout(() => upload ? capture.upload?.pause() : end('Transcription did not finish in time. Your draft is here; check for missing words before sending.'), upload ? uploadDrainMs : voiceCaptureLimits.drainMs);
+    capture.flushTimer = window.setTimeout(() => upload ? capture.finishCapture?.() : end('Recording stopped before its last audio frame could finish. Check the transcript; the last words may be missing.'), 200);
+  }, [end]);
+  /** Ends a live recording. Upload transcribes the audio captured so far; stream ends as before. */
+  const stop = useCallback((reason = stoppedNotice, publish = true, preservePlayback = false) => {
+    const capture = run.current;
+    if (callbacks.current.input !== 'upload' || !publish) return end(reason, publish, preservePlayback);
+    if (!capture) { if (!kept.current) end(reason, publish, preservePlayback); return; }
+    if (!capture.ready) return end(reason, publish, preservePlayback);
+    capture.closing = true; capture.notice ??= reason;
+    finish();
+  }, [end, finish]);
+  /** "Stop waiting": pauses an in-flight upload and keeps its recording for a retry. */
+  const pause = useCallback(() => {
+    const capture = run.current;
+    if (capture?.upload && capture.finishRequested) capture.upload.pause(); else stop();
   }, [stop]);
+  const retry = useCallback(() => {
+    const capture = kept.current;
+    if (!capture?.upload) return;
+    kept.current = undefined; run.current = capture;
+    setInterim(''); setSlow(false); setStatus('finishing'); setMessage('Trying the transcription again…');
+    capture.finishTimer = window.setTimeout(() => capture.upload?.pause(), uploadDrainMs);
+    capture.upload.retry();
+  }, []);
+  /** Throws the recording away without transcribing it. */
+  const discard = useCallback(() => end(run.current || kept.current ? 'Recording discarded. Nothing was transcribed.' : ''), [end]);
+  const keep = (capture: CaptureRun) => {
+    window.clearTimeout(capture.finishTimer); window.clearTimeout(capture.flushTimer);
+    if (run.current === capture) run.current = undefined;
+    kept.current = capture; capture.kept = true; capture.closing = true;
+    setInterim(''); setSlow(false); setStatus('retained'); setMessage(keptNotice);
+  };
+  useEffect(() => { stop(questionChangedNotice); }, [scopeKey, stop]);
+  useEffect(() => {
+    const hidden = () => { if (document.hidden) stop('Recording stopped when this page was hidden. We transcribed what you said so far; check it before sending.'); };
+    // Leaving the page drops the audio; a transcription cannot finish reliably after unload.
+    const pagehide = () => { if (callbacks.current.input === 'upload') end('Recording stopped when you left this page. Nothing was transcribed.'); else stop('Recording stopped when you left this page.'); };
+    document.addEventListener('visibilitychange', hidden); window.addEventListener('pagehide', pagehide);
+    return () => { document.removeEventListener('visibilitychange', hidden); window.removeEventListener('pagehide', pagehide); end('', false); };
+  }, [end, stop]);
   useEffect(() => {
     if (status !== 'connecting' && status !== 'finishing') { setSlow(false); return; }
     const timer = window.setTimeout(() => setSlow(true), 8000);
     return () => window.clearTimeout(timer);
   }, [status]);
 
-  const finish = useCallback(() => {
-    const capture = run.current;
-    if (!capture || !capture.transport || !current(capture) || capture.finishRequested) return;
-    capture.finishRequested = true;
-    callbacks.current.onInterruptPlayback();
-    capture.stopTracks?.(); window.clearTimeout(capture.captureTimer);
-    setStatus('finishing'); setMessage('Microphone off. Finishing the last words…');
-    try { capture.flush?.(); }
-    catch { stop('The connection ended before transcription finished. Check the words below; the last words may be missing.'); return; }
-    capture.finishTimer = window.setTimeout(() => stop('Transcription did not finish in time. Your draft is here; check for missing words before sending.'), callbacks.current.input === 'upload' ? uploadDrainMs : voiceCaptureLimits.drainMs);
-    capture.flushTimer = window.setTimeout(() => stop('Recording stopped before its last audio frame could finish. Check the transcript; the last words may be missing.'), 200);
-  }, [stop]);
-
   const start = useCallback(async (options?: { conversation?: boolean }) => {
     const scope = callbacks.current.getScope();
-    if (!scope || run.current) return;
+    if (!scope || run.current || kept.current) return;
     callbacks.current.onInterruptPlayback();
     if (!window.isSecureContext || (!callbacks.current.mediaSource && !navigator.mediaDevices?.getUserMedia) || !window.AudioContext || !window.AudioWorkletNode) {
       setStatus('unavailable'); setMessage('This browser cannot record here. You can continue by typing.'); if (options?.conversation) callbacks.current.onEvent?.({ type: 'interrupted', scope, reason: 'This browser cannot record here. Continue by typing.' }); return;
@@ -102,13 +151,15 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
       const source = context.createMediaStreamSource(stream), processor = new AudioWorkletNode(context, 'clinic-capture', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: 'explicit' }), silent = context.createGain();
       silent.gain.value = 0;
       capture.hardware.own(() => { processor.port.onmessage = null; processor.port.postMessage('stop'); processor.port.close(); processor.disconnect(); source.disconnect(); silent.disconnect(); });
-      const lost = () => { if (current(capture) && !capture.finishRequested) stop('Microphone access ended. Your words remain in the draft; you can continue typing.'); };
+      const lost = () => { if (current(capture) && !capture.finishRequested) stop('Microphone access ended. We transcribed what you said so far; check it before sending.'); };
       for (const track of stream.getAudioTracks()) { track.addEventListener('ended', lost); capture.hardware.own(() => track.removeEventListener('ended', lost)); }
       const suspended = () => { if (current(capture) && context.state !== 'running') lost(); };
       context.addEventListener('statechange', suspended); capture.hardware.own(() => context.removeEventListener('statechange', suspended));
       const socketUrl = new URL('/api/clinic/speech/input', window.location.href); socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
       const upload = callbacks.current.input === 'upload';
-      const socket = upload ? new UploadSpeechSocket(socketUrl) as unknown as WebSocket : new WebSocket(socketUrl); socket.binaryType = 'arraybuffer';
+      const uploadSocket = upload ? new UploadSpeechSocket(socketUrl) : undefined;
+      capture.upload = uploadSocket;
+      const socket = (uploadSocket ?? new WebSocket(socketUrl)) as unknown as WebSocket; socket.binaryType = 'arraybuffer';
       capture.resources.own(() => { if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close(1000, 'capture-ended'); });
       capture.transport = new PcmTransport(socket, context.sampleRate);
       capture.flush = () => processor.port.postMessage('finish');
@@ -116,16 +167,16 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
         if (!current(capture) || !capture.finishRequested) return;
         window.clearTimeout(capture.flushTimer); capture.hardware.close();
         try { capture.transport!.finish(); }
-        catch { stop('The connection ended before transcription finished. Check for missing words before sending.'); }
+        catch { end('The connection ended before transcription finished. Check for missing words before sending.'); }
       };
-      const vad = new LocalVoiceActivity(); let messages = 0, messageBytes = 0, ready = false;
+      const vad = new LocalVoiceActivity(); let messages = 0, messageBytes = 0;
       processor.port.onmessage = event => {
-        if (!current(capture) || !ready) return;
+        if (!current(capture) || !capture.ready) return;
         if (event.data?.type === 'flushed') { capture.finishCapture?.(); return; }
         if (!(event.data instanceof Float32Array)) return;
         if (vad.feed(event.data, context.sampleRate)) { callbacks.current.onInterruptPlayback(); if (capture.conversation) callbacks.current.onEvent?.({ type: 'voice', scope }); }
         try { capture.transport!.audio(event.data); }
-        catch { stop('The voice connection could not keep up. Your transcript remains here; continue by typing or start a new recording.'); }
+        catch { stop(upload ? limitNotice : 'The voice connection could not keep up. Your transcript remains here; continue by typing or start a new recording.'); }
       };
       const opened = () => {
         if (!current(capture)) return;
@@ -137,45 +188,52 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
           if (typeof event.data !== 'string' || ++messages > 605 || (messageBytes += new TextEncoder().encode(event.data).byteLength) > 2000000 || event.data.length > 64000) throw new Error('invalid-voice-event');
           const value = JSON.parse(event.data) as SpeechInputEvent;
           if (value.type === 'ready') {
-            capture.transport!.ready(value); ready = true;
-            window.clearTimeout(capture.setupTimer); capture.captureTimer = window.setTimeout(() => capture.conversation ? stop('This recording reached its limit. Check the words before continuing.') : finish(), value.maxCaptureMs);
+            capture.transport!.ready(value); capture.ready = true;
+            window.clearTimeout(capture.setupTimer);
+            const limit = () => { if (upload) stop(limitNotice); else if (capture.conversation) stop('This recording reached its limit. Check the words before continuing.'); else finish(); };
+            capture.captureTimer = window.setTimeout(limit, upload ? Math.min(value.maxCaptureMs, uploadCaptureMs) : value.maxCaptureMs);
             setStatus('listening'); setMessage(capture.conversation ? 'Listening. A brief pause lets the conversation continue.' : upload ? 'Recording. Press Finish recording when you are done, then check the words.' : 'Listening. Finish when you’re ready to check the transcript.');
             if (capture.conversation) callbacks.current.onEvent?.({ type: 'ready', scope });
-          } else if (value.type === 'recognition' && ready) {
+          } else if (value.type === 'recognition' && capture.ready) {
             const next = reduceVoiceDraft(capture.draft, { type: 'recognition', generation: capture.draft.generation, segment: recognition(value.segment) });
             const final = appendTranscript(capture.prefix, next.text);
             if (appendTranscript(final, next.interim).length > 8000) throw new Error('transcript-too-long');
             capture.draft = next;
             callbacks.current.onText(final, Boolean(capture.draft.text), capture.conversation); setInterim(capture.draft.interim);
             if (capture.conversation) callbacks.current.onEvent?.({ type: 'recognition', scope, segment: recognition(value.segment), interim: next.interim });
-          } else if (value.type === 'speech-started' && ready) { callbacks.current.onInterruptPlayback(); if (capture.conversation) callbacks.current.onEvent?.({ type: 'voice', scope }); }
+          } else if (value.type === 'speech-started' && capture.ready) { callbacks.current.onInterruptPlayback(); if (capture.conversation) callbacks.current.onEvent?.({ type: 'voice', scope }); }
           else if (value.type === 'ended') {
-            if (!ready || !['completed', 'interrupted', 'failed', 'unknown'].includes(value.outcome)) throw new Error('invalid-voice-event');
+            if (!capture.ready || !['completed', 'interrupted', 'failed', 'unknown'].includes(value.outcome)) throw new Error('invalid-voice-event');
             callbacks.current.onInterruptPlayback();
-            const clean = value.outcome === 'completed' && Boolean(capture.finishRequested) && !capture.draft.interim;
+            const completed = value.outcome === 'completed', clean = completed && Boolean(capture.finishRequested) && !capture.draft.interim;
             capture.draft = reduceVoiceDraft(capture.draft, { type: 'finish' });
-            callbacks.current.onText(appendTranscript(capture.prefix, capture.draft.text), Boolean(capture.draft.text), capture.conversation);
-            run.current = undefined; epoch.current.invalidate(); release(capture); setInterim(''); setSlow(false);
-            setStatus(value.outcome === 'completed' ? 'review' : 'interrupted');
-            setMessage(value.outcome === 'completed' ? 'Check and edit the transcript below, especially names, amounts, units and “not”. Then send your reviewed answer.' : 'Recording ended. Check the transcript carefully; the last words may be missing. Nothing has been sent as an answer.');
-            if (capture.conversation) callbacks.current.onEvent?.({ type: 'completed', scope, text: appendTranscript(capture.prefix, capture.draft.text), clean });
-          } else if (value.type === 'error') stop('Voice is unavailable for this question. Your draft is still here, and you can continue typing.');
+            // A retried recording is appended to whatever the patient has typed since, not to the text from before recording.
+            const base = capture.kept ? callbacks.current.getText() : capture.prefix, text = appendTranscript(base, capture.draft.text);
+            callbacks.current.onText(text, Boolean(capture.draft.text), capture.conversation);
+            settle(capture); setInterim(''); setSlow(false);
+            setStatus(completed ? 'review' : 'interrupted');
+            setMessage(!capture.draft.text && completed ? noWordsNotice : capture.notice ?? (completed ? 'Check and edit the transcript below, especially names, amounts, units and “not”. Then send your reviewed answer.' : 'Recording ended. Check the transcript carefully; the last words may be missing. Nothing has been sent as an answer.'));
+            if (capture.conversation) callbacks.current.onEvent?.({ type: 'completed', scope, text, clean });
+          } else if (value.type === 'error') {
+            if ('retained' in value && value.retained === true) keep(capture);
+            else end('Voice is unavailable for this question. Your draft is still here, and you can continue typing.');
+          }
           else throw new Error('invalid-voice-event');
-        } catch { stop('Transcription was interrupted. Your draft is still here; check it before sending.'); }
+        } catch { end('Transcription was interrupted. Your draft is still here; check it before sending.'); }
       };
-      const closed = () => { if (current(capture)) stop('The voice connection ended. Check the transcript below; the last words may be missing. Start a new recording only if you want to continue.'); };
+      const closed = () => { if (current(capture)) end('The voice connection ended. Check the transcript below; the last words may be missing. Start a new recording only if you want to continue.'); };
       socket.addEventListener('open', opened); socket.addEventListener('message', received); socket.addEventListener('close', closed); socket.addEventListener('error', closed);
       capture.resources.own(() => { socket.removeEventListener('open', opened); socket.removeEventListener('message', received); socket.removeEventListener('close', closed); socket.removeEventListener('error', closed); });
       source.connect(processor); processor.connect(silent); silent.connect(context.destination);
       setStatus('connecting'); setMessage('Connecting voice. You can cancel and keep typing.');
       window.clearTimeout(capture.setupTimer);
-      capture.setupTimer = window.setTimeout(() => stop('The voice connection did not open. Your draft is here; you can continue typing or explicitly try a new recording.'), 15000);
+      capture.setupTimer = window.setTimeout(() => end('The voice connection did not open. Your draft is here; you can continue typing or explicitly try a new recording.'), 15000);
     } catch (error) {
       if (!current(capture)) { release(capture); return; }
       const denied = error instanceof DOMException && ['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(error.name);
-      stop(denied ? 'Microphone access was not allowed. You can continue typing, or change your browser permission and start a new recording.' : 'The microphone could not start. Your draft is unchanged; you can continue typing.');
+      end(denied ? 'Microphone access was not allowed. You can continue typing, or change your browser permission and start a new recording.' : 'The microphone could not start. Your draft is unchanged; you can continue typing.');
       setStatus('unavailable');
     }
-  }, [finish, stop]);
-  return { status, active, interim, message, slow, start, finish, stop };
+  }, [end, finish, stop]);
+  return { status, active, retained: status === 'retained', interim, message, slow, start, finish, stop, pause, retry, discard };
 }

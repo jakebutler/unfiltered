@@ -12,7 +12,9 @@ Both. Typing always works. Voice is push-to-talk:
 4. **Listen to question** reads the current question aloud using your browser's own voice. Tick **Read new questions aloud** to hear each new question automatically.
 
 Voice notes:
-- Recordings are up to one minute. Transcription uses Deepgram (medical model); the raw recording is not stored.
+- Recordings stop automatically just before one minute. Transcription uses Deepgram (medical model); the raw recording is not stored.
+- Your words are never lost by accident. If you press Stop, switch tabs, lose the microphone or the question changes, what you said so far is transcribed into the box (unsent). If transcription fails it retries once, then keeps the recording with **Try transcribing again** and **Discard recording**.
+- Correcting yourself mid-sentence works: "metformin 500 mg, no wait, 850 mg" is saved as 850 mg, with the 500 mg kept on record as corrected.
 - PHQ-4 mood items and other fixed-choice questions stay **buttons only**. That is intentional.
 - Use Chrome, Edge or Safari, and allow the microphone when asked.
 

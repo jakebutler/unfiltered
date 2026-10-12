@@ -417,6 +417,33 @@ describe('intake-interpreter-v1 conflicts', () => {
     expect(outcome.clarifications).toEqual([]);
   });
 
+  it('a correction inside one message replaces the earlier value instead of joining or conflicting', () => {
+    const ctx = context('Metformin 500 mg, no wait, 850 mg. I weigh 200, sorry, 210 pounds.', ['Q04', 'Q08']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [
+      // Out of text order on purpose: position decides, not output order.
+      { topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 210, quote: '210 pounds' },
+      { topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 200, quote: 'I weigh 200' },
+    ], items: [{ topic: 'Q08', list: 'medicines', existing: null, fields: [
+      { field: 'name', state: 'known', value: 'Metformin', quote: 'Metformin 500 mg' },
+      { field: 'strength', state: 'known', value: '500 mg', quote: '500 mg' },
+      { field: 'strength', state: 'known', value: '850 mg', quote: '850 mg' },
+    ] }] }, ctx);
+    expect(itemsOf(outcome, 'Q08', 'medicines')[0].answers.strength).toMatchObject({ state: 'known', value: '850 mg' });
+    expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 210 });
+    expect(outcome.clarifications).toEqual([]);
+    // Both values stay on record, the earlier one marked superseded within the same message.
+    const strength = outcome.provenance.filter(entry => entry.path.endsWith('.strength'));
+    expect(strength.map(entry => [entry.sourceText.join(' '), entry.transform])).toEqual([['500 mg', 'interpreted-v1-superseded-in-message'], ['850 mg', 'interpreted-v1-in-message-correction']]);
+    expect(outcome.provenance.filter(entry => entry.path === 'lastMeasuredWeight.value').map(entry => entry.transform)).toEqual(['interpreted-v1', 'interpreted-v1-superseded-in-message']);
+  });
+  it('"and ... actually" adds to a text answer rather than correcting it', () => {
+    const ctx = context('More energy, and actually to sleep better too.', ['Q01']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [
+      { topic: 'Q01', field: 'reason', state: 'known', value: 'more energy', quote: 'More energy' },
+      { topic: 'Q01', field: 'reason', state: 'known', value: 'sleep better', quote: 'to sleep better' },
+    ] }, ctx);
+    expect(answers(outcome, 'Q01').reason).toMatchObject({ state: 'known', value: 'more energy; sleep better' });
+  });
   it('an answer to a field marked conflicting resolves it and keeps the earlier sources on record', () => {
     const first = context('I want more energy.', ['Q01']);
     const conflicted = { ...first.responses, Q01: { presented: true, answers: { reason: { state: 'conflicting' as const, sourceIds: [first.source.id], note: 'Patient statements differ; clarification is needed.' } } } };

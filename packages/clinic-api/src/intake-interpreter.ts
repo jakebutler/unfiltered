@@ -47,7 +47,7 @@ RULES
 8. Medicines: labelDirections = what the label says; actualUse = how the patient really takes it. Keep them separate. Strength includes units ("500 mg").
 9. Goals (Q01): what they want help with goes in reason ("more energy", "stop snacking at night"); priority is only what progress or success would look like for them.
    Weight: a remembered scale reading is lastMeasuredWeight; a guess about their weight now is currentWeightEstimate.
-10. Corrections: if the patient changes something in KNOWN ANSWERS, output the new value with "corrects" set to that answer's number.
+10. Corrections: if the patient changes something in KNOWN ANSWERS, output the new value with "corrects" set to that answer's number. If they correct themselves inside this message ("500 mg, no wait, 850 mg"), output only the final value.
 11. A question the patient asks goes in "questions" with its exact quote. Do not answer it.
 12. moveOn: only when the patient asks to skip / move on / not talk about the current question. Still extract every other fact in the same message.
 13. Never diagnose or give advice. Never fill MH01-MH04 or any field not in the FIELD CATALOG.
@@ -301,6 +301,9 @@ const relativeWords = /\b(?:mother|mom|mum|father|dad|parents?|sister|brother|si
 const thirdPerson = /\b(?:she|he|they)\b/i;
 const firstPerson = /\b(?:i|i'm|i've|i'd|i was|me)\b/i;
 const correctionCue = /\b(?:actually|correction|correct that|i meant|i mean|sorry|wrong|mistake|changed|now it's|now it is|update|not\b[^.!?;]{0,40}\bbut)\b/i;
+/** A correction inside one message ("500 mg, no wait, 850 mg"). Bare "actually" counts only directly before the new value and not after "and/also". */
+const inMessageCorrection = /\b(?:no,? wait|wait,? no|wait|i mean|i meant|sorry|correction|or rather|make (?:that|it)|scratch that|let me correct|no,? it'?s|not\b[^,.;]{1,30},? (?:but|it'?s))\b|\bno\s*,/i;
+const correctingActually = /(?:^|[^\p{L}])actually[\s,]*$/iu, actuallyJoined = /\b(?:and|also|plus)\b[^,.;]*\bactually[\s,]*$/i;
 const completionWords = /\b(?:that's all|that is all|that's it|that is it|that's everything|nothing else|no others?|only (?:those|these|that|this|one|two|three)|just (?:those|these|that|this|the one)|none other|all of them|no more|that's the lot)\b/i;
 /** An acknowledgement may only restate the patient's own words: every number and substantive word must appear in the message. */
 const ackFrame = new Set('noted note thanks thank you your yours i ive i\'ve have has and or but the a an of for to with that this these about around now it its is are was were in on at as we will can later come back okay ok got sure also both so far updated update recorded added skipping skip moving move goal goals height weight weights reading readings estimate medicine medicines medication medications symptom symptoms concern concerns family history condition conditions question questions care team diet meal meals food sleep mood details detail possible possibly no not any approach approaches lb lbs pound pounds kg kilograms cm ft foot feet in inch inches mg mcg iu ml units'.split(' '));
@@ -408,6 +411,17 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
   const known = intakeKnownAnswers(context);
   const reject = (entry: Omit<AdaptiveRejectedCandidate, 'protocol'>) => { rejected.push({ ...entry, protocol: intakeInterpreterProtocol }); };
   const quoteOf = (spans: readonly EvidenceSpan[]) => spans.map(span => sourceText.slice(span.start, span.end));
+  /** Which of two same-field values the patient corrected within this message, judged by position and the words between. */
+  function selfCorrection(earlierSpans: readonly EvidenceSpan[], laterSpans: readonly EvidenceSpan[]): 'later' | 'earlier' | undefined {
+    const bounds = (list: readonly EvidenceSpan[]) => ({ start: Math.min(...list.map(span => span.start)), end: Math.max(...list.map(span => span.end)) });
+    const a = bounds(earlierSpans), b = bounds(laterSpans);
+    const cued = (from: number, to: number, quote: string) => {
+      const gap = sourceText.slice(from, to);
+      return inMessageCorrection.test(gap) || inMessageCorrection.test(quote.slice(0, 16)) || correctingActually.test(gap) && !actuallyJoined.test(gap) || /^\s*actually\b/i.test(quote);
+    };
+    if (b.start >= a.end && cued(a.end, b.start, sourceText.slice(b.start, b.end))) return 'later';
+    if (a.start >= b.end && cued(b.end, a.start, sourceText.slice(a.start, a.end))) return 'earlier';
+  }
 
   // --- move-on and questions first: they scope which topics can still change ---
   const stopTopics = new Set<string>();
@@ -573,7 +587,16 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     // "Keep the first thing I said" refers to an alternative; it is never itself clinical content.
     if (answer.state === 'known' && typeof answer.value === 'string' && pointerAnswer.test(answer.value)) { clarify('ambiguous-value'); return false; }
     const asked = context.displayed?.topicId === t.id && context.displayed.promptId !== '__clarify-record' && (context.displayed.targetPaths ?? []).includes(candidate.path);
-    if (prior && sameAnswer(prior, answer)) answer = { ...answer, sourceIds: [...new Set([...(prior.sourceIds ?? []), ...(answer.sourceIds ?? [])])] } as SlotAnswer;
+    // Two values for one field in the same message with a correction cue between them: the later one replaces the earlier.
+    const earlier = prior?.state === 'known' && prior.sourceIds.includes(sourceId) ? outcome.provenance.filter(entry => entry.topicId === t.id && entry.path === candidate.path).flatMap(entry => entry.evidence).filter(span => span.sourceId === sourceId) : [];
+    const order = earlier.length ? selfCorrection(earlier, spans) : undefined;
+    if (order === 'earlier') {
+      // This value is the one the patient corrected later in the same message: keep it only as superseded provenance.
+      outcome.provenance.push({ topicId: t.id, path: candidate.path, evidence: spans, transform: `${intakeInterpreterTransform}-superseded-in-message`, sourceText: quoteOf(spans) });
+      return false;
+    }
+    if (order === 'later') { /* replaces the earlier value from this same message; both spans stay in provenance */ }
+    else if (prior && sameAnswer(prior, answer)) answer = { ...answer, sourceIds: [...new Set([...(prior.sourceIds ?? []), ...(answer.sourceIds ?? [])])] } as SlotAnswer;
     // Several parts of one message for the same text field ("more energy, and to stop eating at night") are one answer, not a conflict.
     // A follow-up that asks for more about an answered text field gets an elaboration, not a contradiction.
     else if (prior?.state === 'known' && answer.state === 'known' && definition.kind === 'text' && (prior.sourceIds.includes(sourceId) || asked && !candidate.corrects) && typeof prior.value === 'string' && typeof answer.value === 'string')
@@ -596,7 +619,8 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     catch { reject({ kind: 'fact', topicId: t.id, path: candidate.path, reason: 'invalid-answer', evidence: spans, state: candidate.state }); return false; }
     const quote = quoteOf(spans);
     outcome.updates.push({ topicId: t.id, path: candidate.path, answer });
-    outcome.provenance.push({ topicId: t.id, path: candidate.path, evidence: spans, transform: derived.transform, sourceText: quote, ...(correctsSourceIds?.length ? { correctsSourceIds } : {}) });
+    if (order === 'later') for (const entry of outcome.provenance) if (entry.topicId === t.id && entry.path === candidate.path && !entry.transform.endsWith('-superseded-in-message')) entry.transform = `${intakeInterpreterTransform}-superseded-in-message`;
+    outcome.provenance.push({ topicId: t.id, path: candidate.path, evidence: spans, transform: order === 'later' ? `${intakeInterpreterTransform}-in-message-correction` : derived.transform, sourceText: quote, ...(correctsSourceIds?.length ? { correctsSourceIds } : {}) });
     // Unit implied by the value itself ("5 ft 8 in", "173 cm", "207 lb"); applied after explicit unit facts.
     const unitPath = candidate.path.replace(/\.value$/, '.unit');
     if (derived.impliedUnit && unitPath !== candidate.path) implied.push({ topicId: t.id, unitPath, unit: derived.impliedUnit, spans, quote, corrected: !!correctsSourceIds, height: candidate.path === 'height.value' });

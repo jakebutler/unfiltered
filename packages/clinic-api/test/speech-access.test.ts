@@ -53,6 +53,20 @@ describe('clinic speech authorization', () => {
     }
     f.set({ ...tail, phase: 'review' }); await expect(f.access.output(request, output)).rejects.toMatchObject({ code: 'speech-conversation-required' });
   });
+  it('push-to-talk transcription survives a question change but not a paused, reviewed or foreign session', async () => {
+    const f = await fixture(), input = f.scope(), request = await f.request();
+    await expect(f.access.upload(request, input)).resolves.toMatchObject({ sessionId: f.draft().id });
+    // The transcript only fills the unsent answer box; a newer revision or prompt does not invalidate it.
+    f.set({ ...f.draft(), revision: f.draft().revision + 2 });
+    await expect(f.access.upload(request, { ...input, promptId: 'Q99:gone' })).resolves.toMatchObject({ revision: f.draft().revision });
+    await expect(f.access.capture(request, input)).rejects.toMatchObject({ code: 'stale-session' });
+    await expect(f.access.upload(request, { ...input, sessionId: crypto.randomUUID() })).rejects.toMatchObject({ code: 'session-scope-denied' });
+    await expect(f.access.upload(await f.request({ identityConfirmed: false }), input)).rejects.toMatchObject({ code: 'identity-confirmation-required' });
+    f.set({ ...f.draft(), safety: { rule: 'E04', version: 'E-0.2', sourceId: 's', text: 't', at: new Date().toISOString(), paused: true } });
+    await expect(f.access.upload(request, input)).rejects.toMatchObject({ code: 'speech-conversation-required' });
+    f.set({ ...f.draft(), safety: undefined, phase: 'review' });
+    await expect(f.access.upload(request, input)).rejects.toMatchObject({ code: 'speech-conversation-required' });
+  });
   it('requires enabled speech, exact origin, valid confirmed patient cookie', async () => {
     const f = await fixture();
     await expect(f.access.capture(await f.request(), f.scope())).resolves.toMatchObject({ sessionId: f.draft().id });
