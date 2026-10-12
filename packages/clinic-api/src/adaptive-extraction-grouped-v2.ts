@@ -1013,6 +1013,7 @@ export function groupedSavedNavigation(
   }
   return result;
 }
+const leadInWords = new Set(["i", "i'm", "im", "i'd", "id", "want", "wanted", "would", "like", "to", "and", "also", "so", "well", "um", "uh", "er", "just", "really", "then", "oh", "ok", "okay", "hi", "hello", "think", "guess"]);
 /** Pure local planning over persisted proposed facts. An optional server-owned
  * conversation projection updates qualified branch navigation; this planner
  * never changes clinical/readiness credit or provider capture admission. */
@@ -1043,6 +1044,14 @@ export function planGroupedExtraction(
         text[i - e.start] = " ";
     return !/[\p{L}\p{N}]/u.test(text.join(""));
   };
+  // Lead-in wording ("I want to", "so, um") states no fact; any other unaccounted wording stays a navigation gate.
+  const leadIn = (e: EvidenceSpan) => {
+    const sourceText = proposed.turns.find(
+      (t) => t.role === "patient" && t.id === e.sourceId,
+    )?.text;
+    return !!sourceText && sourceText.slice(e.start, e.end).toLowerCase().split(/[^\p{L}\p{N}']+/u)
+      .every((w) => !w || leadInWords.has(w));
+  };
   const unreviewed = new Set(proposed.turns.filter(t => t.role === 'patient' && t.channel === 'unreviewed-transcript').map(t => t.id));
   const recognitionOnly = (g: typeof projection.gaps[number]) => options.recognitionContinuation === true
     && g.reason === 'recognition-unreviewed' && unreviewed.has(g.sourceId)
@@ -1056,7 +1065,9 @@ export function planGroupedExtraction(
   if (
     !options.recordLocal && (compiled.capture.claims.length !== compiled.draft.claims.length ||
     compiled.draft.residual.length !== compiled.narrow.length ||
-    blocking.length)
+    blocking.length ||
+    // Source text no claim, event or narrow detail accounts for stays a navigation gate.
+    !compiled.capture.accounting.remaining.every((e) => covered(e) || leadIn(e)))
   )
     return {
       status: "interpretation-review" as const,

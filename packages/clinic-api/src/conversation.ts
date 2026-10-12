@@ -80,8 +80,31 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         throw new ApiFailure('detail-not-editable', 400); return field; }
     function synchronize(d: Draft): Draft {
         if (!native) return d;
-        const projected = projectNativeQuestionnaireState({ topics: d.topics, context: nativeContext(d), inactiveHistory: d.questionnaireHistory, unreviewedSourceIds: unresolvedRecognitionSourceIds(d.turns.filter(turn => turn.role === 'patient').map(turn => ({ id: turn.id, patient: d.patient, kind: turn.corrects ? 'patient-correction' as const : 'patient-statement' as const, text: turn.text, capturedAt: turn.at, ...(turn.channel ? { channel: turn.channel } : {}), ...(turn.corrects ? { corrects: turn.corrects } : {}), ...(turn.displayedPromptId ? { displayedPromptId: turn.displayedPromptId } : {}) })), d.topics) }, evidence(d).validSourceIds);
-        d.topics = projected.topics; d.questionnaireHistory = projected.inactiveHistory;
+        // A direct edit inside a provisional list item is routed with that item's provisional anchors
+        // (foods enables foodAmounts); the borrowed anchors are removed again and never become direct answers.
+        const borrowed: { topicId: string; collection: string; itemId: string; field: string }[] = [];
+        const routed = structuredClone(d.topics);
+        if (Object.values(d.topics).some(topic => Object.values(topic?.answers ?? {}).some(answer => answer.state === 'known' && answer.items?.length))) {
+            const provisional = effective(d).responses;
+            for (const [topicId, topic] of Object.entries(routed)) for (const [collection, answer] of Object.entries(topic?.answers ?? {})) {
+                if (answer.state !== 'known' || !answer.items) continue;
+                const projectedList = provisional[topicId]?.answers[collection];
+                for (const item of answer.items) {
+                    const source = projectedList?.state === 'known' ? projectedList.items?.find(candidate => candidate.id === item.id) : undefined;
+                    for (const [field, value] of Object.entries(source?.answers ?? {})) if (!item.answers[field]) {
+                        item.answers = { ...item.answers, [field]: value };
+                        borrowed.push({ topicId, collection, itemId: item.id, field });
+                    }
+                }
+            }
+        }
+        const projected = projectNativeQuestionnaireState({ topics: borrowed.length ? routed : d.topics, context: nativeContext(d), inactiveHistory: d.questionnaireHistory, unreviewedSourceIds: unresolvedRecognitionSourceIds(d.turns.filter(turn => turn.role === 'patient').map(turn => ({ id: turn.id, patient: d.patient, kind: turn.corrects ? 'patient-correction' as const : 'patient-statement' as const, text: turn.text, capturedAt: turn.at, ...(turn.channel ? { channel: turn.channel } : {}), ...(turn.corrects ? { corrects: turn.corrects } : {}), ...(turn.displayedPromptId ? { displayedPromptId: turn.displayedPromptId } : {}) })), d.topics) }, evidence(d).validSourceIds);
+        const isBorrowed = (topicId: string, path: string) => borrowed.some(b => b.topicId === topicId && path === `${b.collection}[${b.itemId}].${b.field}`);
+        for (const b of borrowed) {
+            const list = projected.topics[b.topicId]?.answers[b.collection], item = list?.state === 'known' ? list.items?.find(candidate => candidate.id === b.itemId) : undefined;
+            if (item) { const answers = { ...item.answers }; delete answers[b.field]; item.answers = answers; }
+        }
+        d.topics = projected.topics; d.questionnaireHistory = projected.inactiveHistory.filter(entry => !isBorrowed(entry.topicId, entry.path));
         return d;
     }
     function current(d: Draft): {
@@ -98,6 +121,8 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         const ordered = activeTopic ? [...defs.filter(t => t.id === activeTopic), ...defs.filter(t => t.id !== activeTopic)] : defs;
         for (const topic of ordered) {
             if (topic.id === 'Q18' && !d.relevantTopicIds?.includes('Q18') && !nativeContext(d)?.reproductive)
+                continue;
+            if (d.adaptive?.mode === 'adaptive' && topic.id !== activeTopic && d.adaptive.parkedTopicIds?.includes(topic.id))
                 continue;
             const r = topicResponse(d, topic);
             if (topic.id === 'Q18' && !r.presented)
@@ -251,7 +276,11 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         const p = prompt(n)!, id = crypto.randomUUID(), last = n.turns.at(-1), now = new Date(Math.max(Date.now(), last ? Date.parse(last.at) + 1 : 0)).toISOString();
         let text = input.text?.trim() ?? input.fields?.value?.trim() ?? '';
         const normalListing = c.field.kind === 'collection' && input.action === 'answer' && ['__add', '__done'].includes(text);
-        const prior = normalListing || input.choiceTranscriptOnly ? undefined : rows(c.topic.slots, effective(n).responses[c.topic.id]?.answers ?? {}).find(r => r.id === c.field.path)?.sourceIds.at(-1);
+        // A reviewed rewording of retained raw speech for this same displayed prompt links to that
+        // raw source: unreviewed recognition holds no answer, so the answer lookup cannot find it.
+        const unreviewedRaw = !normalListing && input.channel === 'confirmed-transcript' && input.action === 'answer' && input.text !== undefined && !input.choiceConfirmation
+          ? n.turns.filter(t => t.role === 'patient' && t.channel === 'unreviewed-transcript' && t.displayedPromptId === c.topic.id + ':' + c.field.path && t.text.trim() !== input.text!.trim() && !n.turns.some(later => later.channel === 'confirmed-transcript' && later.displayedPromptId === t.displayedPromptId && Date.parse(later.at) > Date.parse(t.at))).at(-1)?.id : undefined;
+        const prior = normalListing || input.choiceTranscriptOnly ? undefined : rows(c.topic.slots, effective(n).responses[c.topic.id]?.answers ?? {}).find(r => r.id === c.field.path)?.sourceIds.at(-1) ?? unreviewedRaw;
         const selected = p.choices?.find(x => x.value === text);
         if (input.choiceTranscriptOnly && (input.action !== 'answer' || input.channel !== 'unreviewed-transcript' || !p.choices?.length || !input.text?.trim() || input.choiceConfirmation || input.fields)) throw new ApiFailure('invalid-choice-transcript');
         if (input.priorChoiceTranscript && (!input.choiceTranscriptOnly || !exactSpokenChoice(p, input.priorChoiceTranscript))) throw new ApiFailure('invalid-choice-transcript');

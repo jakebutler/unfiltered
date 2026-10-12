@@ -207,7 +207,10 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         if (Object.keys(d.requests).length >= 550) throw new ApiFailure('session-turn-limit', 413);
         const n = structuredClone(d), id = crypto.randomUUID(), sourceId = crypto.randomUUID();
         const time = new Date(Math.max(now(), Date.parse(n.turns.at(-1)?.at ?? n.createdAt) + 1)).toISOString();
-        const displayed = n.adaptive!.exchange?.prompt;
+        // When the adaptive exchange has no question, the screen shows the guided fallback; free text answers THAT question.
+        const fallback = n.adaptive!.exchange?.prompt ? undefined : content.current(d), fallbackText = fallback && content.view(d).currentPrompt?.text;
+        const displayed = n.adaptive!.exchange?.prompt ?? (fallback && fallbackText && !/^MH0[1-4]$/.test(fallback.field.path) && fallback.field.path !== '__applicability'
+            ? { kind: 'question' as const, topicId: fallback.topic.id, promptId: fallback.field.promptIds[0], targetPaths: [fallback.field.path], text: fallbackText, labels: [fallback.field.label], optional: false } : undefined);
         if (displayed) n.turns.push({ id: `p-${sourceId}`, role: 'assistant', text: displayed.text, at: time });
         n.turns.push({ id: sourceId, role: 'patient', text: input.text, at: time, channel: input.channel, ...(displayed ? { displayedPromptId: displayed.promptId } : {}) });
         const op: AdaptiveOperation = { id, requestId: input.requestId, sourceId, fingerprint, status: 'accepted', acceptedAt: time, updatedAt: time, binding: { operationId: id, sessionId: n.id, patient: n.patient, scenario: n.scenario, revision: d.revision + 1, contentVersion: `${content.register.provenance.version}.${content.register.mentalHealth}`, snapshotDigest: '' }, ...(displayed ? { displayed: { topicId: displayed.topicId, promptId: displayed.promptId, targetPaths: [...displayed.targetPaths], ...(displayed.wording ? { wording: structuredClone(displayed.wording) } : {}) } } : {}), dialogue: structuredClone(n.adaptive!.exchange?.state) };
@@ -369,6 +372,12 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
                 const remaining = outcome.clarifications.filter(item => !parked.has(item.topicId));
                 n.adaptive!.exchange = selectAdaptiveDialogue({ ...dialogueContext, topics: dialogueContext.topics.filter(topic => !parked.has(topic.id)), dialogue: { ...dialogueContext.dialogue, activeTopicId: undefined, suspended: undefined, lastUnsuccessful: undefined } },
                     { ...outcome, clarifications: remaining, hasUnresolvedInterpretation: remaining.length > 0 });
+            }
+            // The guided fallback (shown when no adaptive question remains) follows the same rule: park its topic after two showings.
+            for (let guard = 0; interpreter && !n.adaptive!.exchange.prompt && guard < dialogueContext.topics.length; guard++) {
+                const next = content.current(n), text = next && content.view(n).currentPrompt?.text;
+                if (!next || !text || /^MH0[1-4]$/.test(next.field.path) || n.turns.filter(turn => turn.role === 'assistant' && turn.text === text).length < 2) break;
+                n.adaptive!.parkedTopicIds = [...new Set([...(n.adaptive!.parkedTopicIds ?? []), next.topic.id])];
             }
             // A guarded acknowledgement precedes the next AUTHORED question; approved replies always win.
             if (outcome.acknowledgement && !n.adaptive!.exchange.reply && n.adaptive!.exchange.prompt && n.adaptive!.exchange.status === 'question')

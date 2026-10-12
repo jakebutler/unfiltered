@@ -296,6 +296,7 @@ const unknownWords = /\b(?:(?:i )?(?:don't|do not|didn't|did not) (?:know|rememb
 const declinedWords = /\b(?:prefer not|rather not|(?:don't|do not) want to|not comfortable|skip|rather discuss|pass on|leave (?:it|that) out|not (?:willing|ready) to)\b/i;
 const negativeWords = /\b(?:no|none|not|never|nothing|without|nope|neither|nor)\b|n't\b/i;
 const uncertainWords = /\b(?:might|maybe|may (?:have|be)|possibly|possible|not sure|unsure|uncertain|think|thought|suspect(?:ed)?|borderline|yet|probably|perhaps|unconfirmed|not confirmed|could (?:be|have)|told i might)\b/i;
+const approximateWords = /\b(?:around|about|approximately|approx|roughly|or so|give or take|somewhere (?:around|near))\b|~|\b\d+(?:\.\d+)?ish\b/i;
 const relativeWords = /\b(?:mother|mom|mum|father|dad|parents?|sister|brother|siblings?|grandmother|grandfather|grandma|grandpa|grandparents?|aunt|uncle|cousin|son|daughter|children|kids?|family|husband|wife|partner)\b/i;
 const thirdPerson = /\b(?:she|he|they)\b/i;
 const firstPerson = /\b(?:i|i'm|i've|i'd|i was|me)\b/i;
@@ -471,7 +472,9 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
       if (uncertainty(quote) || uncertainty(clause)) return 'negative-with-uncertainty';
       if (!definition.acceptsNegative && definition.kind !== 'presence') return 'negative-not-allowed';
     }
-    if (candidate.state === 'uncertain' && !quoteUncertain && !uncertainty(clause)) return 'uncertain-without-wording';
+    // An approximate number ("around 6", "about 200") is an uncertain value, never an exact one.
+    const approximate = ['positive-number', 'height-value'].includes(definition.kind) && approximateWords.test(clause);
+    if (candidate.state === 'uncertain' && !quoteUncertain && !uncertainty(clause) && !approximate) return 'uncertain-without-wording';
     const asked = norm(sentence).trim();
     if (['presence', 'choice'].includes(definition.kind) && (clause.includes('?') || asked.endsWith('?') && /^(?:do|does|did|can|could|should|would|will|is|am|are|have|has|what|why|how|when|where|which|who)\b/.test(asked))) return 'question-not-answer';
     if (conditionKey) {

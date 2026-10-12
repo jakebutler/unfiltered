@@ -409,6 +409,7 @@ export function expandAdaptiveSourceGroupProposal(
     return { family, role: family.roles.find(role => role.role === r)!,
       path: family.collection ? `${family.collection}[${entity?.itemId ?? `new:${group.key}`}].${r}` : r,
       identity: identities(group)[0],
+      siblings: Object.fromEntries(group.fields.map((f: any) => [f.r, { state: f.s, value: f.s === 'known' ? selectedIdentity(f) : undefined }])),
     };
   };
   const field = (field: any, key: string, scope?: StateScope) => ({ role: field.r, answer: answer(field, key, scope) });

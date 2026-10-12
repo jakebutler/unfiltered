@@ -545,10 +545,12 @@ it.each([
     ).toBe(true);
     const second = fixture("P1", later, (m) => ({
       m: m.id,
-      topics: { W02: { owner: "patient", negative: [["s0", ["logistics"]]] } },
+      // W02 logistics is a composite-negative field: a bare negative is an unsupported state, so the
+      // isolated later statement is carried as an exact narrow detail with zero field credit.
+      topics: { W02: { owner: "patient", narrow: [["s0", { logistics: "I need no practical help before my visit." }]] } },
       events: [],
       residual: [],
-      disposition: "represented",
+      disposition: "partially-represented",
     }));
     second.edit((d) => {
       d.adaptive!.operations[second.id].processingRevision = d.revision + 1;

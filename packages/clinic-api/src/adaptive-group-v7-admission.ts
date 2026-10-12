@@ -61,6 +61,8 @@ export interface StateScope {
   readonly path: string;
   /** Exact selected entity anchor, never model-assigned identity semantics. */
   readonly identity?: string;
+  /** The same group's other proposed fields; a drink role names the item's own known drink. */
+  readonly siblings?: Readonly<Record<string, { readonly state: AdaptiveFact['state']; readonly value?: string }>>;
 }
 /** Preserve original sentence boundaries even when a handle coalesces sentences. */
 function sentences(text: string): string[] {
@@ -74,12 +76,15 @@ function sentences(text: string): string[] {
   if (start < text.length) result.push(text.slice(start));
   return result.map(text => normalize(text).replace(/[.;\r\n]+$/, '').trim()).filter(Boolean);
 }
-function roleObject(scope: StateScope): string | undefined {
+const drinkRoles = new Set(['drinkAmounts', 'drinkAdditions']);
+function roleObject(scope: StateScope, role = scope.role.role): string | undefined {
   if (scope.family.anchorRoles.length) {
-    if (!scope.identity || !entityObjects[scope.role.role]) return;
-    return entityObjects[scope.role.role](escape(normalize(scope.identity)));
+    const drink = drinkRoles.has(role) && scope.siblings?.drinks?.state === 'known' ? scope.siblings.drinks.value : undefined;
+    const name = drink ?? scope.identity;
+    if (!name || !entityObjects[role]) return;
+    return entityObjects[role](escape(normalize(name)));
   }
-  return patientObjects[scope.role.role];
+  return patientObjects[role];
 }
 function historyPredicate(text: string, state: Nonknown, role: string): boolean {
   const window = historyWindows[role];
@@ -119,7 +124,11 @@ function assertedState(context: AdaptiveContext, text: string, state: Nonknown, 
     return exact('nothing else(?: that day)?', text);
   const object = roleObject(scope);
   if (!object) return false;
-  if (state === 'unknown') return exact(`i (?:don't|do not|can't|cannot) (?:know|remember|recall) (?:${object})|(?:${object}) (?:is|are) unknown`, text);
+  // One closed coordination: every conjunct is a complete object grammar of a sibling field proposed with the same state.
+  const others = Object.entries(scope.siblings ?? {}).filter(([role, sibling]) => role !== scope.role.role && sibling.state === state)
+    .map(([role]) => roleObject(scope, role)).filter((grammar): grammar is string => !!grammar).join('|');
+  const coordinated = others ? `(?:(?:${others}),? (?:or|and|nor) )?(?:${object})(?:,? (?:or|and|nor) (?:${others}))?` : object;
+  if (state === 'unknown') return exact(`i (?:don't|do not|can't|cannot) (?:know|remember|recall) (?:${coordinated})|(?:${object}) (?:is|are) unknown`, text);
   if (state === 'uncertain') return exact(`i(?: am|'m) (?:not sure|unsure|uncertain) (?:about )?(?:${object})|(?:${object}) (?:is|are) (?:uncertain|unconfirmed)`, text);
   if (state === 'declined') return exact(`i (?:prefer|would rather) not (?:to )?answer about (?:${object})|i (?:don't|do not) want to answer about (?:${object})`, text);
   if (state === 'not-applicable') return exact(`(?:${object}) (?:is not applicable|does not apply to me)`, text);

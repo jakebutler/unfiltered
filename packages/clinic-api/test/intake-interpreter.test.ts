@@ -223,6 +223,17 @@ describe('intake-interpreter-v1 per-fact validation', () => {
     expect(answers(outcome, 'DM').monitoring).toBeUndefined();
   });
 
+  it('records an approximate A1C ("around 6") as an uncertain value, and still rejects uncertainty with no hedge', () => {
+    const base = context('Prediabetes, which I was told last year. My A1C was around 6, but I am not sure of the exact number.', ['Q06', 'DM']);
+    const ctx: AdaptiveContext = { ...base, responses: { Q06: { presented: true, answers: { 'conditions.prediabetes': { state: 'known', value: true, sourceIds: [base.source.id] } } }, DM: { presented: true, answers: {}, applicability: 'applicable', applicabilitySourceIds: [base.source.id] } } };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'DM', field: 'a1c.value', state: 'uncertain', value: 6, quote: 'around 6' }] }, ctx);
+    expect(answers(outcome, 'DM')['a1c.value']).toMatchObject({ state: 'uncertain', note: 'around 6' });
+    const exact = context('Prediabetes. My A1C was 6.', ['Q06', 'DM']);
+    const rejected = interpretIntakeResponse({ ...empty, facts: [{ topic: 'DM', field: 'a1c.value', state: 'uncertain', value: 6, quote: 'My A1C was 6' }] }, { ...exact, responses: { ...ctx.responses } });
+    expect(answers(rejected, 'DM')['a1c.value']).toBeUndefined();
+    expect(rejected.rejectedCandidates?.map(entry => entry.reason)).toContain('uncertain-without-wording');
+  });
+
   it('fails the turn only for a non-object response and builds a bounded, identity-free request', async () => {
     const ctx = context('Hello', ['Q01']);
     expect(() => interpretIntakeResponse('not json', ctx)).toThrow('invalid-interpreter-output');
@@ -486,12 +497,14 @@ describe('intake-interpreter-v1 list identity and cycle guard', () => {
     await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
     let session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
     const shown: string[] = [session.currentPrompt!.text];
-    for (let turn = 0; turn < 16; turn++) {
+    for (let turn = 0; turn < 80 && session.currentPrompt; turn++) {
       const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text: `Answer number ${turn}.`, channel: 'text' });
       const applied = await f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
       session = applied.body.session;
       if (session.currentPrompt) shown.push(session.currentPrompt.text);
     }
     for (const text of shown) expect(shown.filter(entry => entry === text).length, text).toBeLessThanOrEqual(2);
-  });
+    // Long enough to exhaust adaptive questions and reach the guided fallback, which must not loop either.
+    expect(shown.length).toBeGreaterThan(30);
+  }, 60000);
 });

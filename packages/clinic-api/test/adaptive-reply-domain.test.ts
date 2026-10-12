@@ -118,11 +118,20 @@ it('rejects nonpatient section or item closures in both tail and navigation',()=
   const copy=structuredClone(raw);copy.sections[0].owner=owner;expect(()=>decodeDomainDraft(copy,m)).toThrow('nonpatient-domain-closure');
   copy.sections[0].lists[0].items=[];expect(()=>decodeDomainAdvance({manifestId:m.id,actionId:full.actions[0].id,controls:[],supplied:copy.sections},m)).toThrow('nonpatient-domain-closure');
  }
- (group.lists[0].items![0].identity as {subject:string}).subject='other';expect(()=>decodeDomainDraft(raw,m)).toThrow('nonpatient-domain-closure');
- (group.lists[0].items![0].identity as {subject:string}).subject='unclear';expect(()=>decodeDomainDraft(raw,m)).toThrow('nonpatient-domain-closure');
+ // Patient-only collections (here the food-and-drink occasions) now reject a nonpatient new-item subject at the
+ // schema boundary, before the closure rule can run: such an item can neither be added nor closed.
+ (group.lists[0].items![0].identity as {subject:string}).subject='other';expect(()=>decodeDomainDraft(raw,m)).toThrow();
+ (group.lists[0].items![0].identity as {subject:string}).subject='unclear';expect(()=>decodeDomainDraft(raw,m)).toThrow();
+ // The family-history list admits only other-owned items; closing it is still refused in both tail and navigation.
+ const fullFamily=createFullReplyManifest(fullCaseContext('G5')),mFamily=createDomainManifest(fullFamily),family=domainRepresentativeDraft('G5',fullFamily,mFamily);
+ const familySection=family.sections.find((section:any)=>section.lists.some((list:any)=>list.collection==='familyHistory'))!,familyList=familySection.lists.find((list:any)=>list.collection==='familyHistory')!;
+ expect(familyList.items!.every((item:any)=>item.identity.kind==='new'&&item.identity.subject==='other')).toBe(true);
+ familyList.closure={evidence:[familyList.items![0].identity.evidence[0]]};
+ expect(()=>decodeDomainDraft(family,mFamily)).toThrow('nonpatient-domain-closure');
+ expect(()=>decodeDomainAdvance({manifestId:mFamily.id,actionId:fullFamily.actions[0].id,controls:[],supplied:[familySection]},mFamily)).toThrow('nonpatient-domain-closure');
 });
 
-it('prompt clarification preserves protocol, schema and patient data with one example-only item structure',async()=>{
+it('prompt clarification preserves protocol and patient data with one example-only item structure; the revised schema is pinned',async()=>{
  const full=createFullReplyManifest(fullCaseContext('G7')),m=createDomainManifest(full),system=String(m.messages[0].content),user=String(m.messages[1].content);
  const old=JSON.parse(readFileSync('docs/implementation/evidence/DO-AF37-PREFLIGHT.json','utf8'));
  expect(m.protocol).toBe(old.protocol);expect(system).toContain(`Prompt revision: ${domainPromptRevision}`);
@@ -135,6 +144,10 @@ it('prompt clarification preserves protocol, schema and patient data with one ex
  expect(newItem.fields[0].answer.field).toBe('name');expect(existingItem.fields[0].answer.field).toBe('reason');expect(existingItem.fields[0].correctsSourceIds).toEqual(['EXAMPLE_ONLY_PRIOR_SOURCE_ID']);
  expect(JSON.parse(user).source).toEqual(JSON.parse(String(full.messages[1].content)).source);
  const request=await prepareDigitalOceanStreamRequest({endpoint:'https://inference.do-ai.run',model:'qwen3.8-max',apiKey:'offline',timeoutMs:30000,maxOutputTokens:4096,maxRequestBytes:131072,responseFormat:{type:'json-schema',name:'adaptive_reply_domain_v4',schema:m.jsonSchema}},[...m.messages]);
- expect(request.responseSchema).toEqual(old.responseSchema);expect(request.requestBytes).toBeGreaterThan(old.requestBytes);expect(request.requestBytes-old.requestBytes).toBeLessThan(4000);
- console.log('DOMAIN_PROMPT_DELTA '+JSON.stringify({promptRevision:domainPromptRevision,oldRequestBytes:old.requestBytes,requestBytes:request.requestBytes,requestDeltaBytes:request.requestBytes-old.requestBytes,instructionBytes:m.measurement.instructionBytes,instructionDeltaBytes:m.measurement.instructionBytes-old.manifest.measurement.instructionBytes,exampleBytes:Buffer.byteLength(JSON.stringify(example)),schemaUnchanged:true,outputBudgetUnchanged:true}));
+ // The schema has since changed (patient-only collections restrict new-item subjects, among other revisions), so the AF37
+ // preflight's schema qualification does not carry over to this revision; pin the current schema instead.
+ expect(request.responseSchema).not.toEqual(old.responseSchema);expect(request.responseSchema).toEqual({name:'adaptive_reply_domain_v4',sha256:'5e14077d70df25f3a8b7c3f0dd48743fa7735959ba5316c30ed574cc968d78ba'});expect(request.requestBytes).toBeGreaterThan(old.requestBytes);
+ // The clarification itself stays within its 4 KB instruction budget; the revised schema adds the rest, still far under the request cap.
+ expect(m.measurement.instructionBytes-old.manifest.measurement.instructionBytes).toBeLessThan(4000);expect(request.requestBytes).toBeLessThan(131072);
+ console.log('DOMAIN_PROMPT_DELTA '+JSON.stringify({promptRevision:domainPromptRevision,oldRequestBytes:old.requestBytes,requestBytes:request.requestBytes,requestDeltaBytes:request.requestBytes-old.requestBytes,instructionBytes:m.measurement.instructionBytes,instructionDeltaBytes:m.measurement.instructionBytes-old.manifest.measurement.instructionBytes,exampleBytes:Buffer.byteLength(JSON.stringify(example)),schemaUnchanged:false,outputBudgetUnchanged:true}));
 });

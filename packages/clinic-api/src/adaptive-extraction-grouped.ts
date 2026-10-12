@@ -1007,6 +1007,7 @@ export function groupedSavedNavigation(
   }
   return result;
 }
+const leadInWords = new Set(["i", "i'm", "im", "i'd", "id", "want", "wanted", "would", "like", "to", "and", "also", "so", "well", "um", "uh", "er", "just", "really", "then", "oh", "ok", "okay", "hi", "hello", "think", "guess"]);
 /** Pure local planning over the proposed persisted effective projection, without clinical/readiness credit. */
 export function planGroupedExtraction(
   raw: unknown,
@@ -1034,6 +1035,14 @@ export function planGroupedExtraction(
         text[i - e.start] = " ";
     return !/[\p{L}\p{N}]/u.test(text.join(""));
   };
+  // Lead-in wording ("I want to", "so, um") states no fact; any other unaccounted wording stays a navigation gate.
+  const leadIn = (e: EvidenceSpan) => {
+    const sourceText = proposed.turns.find(
+      (t) => t.role === "patient" && t.id === e.sourceId,
+    )?.text;
+    return !!sourceText && sourceText.slice(e.start, e.end).toLowerCase().split(/[^\p{L}\p{N}']+/u)
+      .every((w) => !w || leadInWords.has(w));
+  };
   const blocking = projection.gaps.filter(
     (g) =>
       !["unsupported-target", "unaddressed-source", "ambiguous"].includes(
@@ -1043,7 +1052,8 @@ export function planGroupedExtraction(
   if (
     compiled.capture.claims.length !== compiled.draft.claims.length ||
     compiled.draft.residual.length !== compiled.narrow.length ||
-    blocking.length
+    blocking.length ||
+    !compiled.capture.accounting.remaining.every((e) => covered(e) || leadIn(e))
   )
     return {
       status: "interpretation-review" as const,

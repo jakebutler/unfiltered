@@ -121,6 +121,8 @@ export interface Draft {
         exchange?: DialogueOutcome;
         /** Direct edits only; source interpretation cannot increment or reset these. */
         targetGenerations?: Record<string, number>;
+        /** Topics whose guided fallback question was already shown twice; skipped until the patient picks them. */
+        parkedTopicIds?: string[];
     };
     version: number;
     preview?: {

@@ -101,6 +101,22 @@ describe('V7 closed positive admission grammar', () => {
     expect(result.outcome.responses.Q04?.answers['lastMeasuredWeight.measuredWhen']).toBeUndefined();
     expect(result.hasInterpretationGaps).toBe(true);
   });
+  it('admits a closed coordination of sibling unknowns only when every conjunct is a proposed field of the same item', () => {
+    const run = (text: string) => {
+      const x = setup(text, 'Q11');
+      return x.run([{ kind: 'Q11.occasions', key: 'breakfast', scope: { mode: 'new', anchor: x.known('foods', 'oatmeal') }, fields: [
+        x.known('drinks', 'coffee'), x.state('foodAmounts', 'unknown', "don't remember"), x.state('drinkAdditions', 'unknown', "don't remember"),
+      ] }]);
+    };
+    const admitted = run("Yesterday at 8 am I had oatmeal and coffee. I don't remember the oatmeal portion or what was added to the coffee.");
+    const item = admitted.outcome.responses.Q11?.answers.occasions?.items?.[0];
+    expect(item?.answers.foodAmounts?.state).toBe('unknown');
+    expect(item?.answers.drinkAdditions?.state).toBe('unknown');
+    // An unrelated conjunct is not a sibling field: neither unknown is admitted.
+    const unrelated = run("Yesterday at 8 am I had oatmeal and coffee. I don't remember the oatmeal portion or what I did after.");
+    expect(unrelated.outcome.responses.Q11?.answers.occasions?.items?.[0]?.answers.foodAmounts).toBeUndefined();
+    expect(unrelated.hasInterpretationGaps).toBe(true);
+  });
   it('documents a conservative miss for coordinated food/drink uncertainty without discarding its source', () => {
     const text = "Yesterday at 8 am I had oatmeal and coffee. I don't remember the oatmeal portion or what was added to the coffee.", x = setup(text, 'Q11'),
       result = x.run([{ kind: 'Q11.occasions', key: 'breakfast', scope: { mode: 'new', anchor: x.known('foods', 'oatmeal') }, fields: [

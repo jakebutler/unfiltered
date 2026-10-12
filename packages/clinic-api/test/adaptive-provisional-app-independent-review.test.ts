@@ -35,19 +35,28 @@ function fixture() {
   return { api, store, accept, tail, reply, propose, finish, content, current: () => structuredClone(stored) };
 }
 
-it('reproduces urgent queued-source write that preserves safety bytes but makes real stored readback fail', async () => {
+it('urgent queued source pauses for safety, discards the pending predecessor, and keeps real stored readback valid', async () => {
+  // Formerly a reproduction of an invalid-stored-operation readback failure. The interpreter path now
+  // settles the queue at write time: the urgent child fails closed and is no longer waiting.
   const f = fixture(), first = await f.accept('Improve my energy.'), running = f.api.interpret(f.store, first.operation.id);
   const stoppedResult = running.catch(error => error);
   await f.reply.promise;
-  await expect(f.accept("I cannot breathe now.")).rejects.toMatchObject({ code: 'invalid-stored-operation' });
+  const urgent = await f.accept("I cannot breathe now.");
   const persisted = f.current().draft, child = persisted.adaptive!.operations[persisted.adaptive!.activeOperationId!];
+  expect(urgent.operation.id).toBe(child.id);
   expect(persisted.safety).toMatchObject({ rule: 'E01', paused: true });
   expect(persisted.turns.filter(turn => turn.role === 'patient').map(turn => turn.text)).toEqual(['Improve my energy.', 'I cannot breathe now.']);
-  expect(child).toMatchObject({ status: 'failed', errorCode: 'safety-interruption', queuedWaiting: true, queuedAfter: first.operation.id });
-  await expect(f.store.read()).rejects.toMatchObject({ code: 'invalid-stored-operation' });
-  await expect(f.api.reconcile(f.store, child.id)).rejects.toMatchObject({ code: 'invalid-stored-operation' });
-  await expect(f.api.discard(f.store, child.id, persisted.revision)).rejects.toMatchObject({ code: 'invalid-stored-operation' });
-  f.finish(); expect(await stoppedResult).toMatchObject({ code: 'invalid-stored-operation' });
+  expect(child).toMatchObject({ status: 'failed', errorCode: 'safety-interruption', queuedWaiting: false, queuedAfter: first.operation.id });
+  expect(persisted.adaptive!.operations[first.operation.id]).toMatchObject({ status: 'discarded', errorCode: 'safety-interruption' });
+  expect(persisted.adaptive!.operations[first.operation.id].stream?.capture).toBe('discarded');
+  // Real stored readback now validates and returns exactly the paused-for-safety draft.
+  expect((await f.store.read()).draft).toEqual(persisted);
+  f.finish(); await stoppedResult;
+  // The late provider result for the discarded predecessor cannot apply, un-pause, or dispatch more work.
+  const after = (await f.store.read()).draft;
+  expect(after.safety).toMatchObject({ rule: 'E01', paused: true });
+  expect(after.adaptive!.operations[first.operation.id].status).toBe('discarded');
+  expect(after.turns.filter(turn => turn.role === 'patient').map(turn => turn.text)).toEqual(['Improve my energy.', 'I cannot breathe now.']);
   expect(f.propose).toHaveBeenCalledTimes(1);
 });
 
