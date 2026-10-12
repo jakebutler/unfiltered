@@ -138,6 +138,15 @@ describe('intake-interpreter-v1 per-fact validation', () => {
     expect(corrected.provenance[0]).toMatchObject({ correctsSourceIds: ['turn-current'], transform: 'interpreted-v1' });
     expect(corrected.clarifications).toEqual([]);
 
+    // The model sometimes drops a few words from the quote without marking the gap.
+    const gapped = nextTurn(ctx, first, 'Actually the metformin is 500 mg, not 750.');
+    const regapped = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q08', field: `medicines[${metformin.id}].strength`, state: 'known', value: '500 mg', quote: 'actually 500 mg, not 750', corrects: line.number }] }, gapped);
+    expect(itemsOf(regapped, 'Q08', 'medicines').find(item => item.id === metformin.id)!.answers.strength).toMatchObject({ state: 'known', value: '500 mg' });
+    expect(regapped.rejectedCandidates ?? []).toEqual([]);
+    const farApart = nextTurn(ctx, first, 'Actually I checked the bottle in the kitchen this morning. It is 500 mg, not 750.');
+    const rejected = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q08', field: `medicines[${metformin.id}].strength`, state: 'known', value: '500 mg', quote: 'actually 500 mg, not 750', corrects: line.number }] }, farApart);
+    expect(rejected.rejectedCandidates).toEqual([expect.objectContaining({ reason: 'quote-not-found' })]);
+
     const uncued = nextTurn(ctx, first, 'The metformin is 500 mg.');
     const conflicted = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q08', field: `medicines[${metformin.id}].strength`, state: 'known', value: '500 mg', quote: '500 mg', corrects: line.number }] }, uncued);
     expect(itemsOf(conflicted, 'Q08', 'medicines').find(item => item.id === metformin.id)!.answers.strength).toMatchObject({ state: 'conflicting' });
@@ -471,21 +480,18 @@ describe('intake-interpreter-v1 list identity and cycle guard', () => {
     expect(itemsOf(outcome, 'Q10', 'familyHistory')).toHaveLength(2);
   });
 
-  it('never shows the same question a third time within six prompts, even when every turn is unresolved', async () => {
+  it('never shows the same question a third time in a session, even when every turn is unresolved', async () => {
     const f = handlerFixture({ interpret: async ctx => ({ outcome: { responses: ctx.responses, updates: [], provenance: [], acts: [], sourceId: ctx.source.id, hasUnresolvedInterpretation: true,
       clarifications: [{ topicId: 'Q01', path: 'reason', reason: 'conflict' as const, evidence: [] }] } as AdaptiveOutcome, receipt: { requestId: 'p', model: 'qwen3.8-max', evidenceProtocol: 'intake-interpreter-v1' as const } }) });
     await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
     let session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
     const shown: string[] = [session.currentPrompt!.text];
-    for (let turn = 0; turn < 7; turn++) {
+    for (let turn = 0; turn < 16; turn++) {
       const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text: `Answer number ${turn}.`, channel: 'text' });
       const applied = await f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
       session = applied.body.session;
       if (session.currentPrompt) shown.push(session.currentPrompt.text);
     }
-    for (let start = 0; start + 6 <= shown.length; start++) {
-      const window = shown.slice(start, start + 6);
-      for (const text of window) expect(window.filter(entry => entry === text).length, text).toBeLessThanOrEqual(2);
-    }
+    for (const text of shown) expect(shown.filter(entry => entry === text).length, text).toBeLessThanOrEqual(2);
   });
 });

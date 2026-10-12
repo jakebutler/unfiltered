@@ -357,13 +357,14 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             outcome = { ...outcome, responses: n.topics };
             const dialogueContext = { ...context, nativeRouting: content.nativeNavigation(n) };
             n.adaptive!.exchange = selectAdaptiveDialogue(dialogueContext, outcome);
-            // Interpreter path: never show the same question a third time in a short window (including A/B cycles).
+            // Interpreter path: never show the same question a third time, in a short window (A/B cycles) or for the same topic all session.
             // Park that topic for now and continue with others; its gaps stay visible in review.
             const recentPrompts = n.turns.filter(turn => turn.role === 'assistant').slice(-12).map(turn => turn.text);
             const parked = new Set<string>();
-            for (let guard = 0; interpreter && guard < 5; guard++) {
+            for (let guard = 0; interpreter && guard <= dialogueContext.topics.length; guard++) { // one topic parked per pass
                 const cycling = n.adaptive!.exchange.prompt;
-                if (!cycling || cycling.kind === 'instrument' || recentPrompts.filter(text => text === cycling.text).length < 2) break;
+                const shownForTopic = Object.values(n.adaptive!.operations ?? {}).filter(op => op.displayed?.topicId === cycling?.topicId && op.displayed?.promptId === cycling?.promptId).length;
+                if (!cycling || cycling.kind === 'instrument' || recentPrompts.filter(text => text === cycling.text).length < 2 && shownForTopic < 2) break;
                 parked.add(cycling.topicId);
                 const remaining = outcome.clarifications.filter(item => !parked.has(item.topicId));
                 n.adaptive!.exchange = selectAdaptiveDialogue({ ...dialogueContext, topics: dialogueContext.topics.filter(topic => !parked.has(topic.id)), dialogue: { ...dialogueContext.dialogue, activeTopicId: undefined, suspended: undefined, lastUnsuccessful: undefined } },

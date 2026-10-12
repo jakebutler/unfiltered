@@ -242,7 +242,7 @@ function findPart(source: string, part: string, from: number): { start: number; 
     if (at >= 0) return { start: map[at], end: map[at + needle.length - 1] + 1 };
   }
 }
-/** Exact first, then case/whitespace/quote-insensitive. An ellipsis may join up to four exact parts in order. */
+/** Exact first, then case/whitespace/quote-insensitive. An ellipsis may join up to four exact parts in order; unmarked short gaps up to three. */
 export function locateQuote(context: AdaptiveContext, quote: unknown): EvidenceSpan[] | undefined {
   if (typeof quote !== 'string') return;
   const trimmed = quote.trim();
@@ -250,7 +250,8 @@ export function locateQuote(context: AdaptiveContext, quote: unknown): EvidenceS
   const whole = findPart(context.source.text, trimmed, 0);
   if (whole) return [{ sourceId: context.source.id, ...whole }];
   const parts = trimmed.split(/\s*(?:\.\.\.|…)\s*/).filter(part => /[\p{L}\p{N}]/u.test(part));
-  if (parts.length < 2 || parts.length > 4) return;
+  if (parts.length < 2) return unmarkedGaps(context, trimmed);
+  if (parts.length > 4) return;
   const spans: EvidenceSpan[] = []; let from = 0;
   for (const part of parts) {
     const found = findPart(context.source.text, part, from);
@@ -258,6 +259,21 @@ export function locateQuote(context: AdaptiveContext, quote: unknown): EvidenceS
     spans.push({ sourceId: context.source.id, ...found }); from = found.end;
   }
   return spans;
+}
+
+/** Models sometimes drop a few words without marking the gap: accept at most three in-order runs with short gaps. */
+function unmarkedGaps(context: AdaptiveContext, quote: string): EvidenceSpan[] | undefined {
+  const words = quote.split(/\s+/).filter(Boolean), spans: EvidenceSpan[] = [];
+  let from = 0;
+  for (let i = 0; i < words.length;) {
+    let found: { start: number; end: number } | undefined, next = i;
+    for (let j = words.length; j > i && !found; j--) { found = findPart(context.source.text, words.slice(i, j).join(' '), from); next = j; }
+    if (!found || spans.length === 3) return;
+    const previous = spans.at(-1);
+    if (previous && (found.start - previous.end > 30 || /[.!?\n]/.test(context.source.text.slice(previous.end, found.start)))) return;
+    spans.push({ sourceId: context.source.id, ...found }); from = found.end; i = next;
+  }
+  return spans.length > 1 ? spans : undefined;
 }
 
 interface Region { start: number; end: number; text: string; }
