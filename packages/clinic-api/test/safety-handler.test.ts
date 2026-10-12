@@ -64,8 +64,11 @@ describe('tiered safety through the clinic handler', () => {
   it('high-risk model review pauses the intake with authored crisis copy', async () => {
     const f = await fixture(verdict({ level: 'imminent', categories: ['self-harm'] }));
     const view = await f.answer('I keep thinking everyone would be better off without me.');
-    const reviewed = await f.call<{ escalated: boolean }>('/api/clinic/safety-reviews', { signalId: view.safetyReview!.pendingSignalIds[0] });
+    const reviewed = await f.call<{ escalated: boolean; session: ClinicSessionView }>('/api/clinic/safety-reviews', { signalId: view.safetyReview!.pendingSignalIds[0] });
     expect(reviewed.body.escalated).toBe(true);
+    // The paused view comes back directly, still identity-confirmed, with the authored crisis notice.
+    expect(reviewed.body.session).toMatchObject({ phase: 'conversation', notice: { tone: 'urgent' } });
+    expect(reviewed.body.session.notice!.text).toContain('988');
     const saved = (await f.draft()).draft;
     expect(saved.safety).toMatchObject({ rule: 'E04', paused: true, via: 'model-review' });
     const session = await f.call('/api/clinic/turns', { requestId: crypto.randomUUID(), expectedRevision: saved.revision, promptId: view.currentPrompt!.id, action: 'answer', text: 'more', channel: 'text' });

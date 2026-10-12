@@ -243,8 +243,9 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 const result = await safety.review(p.r.client, p.stored.draft, input.signalId);
                 // Only an escalation touches the draft, so background reviews never make the patient's next turn stale.
                 const escalated = !!result.entry?.escalated && !p.stored.draft.safety && !p.stored.draft.confirmed;
-                if (escalated) await safety.settleDraft(p.r.client, p.claims.sessionId, p.claims.patient, result.entry!);
-                return reply({ signalId: input.signalId, state: result.pending ? 'pending' : 'reviewed', escalated });
+                // The escalated (paused) view is returned directly: a session GET would drop identity confirmation.
+                const paused = escalated ? await safety.settleDraft(p.r.client, p.claims.sessionId, p.claims.patient, result.entry!) : undefined;
+                return reply({ signalId: input.signalId, state: result.pending ? 'pending' : 'reviewed', escalated, ...(paused ? { session: view(paused) } : {}) });
             }
             if (path === '/api/clinic/review' && request.method === 'POST') {
                 const input = await body(request, schemas.review), p = await patient(request), d = p.stored.draft;

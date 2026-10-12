@@ -15,6 +15,7 @@ import { promptAllowsFreeText } from './prompt-input';
 import type { VoiceChoiceCandidate } from './choice-voice';
 import { choiceConfirmationSpeech } from '../../../packages/clinic-contract/src/choice-voice';
 import type { CaptureScope } from './voice-capture';
+import { SafetyReviewQueue } from './safety-review-client';
 
 export function PatientApp({ captureMediaSource }: { captureMediaSource?: CaptureMediaSource } = {}) {
   const [config, setConfig] = useState<ClinicConfig>();
@@ -146,6 +147,30 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     finally { setBooting(false); }
   };
   useEffect(() => { void boot(); }, []);
+  // Background tier-2 safety reviews: no patient-facing text. An escalation returns the paused session
+  // view itself (a session GET would drop identity confirmation); it never replaces a newer revision.
+  const safetyQueue = useRef<SafetyReviewQueue | undefined>(undefined);
+  const escalatedSession = useRef<ClinicSessionView | undefined>(undefined);
+  const refreshAfterEscalation = () => {
+    const value = escalatedSession.current, current = sessionRef.current;
+    escalatedSession.current = undefined;
+    if (value && current && value.id === current.id && value.revision >= current.revision) acceptAdaptiveSession(value);
+  };
+  useEffect(() => {
+    const queue = new SafetyReviewQueue({
+      post: async signalId => {
+        const result = await request<{ signalId: string; state: 'pending' | 'reviewed'; escalated: boolean; session?: ClinicSessionView }>('/api/clinic/safety-reviews', { signalId });
+        if (result.escalated && result.session) escalatedSession.current = result.session;
+        return result;
+      },
+      escalated: refreshAfterEscalation,
+    });
+    safetyQueue.current = queue;
+    return () => { queue.dispose(); safetyQueue.current = undefined; };
+  }, []);
+  const safetyIds = session?.safetyReview?.pendingSignalIds;
+  const safetyReviewable = verified && (session?.phase === 'conversation' || session?.phase === 'review');
+  useEffect(() => { if (safetyReviewable) safetyQueue.current?.sync(safetyIds ?? []); }, [safetyReviewable, safetyIds]);
   useEffect(() => {
     if (!hasDraft) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
