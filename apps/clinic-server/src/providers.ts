@@ -5,6 +5,7 @@ import { DO_ENDPOINT, DO_MODELS } from '../../../packages/clinical-core/src/digi
 import { createProviderAdmission, type ProviderBudgetPolicy } from '../../../packages/clinic-api/src/provider-admission.js';
 import { boundedAdaptiveProposer, boundedIntakeInterpreter, speechAdmission } from '../../../packages/clinic-api/src/bounded-providers.js';
 import { createIntakeInterpreter } from '../../../packages/clinic-api/src/intake-interpreter.js';
+import { boundedSafetyReviewer, createSafetyReviewer } from '../../../packages/clinic-api/src/safety-review.js';
 import type { Runtime } from '../../../packages/clinic-api/src/runtime.js';
 
 export interface ClinicProviderWiring {
@@ -18,6 +19,8 @@ export interface ClinicProviderWiring {
   finalRepresentationQualification?: import('../../../packages/clinic-api/src/final-representation.js').FinalRepresentationQualification;
   speech?: Omit<import('./speech.js').NodeSpeechOptions, 'access' | 'ingress'>;
   /** Hosted push-to-talk: one-shot REST transcription. Mutually exclusive with streaming speech. */
+  /** Tier-2 safety reviewer; wired whenever the interpreter is, on its own admission session. */
+  safetyReviewer?: import('../../../packages/clinic-api/src/safety-review.js').SafetyReviewer;
   speechUpload?: { deepgramApiKey: string; admission: import('../../../packages/speech/src/server.js').SpeechAdmission };
 }
 
@@ -27,6 +30,10 @@ function interpreterConfig(apiKey: string) {
   const model = (process.env.CLINIC_ADAPTIVE_MODEL || defaultInterpreterModel) as typeof DO_MODELS[number];
   if (!DO_MODELS.includes(model)) throw new Error('unsupported-adaptive-model');
   return { endpoint: DO_ENDPOINT, model, apiKey, maxOutputTokens: 1500, timeoutMs: 14000 } as const;
+}
+/** Same DigitalOcean model as the interpreter; a short JSON verdict needs a smaller output bound. */
+function safetyReviewerConfig(apiKey: string) {
+  return { ...interpreterConfig(apiKey), maxOutputTokens: 800, timeoutMs: 10000 } as const;
 }
 function interpreterMode(): 'intake-v1' | undefined {
   const mode = process.env.CLINIC_ADAPTIVE_INTERPRETER;
@@ -52,7 +59,7 @@ export function configuredProviders(runtime: () => Promise<Runtime>): ClinicProv
     loadPrivateEnvFile();
     const apiKey = doApiKey();
     if (!apiKey?.trim()) throw new Error('digitalocean-model-access-key-required');
-    return { adaptiveInterpreter: createIntakeInterpreter(interpreterConfig(apiKey)) };
+    return { adaptiveInterpreter: createIntakeInterpreter(interpreterConfig(apiKey)), safetyReviewer: createSafetyReviewer(safetyReviewerConfig(apiKey)) };
   }
   if (!isAbsolute(settingsPath) || (statSync(settingsPath).mode & 0o077)) throw new Error('provider-settings-must-be-private');
   const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as { canonicalEnabled?: boolean; adaptiveEnabled?: boolean; adaptiveInterpreter?: 'intake-v1'; qualification?: string; speechEnabled?: boolean; speechQualification?: string; policy: ProviderBudgetPolicy };
@@ -71,7 +78,7 @@ export function configuredProviders(runtime: () => Promise<Runtime>): ClinicProv
   const useInterpreter = settings.adaptiveInterpreter === 'intake-v1' || envInterpreter === 'intake-v1';
   return {
     ...(settings.adaptiveEnabled === true ? useInterpreter
-      ? { adaptiveInterpreter: boundedIntakeInterpreter(interpreterConfig(apiKey!), admission) }
+      ? { adaptiveInterpreter: boundedIntakeInterpreter(interpreterConfig(apiKey!), admission), safetyReviewer: boundedSafetyReviewer(safetyReviewerConfig(apiKey!), admission) }
       : { adaptiveProposer: boundedAdaptiveProposer({ endpoint: DO_ENDPOINT, model: 'qwen3.8-max', apiKey: apiKey!, maxOutputTokens: 4096, timeoutMs: 12000 }, admission) } : {}),
     ...(settings.speechEnabled === true ? { speech: { admission: speechAdmission(admission), deepgramApiKey: deepgramApiKey!, elevenlabsApiKey: elevenlabsApiKey! } } : {}),
   };
@@ -92,11 +99,13 @@ export function hostedInterpreterProviders(runtime: () => Promise<Runtime>, env:
   if (!apiKey?.trim()) throw new Error('digitalocean-model-access-key-required');
   if (!env.CLINIC_PROVIDER_POLICY_JSON) throw new Error('provider-budget-policy-required');
   const admission = createProviderAdmission(async () => (await runtime()).client, JSON.parse(env.CLINIC_PROVIDER_POLICY_JSON) as ProviderBudgetPolicy);
-  if (!speechInput) return { adaptiveInterpreter: boundedIntakeInterpreter(interpreterConfig(apiKey), admission) };
+  const safetyReviewer = boundedSafetyReviewer(safetyReviewerConfig(apiKey), admission);
+  if (!speechInput) return { adaptiveInterpreter: boundedIntakeInterpreter(interpreterConfig(apiKey), admission), safetyReviewer };
   const deepgramApiKey = env.DEEPGRAM_API_KEY?.trim();
   if (!deepgramApiKey) throw new Error('speech-credentials-required');
   return {
     adaptiveInterpreter: boundedIntakeInterpreter(interpreterConfig(apiKey), admission),
+    safetyReviewer,
     speechUpload: { deepgramApiKey, admission: speechAdmission(admission) },
   };
 }

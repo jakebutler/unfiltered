@@ -17,6 +17,7 @@ import { trackDirectAdaptiveEdits, type AdaptiveStreamProposer } from './adaptiv
 import type { AdaptiveProposer } from './adaptive.js';
 import type { GroupedExtractionProposer } from './adaptive-extraction-grouped-session-v2.js';
 import type { IngressAdmission } from './ingress-admission.js';
+import { safetyActionOutcomes, safetyReviews, staffSafety, type SafetyReviewer } from './safety-review.js';
 const revision = z.number().int().nonnegative();
 const schemas = {
     sessions: z.object({ scenario: z.enum(['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill']), syntheticAcknowledged: z.literal(true) }).strict(),
@@ -29,6 +30,8 @@ const schemas = {
     confirm: z.object({ expectedRevision: revision, digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
     empty: z.object({}).strict(),
     login: z.object({ email: z.string().email().max(254), password: z.string().min(1).max(500) }).strict(),
+    safetyReview: z.object({ signalId: z.string().uuid() }).strict(),
+    safetyAction: z.object({ actionId: z.string().uuid(), signalId: z.string().uuid().optional(), outcome: z.enum(safetyActionOutcomes), note: z.string().min(1).max(1000) }).strict(),
     action: z.object({ actionId: z.string().uuid(), workId: z.string().max(64), expectedVersion: z.number().int().positive(), expectedWorkVersion: z.string().min(1).max(100), outcome: z.enum(['reviewed', 'needs-information', 'declined', 'resolved']), note: z.string().min(1).max(4000) }).strict(),
 };
 async function body<T>(request: Request, schema: z.ZodType<T>): Promise<T> { if (!request.headers.get('content-type')?.startsWith('application/json'))
@@ -80,6 +83,8 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
     speechEnabled?: boolean;
     /** 'upload' = one-shot recording transcribed on the server; browser reads questions aloud. */
     speechInput?: 'stream' | 'upload';
+    /** Tier-2 safety reviewer. Absent: every tier-1 signal fails closed to clinician review. */
+    safetyReviewer?: SafetyReviewer;
     ingress?: IngressAdmission;
 } = {}) {
     const origin = new URL(config.origin).origin;
@@ -88,6 +93,7 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
     const fetcher = options.fetcher ?? fetch, jar = cookies(config.cookieSecret, origin.startsWith('https:')), staff = staffAuthentication(config, fetcher, jar), runtime = options.runtime ?? runtimeProvider(config, fetcher), content = conversation(config, { provisionalQualification: options.provisionalQualification, finalRepresentationQualification: options.finalRepresentationQualification }), handoff = handoffs(config, { provisionalQualification: options.provisionalQualification, finalRepresentationQualification: options.finalRepresentationQualification });
     const adaptive = adaptiveSession(content, options.adaptiveProposer, { now: options.adaptiveNow, timeoutMs: options.adaptiveTimeoutMs, streamProposer: options.adaptiveStreamProposer, groupedExtractor: options.adaptiveGroupedExtractor, fullCapture: options.adaptiveFullCapture, interpreter: options.adaptiveInterpreter });
     const view = (d: Draft, identity = true) => content.view(d, identity, adaptive.available);
+    const safety = safetyReviews({ reviewer: options.safetyReviewer }), staffSafetyApi = staffSafety(reference => Object.values(config.patients).find(fixture => fixture.reference === reference)?.displayName);
     function adaptiveStore(p: { r: Runtime; claims: PatientClaims }): AdaptiveDraftStore { return { read: () => readDraft(p.r.client, p.claims.sessionId, p.claims.patient), save: (previous, next) => saveDraft(p.r.client, previous, next) }; }
     const adaptiveReply = (result: Awaited<ReturnType<typeof adaptive.accept>>, status = 200) => reply({ session: view(result.draft), operation: operationView(result.operation) }, status);
     const rate = new Map<string, {
@@ -125,7 +131,7 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
     return async (request: Request): Promise<Response> => {
         try {
             const url = new URL(request.url), path = url.pathname;
-            if (url.search && (path !== '/api/staff/queue' || request.method !== 'GET' || [...url.searchParams.keys()].some(key => !['cursor', 'recoveryCursor'].includes(key)) || ['cursor', 'recoveryCursor'].some(key => url.searchParams.getAll(key).length > 1)))
+            if (url.search && (!['/api/staff/queue', '/api/staff/safety'].includes(path) || request.method !== 'GET' || [...url.searchParams.keys()].some(key => !(path === '/api/staff/queue' ? ['cursor', 'recoveryCursor'] : ['cursor']).includes(key)) || ['cursor', 'recoveryCursor'].some(key => url.searchParams.getAll(key).length > 1)))
                 throw new ApiFailure('unexpected-query');
             if (!['GET', 'POST'].includes(request.method))
                 throw new ApiFailure('method-not-allowed', 405);
@@ -231,6 +237,15 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 next = adaptive.dialogue(next);
                 return reply(view(await persist(p.r, p.stored, next)));
             }
+            if (path === '/api/clinic/safety-reviews' && request.method === 'POST') {
+                const input = await body(request, schemas.safetyReview), p = await patient(request);
+                limit(`safety:${p.claims.sessionId}`, 60);
+                const result = await safety.review(p.r.client, p.stored.draft, input.signalId);
+                // Only an escalation touches the draft, so background reviews never make the patient's next turn stale.
+                const escalated = !!result.entry?.escalated && !p.stored.draft.safety && !p.stored.draft.confirmed;
+                if (escalated) await safety.settleDraft(p.r.client, p.claims.sessionId, p.claims.patient, result.entry!);
+                return reply({ signalId: input.signalId, state: result.pending ? 'pending' : 'reviewed', escalated });
+            }
             if (path === '/api/clinic/review' && request.method === 'POST') {
                 const input = await body(request, schemas.review), p = await patient(request), d = p.stored.draft;
                 checkRevision(d, input.expectedRevision);
@@ -239,8 +254,9 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                     throw new ApiFailure('already-confirmed', 409);
                 if (d.preview && d.phase === 'review')
                     return reply({ session: view(d), digest: d.preview.digest, confirmationText: 'I reviewed my full saved words and the answers shown, checked for missing meaning and visible unresolved details, and want to send this version to my care team.' });
-                const preview = await content.preview(d);
-                const next = await persist(p.r, p.stored, { ...d, phase: 'review', preview });
+                // Every tier-1 signal gets a terminal tier-2 outcome before the patient reviews; unfinished reviews fail closed.
+                const swept = await safety.sweep(p.r.client, d), preview = await content.preview(swept);
+                const next = await persist(p.r, p.stored, { ...swept, phase: 'review', preview });
                 return reply({ session: view(next), digest: preview.digest, confirmationText: next.preview?.confirmation.submission.completeness === 'complete' ? 'I reviewed my full saved words and the answers shown, checked for missing meaning and visible unresolved details, and want to send this complete intake to my care team.' : 'I reviewed my full saved words and the answers shown, checked for missing meaning and visible unresolved details, and want to send this partial handoff, including the visible gaps, to my care team.' });
             }
             if (path === '/api/clinic/confirm' && request.method === 'POST') {
@@ -310,6 +326,19 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                     return reply({ items: [], recovery: [] });
                 const r = await runtime();
                 return reply(await handoff.queue(r.client, s.client, s.assignment, cursor, recoveryCursor));
+            }
+            if (path === '/api/staff/safety' && request.method === 'GET') {
+                const cursor = url.searchParams.get('cursor') ?? undefined;
+                queueOffset(cursor);
+                const s = await staff.read(request), r = await runtime();
+                return reply(await staffSafetyApi.list(r.client, s.assignment, cursor));
+            }
+            const safetyMatch = path.match(/^\/api\/staff\/safety\/([a-f0-9-]{36})(\/actions)?$/);
+            if (safetyMatch) {
+                const s = await staff.read(request), r = await runtime();
+                if (request.method === 'GET' && !safetyMatch[2]) return reply(await staffSafetyApi.view(r.client, s.assignment, safetyMatch[1]));
+                if (request.method === 'POST' && safetyMatch[2]) return reply(await staffSafetyApi.act(r.client, s.assignment, safetyMatch[1], await body(request, schemas.safetyAction)));
+                throw new ApiFailure('method-not-allowed', 405);
             }
             const match = path.match(/^\/api\/staff\/handoffs\/([a-f0-9-]+\.v[1-9]\d*)(\/(?:actions|resume))?$/);
             if (match) {

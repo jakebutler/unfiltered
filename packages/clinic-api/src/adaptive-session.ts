@@ -6,6 +6,7 @@ import { AdaptiveProposalFailure, buildAdaptiveMessages, type AdaptiveProposer, 
 import { eligibleAdaptiveProbes, selectAdaptiveDialogue } from './dialogue.js';
 import type { conversation } from './conversation.js';
 import { escalation, escalationCopy } from './safety.js';
+import { screenSafety } from './safety-screen.js';
 import { ApiFailure, type AdaptiveOperation, type AdaptiveRawProposalAudit, type Draft, type StoredDraft } from './types.js';
 import { runAdaptiveStreamOperation, type AdaptiveStreamProposer } from './adaptive-stream-session.js';
 import { runGroupedExtractionOperation, type GroupedExtractionProposer } from './adaptive-extraction-grouped-session-v2.js';
@@ -237,6 +238,9 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             if (rule) n.safety = { rule, version: 'E-0.1', sourceId, text: escalationCopy[rule], at: time, paused: true };
             if (displayed) n.topics[displayed.topicId] = { ...(n.topics[displayed.topicId] ?? { presented: true, answers: {} }), stopped: 'safety-interruption' };
         }
+        // Tier 1: a liberal screen queues a background model review in this same commit; it never pauses the intake.
+        const screen = rule ? undefined : screenSafety(input.text);
+        if (screen) n.safetySignals = [...(n.safetySignals ?? []), { id: crypto.randomUUID(), sourceId, categories: screen.categories, terms: screen.terms, at: time, version: screen.version }];
         op.binding.snapshotDigest = await snapshotDigest(baseContext(n, op));
         // Leave 64KiB inside the existing 500KiB document ceiling for a claim,
         // bounded provisional result, receipt and terminal/queued settlement.

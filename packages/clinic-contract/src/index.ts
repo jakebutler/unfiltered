@@ -66,6 +66,8 @@ export interface ClinicSessionView {
   phase: 'identity' | 'conversation' | 'review' | 'confirmed';
   revision: number; savedAt: string; completeness: 'partial' | 'complete';
   topics: TopicView[]; turns: SourceTurn[]; currentPrompt?: PromptView;
+  /** Tier-1 safety signals still awaiting a background tier-2 review; the browser requests each one. */
+  safetyReview?: { pendingSignalIds: string[] };
   /** Opaque server scope of authored answers/control state, excluding provisional projections. */
   speechScopeDigest?: string;
   delivery?: DeliveryView;
@@ -139,3 +141,15 @@ export interface ClinicApiContract {
   'POST /api/staff/handoffs/:id/resume': { body: Record<string, never>; response: StaffHandoffView };
   'POST /api/staff/handoffs/:id/actions': { body: { actionId: string; workId: string; expectedVersion: number; expectedWorkVersion: string; outcome: 'reviewed' | 'needs-information' | 'declined' | 'resolved'; note: string }; response: StaffHandoffView };
 }
+
+/** Clinician-only safety review queue (tier-2 outcomes that need a human). */
+export type SafetyCategoryView = 'self-harm' | 'medical-urgent' | 'medication-substance' | 'eating' | 'abuse-safety' | 'mental-distress';
+export type SafetyLevelView = 'none' | 'low' | 'moderate' | 'high' | 'imminent';
+export interface StaffSafetyItem { sessionId: string; patientName: string; scenario: string; open: number; highestLevel: SafetyLevelView; categories: SafetyCategoryView[]; flaggedAt: string; escalated: boolean; }
+export interface StaffSafetyReview {
+  signalId: string; sourceId: string; screened: SafetyCategoryView[]; status: 'cleared' | 'needs-human-review'; level: SafetyLevelView; concern: boolean;
+  categories: SafetyCategoryView[]; rationale: string; reviewer: string; reviewedAt: string; failure?: string; escalated?: string;
+  open: boolean; message?: string; question?: string; messageAt?: string;
+}
+export interface StaffSafetyAction { actionId: string; signalId?: string; outcome: 'no-concern' | 'contacted-patient' | 'escalated'; note: string; by: string; role: string; at: string; }
+export interface StaffSafetyView { sessionId: string; patientName: string; scenario: string; reviews: StaffSafetyReview[]; actions: StaffSafetyAction[]; }

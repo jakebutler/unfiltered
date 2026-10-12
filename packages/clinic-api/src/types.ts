@@ -107,7 +107,19 @@ export interface Draft {
         text: string;
         at: string;
         paused: boolean;
+        /** Set when a tier-2 model review (not the E-0.1 predicates) found high or imminent risk. */
+        via?: 'model-review';
     };
+    /** Tier-1 screen hits (S1-0.1). Each queues one tier-2 review; terminal outcomes are copied in at review time. */
+    safetySignals?: Array<{
+        id: string;
+        sourceId: string;
+        categories: import('./safety-screen.js').SafetyCategory[];
+        terms: string[];
+        at: string;
+        version: 'S1-0.1';
+        review?: { status: 'cleared' | 'needs-human-review'; level: 'none' | 'low' | 'moderate' | 'high' | 'imminent' };
+    }>;
     topics: Record<string, TopicResponse>;
     requests: Record<string, {
         fingerprint: string;
