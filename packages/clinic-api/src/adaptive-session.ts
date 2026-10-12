@@ -359,7 +359,7 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             n.adaptive!.exchange = selectAdaptiveDialogue(dialogueContext, outcome);
             // Interpreter path: never show the same question a third time in a short window (including A/B cycles).
             // Park that topic for now and continue with others; its gaps stay visible in review.
-            const recentPrompts = n.turns.filter(turn => turn.role === 'assistant').slice(-6).map(turn => turn.text);
+            const recentPrompts = n.turns.filter(turn => turn.role === 'assistant').slice(-12).map(turn => turn.text);
             const parked = new Set<string>();
             for (let guard = 0; interpreter && guard < 5; guard++) {
                 const cycling = n.adaptive!.exchange.prompt;

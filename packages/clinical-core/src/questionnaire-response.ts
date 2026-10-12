@@ -816,7 +816,13 @@ export async function buildNativeQuestionnaireCapture(input: {
       : {}),
   };
   parseNativeQuestionnaireCaptureShape(capture, input.validSourceIds, true, input.representationAuthority);
-  const projected = projectActive(capture, input.validSourceIds, input.representationAuthority);
+  // Routing reads answers before unreviewed ones move to history, so one pass can cite sources the next drops; settle first.
+  let projected = projectActive(capture, input.validSourceIds, input.representationAuthority);
+  for (let pass = 0; pass < 3; pass++) {
+    const next = projectActive(projected, input.validSourceIds, input.representationAuthority);
+    if (nativeCanonicalJson(next.topics) === nativeCanonicalJson(projected.topics)) break;
+    projected = next;
+  }
   await validateNativeQuestionnaireCapture(projected, input.validSourceIds, input.representationAuthority);
   return projected;
 }
