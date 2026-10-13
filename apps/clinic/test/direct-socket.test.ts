@@ -134,6 +134,13 @@ describe('DirectSpeechSocket', () => {
     expect(directCaptureMs).toBe(59000);
   });
 
+  it('the direct listen URL asks for nova-3-medical, an 800ms endpoint, and filler words so the endpoint grace can hear "um"', () => {
+    const params = new URL(deepgramDirectListenUrl).searchParams;
+    expect(params.get('model')).toBe('nova-3-medical');
+    expect(params.get('endpointing')).toBe('800');
+    expect(params.get('filler_words')).toBe('true');
+  });
+
   it('drops audio before ready and forwards a copy after ready', async () => {
     const { provider, connecting, socket, until } = harness();
     await connecting();

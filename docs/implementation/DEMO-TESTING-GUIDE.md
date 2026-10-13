@@ -27,14 +27,14 @@ Hands-free listens for your answers without the Dictate and Finish buttons. Push
 
 1. Under the question, click **Use voice**, tick the consent box, then click **Start voice conversation**.
 2. Answer in your own words. After a short pause, a clean answer is saved automatically as a draft answer and the next question follows. Nothing reaches your care team until you review the summary and confirm it.
-3. If you trail off or end with "um", "no wait", "I mean", "and" or a comma, the assistant waits longer before saving. That is intentional.
+3. The assistant waits about a second after you stop, and about 2.5 seconds if you end on "um", "no wait", "I mean", "and", a comma, or an amount such as "ten milligrams". That leaves room to correct yourself. Click **Done speaking** to skip the wait.
 4. Say **"stop"**, **"wait"**, **"pause"** or **"hold on"** to pause voice. Nothing is saved when you say it. Click **Resume voice conversation** to carry on, or click **Stop conversation** at any time.
 5. Speaking over a question that is being read aloud stops the reading.
 6. PHQ-4 mood items and other fixed-choice questions stay **buttons only**. Voice pauses and asks you to use the buttons.
 7. If hands-free can't connect, you'll see: "Hands-free voice could not connect. Nothing was lost: dictate one answer instead, or keep typing." Voice then switches to push-to-talk for the rest of the visit.
    - If the connection drops mid-answer, the words heard so far stay in the answer box. The last words may be missing, so check them.
 
-Hands-free needs a Deepgram key with the Member role. With the current key it falls back to push-to-talk straight away.
+Hands-free needs a Deepgram key with the Member role (installed locally 2026-10-13). With a lower-role key it falls back to push-to-talk straight away.
 
 ## Run through it (about 10 minutes)
 

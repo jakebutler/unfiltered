@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { AdaptiveTurnResult, PromptView, SourceTurn } from '../../../packages/clinic-contract/src/index';
 import { conversationSpeech } from '../../../packages/clinic-contract/src/index';
-import { VoiceConversation, endpointGraceMs, type ConversationVoiceContext } from '../src/voice-conversation';
+import { VoiceConversation, endpointGrace, endpointGraceMs, type ConversationVoiceContext } from '../src/voice-conversation';
 import { promptAllowsFreeText } from '../src/prompt-input';
 import { SourceInspector } from '../src/components';
 
@@ -36,32 +36,34 @@ describe('natural voice endpoint and lifecycle', () => {
     h.controller.start(); expect(h.ports.startCapture).toHaveBeenCalledTimes(1); expect(h.ports.speak).not.toHaveBeenCalled();
     h.ready(); expect(h.ports.speak).toHaveBeenCalledOnce(); h.ready(); expect(h.ports.speak).toHaveBeenCalledOnce();
   });
-  it('requires final speech plus the complete 600ms grace, then clean drain before one save', async () => {
-    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(599); expect(h.ports.finishCapture).not.toHaveBeenCalled();
+  it('requires final speech plus the complete endpoint grace, then clean drain before one save', async () => {
+    // Default final text "I take five milligrams" ends in a unit, so it gets the hold grace.
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(endpointGrace.hold - 1); expect(h.ports.finishCapture).not.toHaveBeenCalled();
     h.timer.advance(1); expect(h.ports.finishCapture).toHaveBeenCalledOnce(); expect(h.ports.save).not.toHaveBeenCalled();
     h.completed(); h.completed(); await tick(); expect(h.ports.save).toHaveBeenCalledTimes(1); expect(h.ports.save).toHaveBeenCalledWith('I take five milligrams', initial); expect(h.ports.interpret).toHaveBeenCalledOnce();
   });
   it('a duplicate final cannot reset or duplicate the grace timer', () => {
-    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(300); h.final(); h.timer.advance(300);
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(1000); h.final(); h.timer.advance(endpointGrace.hold - 1000);
     expect(h.ports.finishCapture).toHaveBeenCalledOnce(); h.final(); h.timer.advance(1000); expect(h.ports.finishCapture).toHaveBeenCalledOnce();
   });
   it('waits for speechFinal even if a segment was already final, without re-adding its words', () => {
     const h = harness(false); h.controller.start(); h.ready(); h.final('Five', false); h.timer.advance(1000); expect(h.ports.finishCapture).not.toHaveBeenCalled();
-    h.final('Five', true); h.timer.advance(600); expect(h.ports.finishCapture).toHaveBeenCalledOnce();
+    h.final('Five', true); h.timer.advance(endpointGrace.hold); expect(h.ports.finishCapture).toHaveBeenCalledOnce();
   });
   it.each(['voice', 'interim', 'changed-final'])('%s cancels the grace; a later endpoint can finish', type => {
     const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(400);
     if (type === 'voice') h.controller.event({ type: 'voice', scope: initial });
     else if (type === 'interim') h.controller.event({ type: 'recognition', scope: initial, segment: { start: 1, duration: .2, text: 'not', isFinal: false, speechFinal: false }, interim: 'not' });
     else h.final('Actually ten', false);
-    h.timer.advance(600); expect(h.ports.finishCapture).not.toHaveBeenCalled(); h.final('Actually ten, not five', true); h.timer.advance(600); expect(h.ports.finishCapture).toHaveBeenCalledOnce();
+    // The original deadline (hold after the first final) has passed; a cancelled grace must not fire.
+    h.timer.advance(endpointGrace.hold); expect(h.ports.finishCapture).not.toHaveBeenCalled(); h.final('Actually ten, not five', true); h.timer.advance(endpointGrace.hold); expect(h.ports.finishCapture).toHaveBeenCalledOnce();
   });
   it.each([['unclean', false, 'Five'], ['empty', true, '']])('%s completion pauses without saving provisional words', (_name, clean, text) => {
-    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(600); h.completed(clean as boolean, text as string);
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(endpointGrace.hold); h.completed(clean as boolean, text as string);
     expect(h.controller.state.status).toBe('paused'); expect(h.ports.save).not.toHaveBeenCalled();
   });
   it('stop during grace cancels submission and retains the draft through the capture stop port', () => {
-    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(500); h.controller.stop(); h.timer.advance(500); h.completed();
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(1000); h.controller.stop(); h.timer.advance(endpointGrace.hold); h.completed();
     expect(h.ports.finishCapture).not.toHaveBeenCalled(); expect(h.ports.save).not.toHaveBeenCalled(); expect(h.ports.stopCapture).toHaveBeenCalled();
   });
   it('capture interruption/limit pauses with no automatic replacement STT attempt', () => {
@@ -81,24 +83,24 @@ describe('natural voice endpoint and lifecycle', () => {
     expect(h.controller.state.status).toBe('paused'); expect(h.ports.stopPlayback).not.toHaveBeenCalled(); expect(h.ports.stopCapture).toHaveBeenLastCalledWith(expect.any(String), true); expect(h.ports.speak).toHaveBeenCalledOnce();
   });
   it('acceptance and interpretation must finish before another capture starts at the new revision', async () => {
-    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(600); h.completed(); await tick();
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(endpointGrace.hold); h.completed(); await tick();
     expect(h.ports.startCapture).toHaveBeenCalledTimes(1);
     h.setContext({ scope: { ...initial, promptId: 'Q02', expectedRevision: 7, requestId: 'answer-2' }, eligible: true, blocked: false }); h.controller.reconcile();
     expect(h.ports.startCapture).toHaveBeenCalledTimes(2); expect(h.controller.state.status).toBe('connecting');
   });
   it('stop during a submitted save prevents a late acknowledgement from dispatching interpretation', async () => {
     const h = harness(false); let resolve!: (value: AdaptiveTurnResult) => void; h.ports.save.mockImplementation(() => new Promise(done => { resolve = done; }));
-    h.controller.start(); h.ready(); h.final(); h.timer.advance(600); h.completed(); h.controller.stop(); resolve(result()); await tick();
+    h.controller.start(); h.ready(); h.final(); h.timer.advance(endpointGrace.hold); h.completed(); h.controller.stop(); resolve(result()); await tick();
     expect(h.ports.interpret).not.toHaveBeenCalled(); expect(h.ports.startCapture).toHaveBeenCalledTimes(1); expect(h.controller.state.active).toBe(false);
   });
   it('uncertain save or interpretation pauses without retrying, and the same submitted answer ID cannot recapture', async () => {
-    const h = harness(false); h.ports.save.mockResolvedValue(undefined as any); h.controller.start(); h.ready(); h.final(); h.timer.advance(600); h.completed(); await tick();
+    const h = harness(false); h.ports.save.mockResolvedValue(undefined as any); h.controller.start(); h.ready(); h.final(); h.timer.advance(endpointGrace.hold); h.completed(); await tick();
     h.controller.reconcile(); h.controller.start(); expect(h.ports.save).toHaveBeenCalledOnce(); expect(h.ports.interpret).not.toHaveBeenCalled(); expect(h.ports.startCapture).toHaveBeenCalledOnce(); expect(h.controller.state.status).toBe('paused');
-    const second = harness(false); second.ports.interpret.mockResolvedValue(undefined as any); second.controller.start(); second.ready(); second.final(); second.timer.advance(600); second.completed(); await tick(); second.controller.reconcile(); expect(second.ports.interpret).toHaveBeenCalledOnce(); expect(second.ports.startCapture).toHaveBeenCalledOnce();
+    const second = harness(false); second.ports.interpret.mockResolvedValue(undefined as any); second.controller.start(); second.ready(); second.final(); second.timer.advance(endpointGrace.hold); second.completed(); await tick(); second.controller.reconcile(); expect(second.ports.interpret).toHaveBeenCalledOnce(); expect(second.ports.startCapture).toHaveBeenCalledOnce();
   });
   it('stale scope events and a mismatched next revision cannot advance the conversation', async () => {
     const h = harness(false); h.controller.start(); h.ready(); h.setContext({ scope: { ...initial, expectedRevision: 5 }, eligible: true, blocked: false });
-    h.controller.event({ type: 'recognition', scope: initial, segment: { start: 0, duration: 1, text: 'stale', isFinal: true, speechFinal: true }, interim: '' }); h.timer.advance(600); expect(h.ports.finishCapture).not.toHaveBeenCalled(); h.controller.reconcile(); expect(h.controller.state.active).toBe(false);
+    h.controller.event({ type: 'recognition', scope: initial, segment: { start: 0, duration: 1, text: 'stale', isFinal: true, speechFinal: true }, interim: '' }); h.timer.advance(endpointGrace.hold); expect(h.ports.finishCapture).not.toHaveBeenCalled(); h.controller.reconcile(); expect(h.controller.state.active).toBe(false);
   });
   it.each(['PHQ choices', 'review', 'identity loss'])('%s stops automatic capture and requires explicit resumption', name => {
     const h = harness(); h.controller.start(); h.ready(); h.setContext({ eligible: false, blocked: false, pauseReason: name }); h.controller.reconcile();
@@ -107,33 +109,72 @@ describe('natural voice endpoint and lifecycle', () => {
 });
 
 describe('endpoint cues and spoken pause commands', () => {
+  const { base, hold } = endpointGrace;
   it.each([
-    ['I take metformin', 600], ['I take um', 1800], ['metformin 500 no wait', 1800], ['I mean', 1800], ['summer', 600],
-    ['sorry about that, it\'s 5 mg', 600], ['and,', 1800], ['the dose is…', 1800], ['let me think.', 1800], ['so the dose', 600],
+    // base: no cue, no amount, no continuation
+    ['I take metformin', base], ['summer', base], ['so the dose', base], ['twice a day', base], ['I take lisinopril', base], ['seventy', base],
+    // hold: filler or continuation cue, trailing comma or ellipsis
+    ['I take um', hold], ['metformin 500 no wait', hold], ['I mean', hold], ['and,', hold], ['the dose is…', hold], ['let me think.', hold],
+    // hold: amount or unit at the end
+    ['metformin 500', hold], ['ten milligrams.', hold], ['Five', hold], ['sorry about that, it\'s 5 mg', hold],
   ])('endpointGraceMs(%j) is %i', (text, ms) => { expect(endpointGraceMs(text)).toBe(ms); });
-  it('a final ending in a filler keeps the endpoint open for 1800ms, not 600ms', () => {
-    const h = harness(false); h.controller.start(); h.ready(); h.final('I take um'); h.timer.advance(600); expect(h.ports.finishCapture).not.toHaveBeenCalled();
-    h.timer.advance(1199); expect(h.ports.finishCapture).not.toHaveBeenCalled(); h.timer.advance(1); expect(h.ports.finishCapture).toHaveBeenCalledOnce();
+  it('a final ending in a filler keeps the endpoint open for the hold grace, not the base grace', () => {
+    const h = harness(false); h.controller.start(); h.ready(); h.final('I take um'); h.timer.advance(base); expect(h.ports.finishCapture).not.toHaveBeenCalled();
+    h.timer.advance(hold - base - 1); expect(h.ports.finishCapture).not.toHaveBeenCalled(); h.timer.advance(1); expect(h.ports.finishCapture).toHaveBeenCalledOnce();
   });
   it.each(['Stop.', 'wait please', 'Hold on, please.', 'pause', 'Wait a second'])('spoken pause command %j pauses without saving', async text => {
-    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(600); h.completed(true, text); await tick();
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(hold); h.completed(true, text); await tick();
     expect(h.controller.state.status).toBe('paused'); expect(h.controller.state.message).toBe("Voice paused. Resume when you’re ready, or keep typing.");
     expect(h.ports.stopCapture).toHaveBeenLastCalledWith("Voice paused. Resume when you’re ready, or keep typing.", false); expect(h.ports.save).not.toHaveBeenCalled();
   });
   it('a sentence that merely starts with stop is saved normally', async () => {
-    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(600); h.completed(true, 'stop taking aspirin last week'); await tick();
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(hold); h.completed(true, 'stop taking aspirin last week'); await tick();
     expect(h.ports.save).toHaveBeenCalledWith('stop taking aspirin last week', initial); expect(h.controller.state.status).toBe('thinking');
   });
   it('a spoken pause after typed words pauses, keeps the typed draft, and never saves the command', async () => {
-    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(600);
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(hold);
     h.completed(true, 'Earlier typed words. Pause.', { utterance: 'Pause.', prefix: 'Earlier typed words.' }); await tick();
     expect(h.controller.state.status).toBe('paused'); expect(h.controller.state.message).toBe("Voice paused. Resume when you’re ready, or keep typing.");
     expect(h.ports.restoreDraft).toHaveBeenCalledExactlyOnceWith('Earlier typed words.'); expect(h.ports.save).not.toHaveBeenCalled();
   });
   it('a sentence saved from a recording with an empty prefix is not treated as a command or restored', async () => {
-    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(600);
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(hold);
     h.completed(true, 'stop taking aspirin', { utterance: 'stop taking aspirin', prefix: '' }); await tick();
     expect(h.ports.save).toHaveBeenCalledWith('stop taking aspirin', initial); expect(h.ports.restoreDraft).not.toHaveBeenCalled();
+  });
+});
+
+describe('Done speaking', () => {
+  it('done() takes the turn at once without a timer, and a clean drain saves exactly once', async () => {
+    const h = harness(false); h.controller.start(); h.ready(); h.final();
+    h.controller.done();
+    expect(h.ports.finishCapture).toHaveBeenCalledOnce(); expect(h.controller.state.status).toBe('finishing'); expect(h.ports.stopPlayback).toHaveBeenCalled();
+    h.controller.done(); h.timer.advance(endpointGrace.hold * 2); expect(h.ports.finishCapture).toHaveBeenCalledOnce();
+    h.completed(); h.completed(); await tick();
+    expect(h.ports.save).toHaveBeenCalledTimes(1); expect(h.ports.save).toHaveBeenCalledWith('I take five milligrams', initial);
+  });
+  it('done() before any voice is heard is a no-op', () => {
+    const h = harness(false); h.controller.start(); h.ready(); h.controller.done();
+    expect(h.controller.state.status).toBe('listening'); expect(h.ports.finishCapture).not.toHaveBeenCalled(); expect(h.ports.stopPlayback).not.toHaveBeenCalled();
+  });
+  it('done() while thinking is a no-op', async () => {
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.controller.done(); h.completed(); await tick();
+    expect(h.controller.state.status).toBe('thinking');
+    h.ports.finishCapture.mockClear(); h.controller.done();
+    expect(h.controller.state.status).toBe('thinking'); expect(h.ports.finishCapture).not.toHaveBeenCalled(); expect(h.ports.save).toHaveBeenCalledOnce();
+  });
+});
+
+describe('restoreDraft port', () => {
+  it('is optional: a spoken pause without it still pauses and saves nothing', async () => {
+    const h = harness(false);
+    const { restoreDraft: _unused, ...ports } = h.ports;
+    const controller = new VoiceConversation(ports, h.timer);
+    controller.start(); controller.event({ type: 'ready', scope: initial });
+    controller.event({ type: 'recognition', scope: initial, segment: { start: 0, duration: 1, text: 'Earlier typed words. Pause.', isFinal: true, speechFinal: true }, interim: '' });
+    h.timer.advance(endpointGrace.hold);
+    controller.event({ type: 'completed', scope: initial, text: 'Earlier typed words. Pause.', clean: true, utterance: 'Pause.', prefix: 'Earlier typed words.' }); await tick();
+    expect(controller.state.status).toBe('paused'); expect(h.ports.save).not.toHaveBeenCalled();
   });
 });
 

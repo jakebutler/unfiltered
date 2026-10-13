@@ -24,6 +24,7 @@ export function VoiceControls({ available, explanation, conversation, conversati
       <Button variant="text" aria-expanded={open} aria-controls={`${id}-capture`} onClick={() => { if (open) { conversation.controller.stop('Voice paused. Continue typing in the same draft.'); capture.stop(); } else playback.stop(); setOpen(!open); }}><Mic size={17} aria-hidden="true" />{open ? 'Use typing' : 'Use voice'}</Button>
       <Button variant="text" onClick={onListen} disabled={listenDisabled(capture, disabled || conversation.active, questionTooLong || playing)}><Volume2 size={17} aria-hidden="true" />Listen to question</Button>
       {onListenReply && <Button variant="text" onClick={onListenReply} disabled={listenDisabled(capture, disabled || conversation.active, replyTooLong || playing)}><Volume2 size={17} aria-hidden="true" />Listen to reply</Button>}
+      {conversation.active && ['listening', 'speaking'].includes(conversation.status) && <Button variant="primary" onClick={() => conversation.controller.done()}><Square size={15} aria-hidden="true" />Done speaking</Button>}
       {conversation.active && <Button onClick={() => conversation.controller.stop()}><MicOff size={17} aria-hidden="true" />Stop conversation</Button>}
       {playing && <Button onClick={playback.stop}><Square size={15} aria-hidden="true" />Stop audio</Button>}
     </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createVoiceDraft, reduceVoiceDraft, type RecognitionSegment } from '../../../packages/speech/src/index';
-import { VoiceConversation, type ConversationVoiceContext } from '../src/voice-conversation';
+import { VoiceConversation, endpointGrace, type ConversationVoiceContext } from '../src/voice-conversation';
 
 const scope = { sessionId: 'synthetic-session', promptId: 'Q08:actualUse', expectedRevision: 4, requestId: 'one-answer' };
 
@@ -42,7 +42,7 @@ describe('independent natural voice event ordering', () => {
     h.recognition({ start: 0, duration: 1, text: 'I take five', isFinal: false, speechFinal: false });
     expect(h.draft().text).toBe('I take five milligrams.');
     expect(h.draft().interim).toBe('');
-    h.advance(1000);
+    h.advance(endpointGrace.hold);
     expect(h.ports.finishCapture).toHaveBeenCalledTimes(1);
     expect(h.ports.save).not.toHaveBeenCalled();
   });
@@ -54,7 +54,7 @@ describe('independent natural voice event ordering', () => {
     h.recognition({ start: 0, duration: 1, text: 'I take five milligrams,', isFinal: true, speechFinal: false });
     expect(h.draft().text).toBe('I take five milligrams, not fifty.');
     expect(h.draft().interim).toBe('');
-    h.advance(1000);
+    h.advance(endpointGrace.hold);
     expect(h.ports.finishCapture).toHaveBeenCalledTimes(1);
     expect(h.ports.save).not.toHaveBeenCalled();
   });
@@ -65,7 +65,7 @@ describe('independent natural voice event ordering', () => {
     h.advance(300);
     h.recognition({ start: 1, duration: 1, text: 'Actually not', isFinal: false, speechFinal: false });
     expect(h.draft().interim).toBe('Actually not');
-    h.advance(1000);
+    h.advance(endpointGrace.hold);
     expect(h.ports.finishCapture).not.toHaveBeenCalled();
     expect(h.ports.save).not.toHaveBeenCalled();
   });
@@ -73,7 +73,7 @@ describe('independent natural voice event ordering', () => {
   it('does not save a clean-looking late drain after explicit Stop', () => {
     const h = harness();
     h.recognition({ start: 0, duration: 1, text: 'Five milligrams.', isFinal: true, speechFinal: true });
-    h.advance(600);
+    h.advance(endpointGrace.hold);
     expect(h.ports.finishCapture).toHaveBeenCalledTimes(1);
     h.controller.stop('Use typing');
     h.controller.event({ type: 'completed', scope, text: h.draft().text, clean: true });

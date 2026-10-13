@@ -60,9 +60,15 @@ Progress (2026-10-12):
   - Fallback to push-to-talk on a server, network or socket failure. A refusal is not a fallback.
   - Read-aloud: browser voice by default. Optional ElevenLabs Flash via `POST /api/clinic/speech/output`, authored prompts only, same ledger.
   - Verified: suites green (foundation 1849, clinic 230, hosting 28). Live, the exact streaming URL transcribed a self-correction clip as one utterance. A live browser token refusal fell back to push-to-talk, and dictation filled the box.
-  - **Blocker:** the Deepgram token grant needs a Member-role key. The current key returns 403, so hosted hands-free falls back today. Owner to create a Member-role key for `DEEPGRAM_API_KEY`.
+  - The Deepgram token grant needs a Member-role key; the hosted `DEEPGRAM_API_KEY` must be that key.
   - **Known limit:** a token is checked only when the socket opens, so the server cannot cut a stream mid-utterance. The browser enforces the 59 s cap. The server bounds exposure by bounding the number of tokens.
-  - Not yet verified: a full browser hands-free intake against Deepgram (blocked on the key), and the hosted deploy (P5).
+  - Codex review of c6f04c4: three findings fixed with failing-first tests (token re-checked after admission and before release; a cancel during admission never reaches Deepgram; a spoken "pause" is removed from the draft).
+  - **Member-role key installed 2026-10-13. Live browser run against Deepgram (synthetic speech through a fake microphone):**
+    - 14 consecutive hands-free turns, one token each, no errors; the intake moved through 7 questions.
+    - Barge-in: speech during read-aloud stopped it within 0.5 s.
+    - "Stop." paused voice, saved nothing and left the answer box empty.
+    - The first run cut "ten milligrams, uh, [1.2 s] no wait, twenty milligrams" into two turns. Fixes, per the voice article review: Deepgram endpointing 800 ms with filler words kept; grace 1.0 s, or 2.5 s after a filler, correction cue or amount; a **Done speaking** button. Rerun: one turn, 3 of 3.
+  - Not yet verified: the hosted deploy (P5).
 - **P5: next.** Voice article review triage: `VOICE-ARTICLE-REVIEW-2026-10-12.md`.
 Constraints carried forward:
 - Reasoning runs on DigitalOcean inference only.

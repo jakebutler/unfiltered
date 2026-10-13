@@ -37,12 +37,16 @@ const sameScope = (a?: CaptureScope, b?: CaptureScope) => Boolean(a && b && a.se
 const endpointCues = new Set(['um', 'uh', 'er', 'erm', 'hmm', 'wait', 'no wait', 'hold on', 'i mean', 'actually', 'sorry', 'let me think', 'and', 'or', 'but', 'so', 'like']);
 const pauseCommands = new Set(['stop', 'stop listening', 'pause', 'wait', 'hold on', 'wait a moment', 'wait a second']);
 const spokenCommand = (text: string) => text.trim().toLowerCase().replace(/[\p{P}\s]+$/u, '').replace(/(^|\s)please$/, '').replace(/[\p{P}\s]+$/u, '');
-/** A filler or continuation cue at the end of the latest final segment means the speaker is likely still talking. */
+/** Silence after the provider's endpoint before a turn is taken. Conservative: a cut-off answer costs more than a wait, and Done skips it. */
+export const endpointGrace = Object.freeze({ base: 1000, hold: 2500 });
+/** Amounts and units: "ten milligrams" is often followed by a correction or the frequency. */
+const amountEnding = /(?:\d|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|hundred|thousand|half|mg|mcg|milligrams?|micrograms?|grams?|units?|ml|milliliters?|tablets?|pills?|capsules?|puffs?|drops?|pounds?|lbs?|kg|kilos?|kilograms?|feet|foot|inches|cm|centimeters?))$/;
+/** A filler, continuation cue or amount at the end of the latest final segment means the speaker may still be talking. */
 export function endpointGraceMs(text: string): number {
   const raw = text.trim();
-  if (/[,…]$|\.\.\.$/.test(raw)) return 1800;
-  const words = raw.toLowerCase().replace(/[\p{P}\s]+$/u, '').split(/\s+/);
-  return [1, 2, 3].some(n => endpointCues.has(words.slice(-n).join(' '))) ? 1800 : 600;
+  if (/[,…]$|\.\.\.$/.test(raw)) return endpointGrace.hold;
+  const tail = raw.toLowerCase().replace(/[\p{P}\s]+$/u, ''), words = tail.split(/\s+/);
+  return [1, 2, 3].some(n => endpointCues.has(words.slice(-n).join(' '))) || amountEnding.test(tail) ? endpointGrace.hold : endpointGrace.base;
 }
 
 /** Explicit opt-in coordinator. Speech final events alone never submit in dictation mode. */
@@ -76,6 +80,11 @@ export class VoiceConversation {
   private begin(context: ConversationVoiceContext) {
     this.clearTimers(); this.scope = context.scope; this.finals.clear(); this.latestFinalEnd = -1; this.latestFinalText = ''; this.endpointEnd = undefined; this.heardVoice = false; this.startingSpeech = false;
     this.set('connecting', 'Connecting the microphone…'); this.ports.startCapture();
+  }
+  /** "Done speaking": take the turn now instead of waiting out the endpoint grace. */
+  done() {
+    if (!['listening', 'speaking'].includes(this.state.status) || !this.heardVoice) return;
+    this.clearTimers(); this.set('finishing', 'Finishing your words · microphone off'); this.ports.stopPlayback(); this.ports.finishCapture();
   }
   stop(reason = 'Voice conversation paused. Your available words remain in the draft.', preservePlayback = false) {
     const candidate = this.choice?.candidate;
