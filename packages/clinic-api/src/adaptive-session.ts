@@ -332,11 +332,13 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         // The safety gate runs beside interpretation on every turn, so risk is decided before the next question is shown.
         const gate = store.safetyGate ? store.safetyGate(stored.draft, op.sourceId).catch(() => undefined) : undefined;
         if (options.groupedExtractor || options.streamProposer) {
-            // These paths save their own result; the gate verdict follows on its own save.
+            // These paths save their own result; the gate verdict follows on its own save. An early reply is
+            // published only once the gate has answered, and never after an escalation.
+            const onReplySaved = options.onReplySaved && gate ? (draft: Draft) => { void gate.then(gated => { if (!gated?.entry.escalated) options.onReplySaved!(draft); }); } : options.onReplySaved;
             const saved = options.groupedExtractor
-                ? (await runGroupedExtractionOperation(store, stored, context, options.groupedExtractor, { now, timeoutMs, onReplySaved: options.onReplySaved, recognitionContinuation: true,
+                ? (await runGroupedExtractionOperation(store, stored, context, options.groupedExtractor, { now, timeoutMs, onReplySaved, recognitionContinuation: true,
                     navigationContext: draft => ({ responses: content.effective(draft, true).responses, nativeRouting: content.nativeNavigation(draft), qualification: content.navigationQualification }) })).stored
-                : await runAdaptiveStreamOperation(store, stored, context, options.streamProposer!, { now, timeoutMs, onReplySaved: options.onReplySaved, fullCapture: options.fullCapture });
+                : await runAdaptiveStreamOperation(store, stored, context, options.streamProposer!, { now, timeoutMs, onReplySaved, fullCapture: options.fullCapture });
             const gated = gate ? await gate : undefined;
             if (!gated) return { draft: saved.draft, operation: operation(saved.draft, id) };
             await settleGate(store, gated);

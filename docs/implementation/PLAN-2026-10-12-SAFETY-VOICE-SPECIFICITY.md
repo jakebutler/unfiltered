@@ -39,6 +39,14 @@ Progress (2026-10-12):
     - The fail-closed banner staying visible is accurate (the message was flagged).
     - A queue-test timer is a test-only flake risk.
     - With no reviewer configured at all, the floor and screen are the documented fallback.
+- **Codex re-review of 7da5d98:** six findings, all fixed with tests that fail on 7da5d98:
+  - A current "pain was severe … still is now" pauses again.
+  - Structured guided field answers are gated.
+  - The stream path publishes its early reply only after the gate.
+  - A first-person statement isn't scoped as media.
+  - A follow-up reply that also states a new fact keeps it.
+  - Settling never brings back an earlier value's code.
+  - Known gap: the native final-review completeness override has no automated test. The test fixtures cannot bind a representation authority for a full first intake. It shares the same `specificityIncomplete` check as the guided path, which is tested.
 - **P4 and P5: next.** Voice article review triage: `VOICE-ARTICLE-REVIEW-2026-10-12.md`.
 Constraints carried forward:
 - Reasoning runs on DigitalOcean inference only.

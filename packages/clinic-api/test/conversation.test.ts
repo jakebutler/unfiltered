@@ -46,7 +46,7 @@ describe('guided patient evidence and immutable confirmation', () => {
         changed.turns.find(t => t.role === 'patient')!.text = 'Different source after preview';
         await expect(c.finalize(changed, confirmedAt)).rejects.toThrow('confirmation-digest-mismatch');
     });
-    it('an otherwise complete intake with one vague required answer stays partial in the view and the submission', async () => { let d = fresh(), count = 0, vague = 0; while (c.view(d).currentPrompt) {
+    it('guided path: an otherwise complete intake with one vague required answer stays partial in the view and the submission', async () => { let d = fresh(), count = 0, vague = 0; while (c.view(d).currentPrompt) {
         const p = c.view(d).currentPrompt!;
         expect(++count).toBeLessThan(150);
         const text = p.choices ? p.choices.find(x => x.value === '__negative')?.value ?? p.choices.find(x => x.value === '__done')?.value ?? p.choices.find(x => x.value === '__topic-not-applicable')?.value ?? p.choices[0].value

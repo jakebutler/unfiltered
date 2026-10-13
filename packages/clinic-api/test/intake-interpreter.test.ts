@@ -629,6 +629,14 @@ describe('intake-interpreter-v1 answer specificity', () => {
     expect(outcome.rejectedCandidates?.map(entry => entry.reason)).toEqual(['follow-up-reply-elsewhere']);
     expect(outcome.hasUnresolvedInterpretation).toBe(false);
   });
+  it.each([
+    ["I'll bring the bottle. I don't know my height.", { topic: 'Q04', field: 'height.value', state: 'unknown', value: null, quote: "I don't know my height" }],
+    ["I'll bring it. I get a rash from penicillin.", { topic: 'Q09', field: 'allergy', state: 'known', value: 'penicillin rash', quote: "I'll bring it. I get a rash from penicillin." }],
+  ])('a follow-up reply that also says something new keeps that content: %s', (text, fact) => {
+    const ctx = followUp(text);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [fact] }, { ...ctx, topics: [...ctx.topics, ...context('x', ['Q04', 'Q09']).topics] });
+    expect(outcome.updates.length > 0 || outcome.hasUnresolvedInterpretation).toBe(true);
+  });
   it('an unrelated reply to a spelling question is not settled by the question alone', () => {
     const ctx = followUp('No, and I get a rash from antibiotics.');
     ctx.displayed = { ...ctx.displayed!, specificity: { key: 'Q08:medicines[m1].name', spelling: { system: 'rxnorm', code: '6809', display: 'metformin' } } };

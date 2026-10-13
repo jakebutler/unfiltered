@@ -227,7 +227,9 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 // Guided free text gets the same synchronous safety gate before the next question is shown.
                 const source = next.turns.find(turn => turn.role === 'patient' && !d.turns.some(prior => prior.id === turn.id));
                 // A spoken reply that could not fill a choice is still the patient's own words, so it is reviewed too.
-                const freeText = input.action === 'answer' && !!input.text?.trim() && !input.text.startsWith('__') && !content.view(guidedDraft).currentPrompt?.choices?.some(choice => choice.value === input.text);
+                // Structured field answers are the patient's words too; bare numbers need no review.
+                const typed = input.text ?? Object.values(input.fields ?? {}).join(' ');
+                const freeText = input.action === 'answer' && /\p{L}/u.test(typed) && !typed.startsWith('__') && !content.view(guidedDraft).currentPrompt?.choices?.some(choice => choice.value === input.text);
                 const gated = source && freeText && !next.safety?.paused ? await safety.gate(p.r.client, next, source.id).catch(() => undefined) : undefined;
                 if (gated) applyGateOutcome(next, gated.entry, gated.signal);
                 return reply(view(await persist(p.r, p.stored, next)));

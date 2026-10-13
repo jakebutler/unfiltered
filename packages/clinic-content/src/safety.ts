@@ -17,7 +17,7 @@ export const safetyRules: ReadonlyArray<{ id: EscalationRule; pattern: RegExp }>
   {
     id: "E01",
     pattern:
-      /\b(?:can'?t breathe?|cannot breathe|struggling to breathe|(?:i'?m|i am|i think i'?m|i think i am) having a (?:heart attack|stroke)|medical emergency|(?:vomiting|throwing up|coughing up) blood|uncontrolled bleeding|(?:won'?t|will not) stop bleeding|(?:my )?chest (?:is|feels) (?:like it'?s being )?crush(?:ing|ed)|crushing (?:chest )?pain|severe (?:chest|abdominal|stomach|belly) pain|(?:chest|abdominal|stomach|belly) pain (?:is|feels) (?:so |really |very )?severe|(?:just|today|tonight) (?:fainted|passed out|collapsed)|(?:fainted|passed out|collapsed) (?:just now|today|tonight|this morning|a few minutes ago))/g,
+      /\b(?:can'?t breathe?|cannot breathe|struggling to breathe|(?:i'?m|i am|i think i'?m|i think i am) having a (?:heart attack|stroke)|medical emergency|(?:vomiting|throwing up|coughing up) blood|uncontrolled bleeding|(?:won'?t|will not) stop bleeding|(?:my )?chest (?:is|feels) (?:like it'?s being )?crush(?:ing|ed)|crushing (?:chest )?pain|severe (?:chest|abdominal|stomach|belly) pain|(?:chest|abdominal|stomach|belly) pain (?:is|feels) (?:so |really |very )?severe|(?:chest|abdominal|stomach|belly) pain was (?:so |really |very )?severe(?=[^.!?;\n]*\b(?:now|right now|still|today|tonight|this morning|currently|just)\b)|(?:just|today|tonight) (?:fainted|passed out|collapsed)|(?:fainted|passed out|collapsed) (?:just now|today|tonight|this morning|a few minutes ago))/g,
   },
   {
     id: "E04",
@@ -84,7 +84,8 @@ function scopeOf(value: string, start: number, end: number): SafetyScope {
   if (safetyScopeCues.historical.test(clause) && !safetyScopeCues.current.test(phrase)) return "historical";
   if (safetyScopeCues.hypothetical.test(clause)) return "hypothetical";
   if (clause.trimEnd().endsWith("?")) return "question";
-  if (safetyScopeCues.media.test(clause) && !safetyScopeCues.current.test(phrase)) return "media";
+  // "I wrote that story because I am suicidal": the patient's own present-tense statement is not about the media.
+  if (safetyScopeCues.media.test(clause) && !safetyScopeCues.current.test(phrase) && !/\b(?:i am|i'm|im|i feel|i've been|i have been|i keep|i still)\b/.test(near)) return "media";
   return "direct";
 }
 /** Line breaks are kept (one per whitespace run) so they still end a clause; matching sees them as spaces at the same positions. */

@@ -189,6 +189,13 @@ describe('safety gate through the clinic handler', () => {
     expect(reviewer.review).toHaveBeenCalledTimes(1);
     expect((await f.draft()).draft.safety).toMatchObject({ rule: 'E04', via: 'model-review', paused: true });
   });
+  it('a structured field answer is reviewed like typed text', async () => {
+    const reviewer = verdict({ level: 'imminent', categories: ['self-harm'] }), f = await fixture(reviewer);
+    const result = await f.call('/api/clinic/turns', { requestId: crypto.randomUUID(), expectedRevision: f.current().revision, promptId: f.current().currentPrompt!.id, action: 'answer', fields: { value: 'I gave my cat to my neighbour and wrote letters to everyone this week.' }, channel: 'text' });
+    expect(result.status).toBe(200);
+    expect(reviewer.review).toHaveBeenCalledTimes(1);
+    expect((await f.draft()).draft.safety).toMatchObject({ rule: 'E04', via: 'model-review', paused: true });
+  });
   it('an imminent verdict still pauses when the staff safety record cannot be saved', async () => {
     const f = await fixture(verdict({ level: 'imminent', categories: ['self-harm'] }), undefined, { failSafetyRecordWrites: true });
     const view = await f.answer('I gave my cat to my neighbour and wrote letters to everyone this week.');

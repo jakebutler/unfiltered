@@ -314,6 +314,8 @@ const correctionCue = /\b(?:actually|correction|correct that|i meant|i mean|sorr
 const inMessageCorrection = /(?:^|[\s,;:.!?-])(?:no,? wait|wait,? no|wait|i mean|i meant|sorry|correction|or rather|make (?:that|it)|scratch that|let me correct|no,? it'?s|no\s*,)[\s,:;.!-]*(?:(?:it'?s|it is|that'?s|more like)[\s,]*)?$/i;
 const correctionHead = /^\s*(?:no,? wait|wait,? no|i mean|i meant|sorry|correction|or rather|make (?:that|it)|scratch that|no,? it'?s|no\s*,)/i;
 const notButCorrection = /\bnot\b[^,.;!?]{1,30},? (?:but|it'?s)[\s,]*$/i;
+/** One sentence or clause: a reply that is only "I'll bring the bottle", not that plus a new fact. */
+const oneSentence = (text: string) => text.split(/[.!?;\n]+/).filter(part => /\p{L}/u.test(part)).length <= 1;
 const correctingActually = /(?:^|[^\p{L}])actually[\s,]*$/iu, actuallyJoined = /\b(?:and|also|plus)\b[^,.;]*\bactually[\s,]*$/i;
 const completionWords = /\b(?:that's all|that is all|that's it|that is it|that's everything|nothing else|no others?|only (?:those|these|that|this|one|two|three)|just (?:those|these|that|this|the one)|none other|all of them|no more|that's the lot)\b/i;
 /** An acknowledgement may only restate the patient's own words: every number and substantive word must appear in the message. */
@@ -495,7 +497,7 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     const quoteUncertain = uncertainty(quote) || (candidate.path === 'conditions.diabetes' && candidate.state !== 'negative' && conditionNames.prediabetes.test(quote) && !conditionNames.diabetes.test(quote.replace(/\bpre[- ]?diabet(?:es|ic)\b/gi, '')));
     // A short "I don't know" to a specificity follow-up answers that follow-up; filed under any other field it is misplaced.
     const followUp = context.displayed?.specificity && !(context.displayed.topicId === candidate.topicId && context.displayed.targetPaths.includes(candidate.path));
-    if (followUp && (candidate.state === 'unknown' || candidate.state === 'declined') && specificityReplySettles(false, sourceText)) return 'follow-up-reply-elsewhere';
+    if (followUp && (candidate.state === 'unknown' || candidate.state === 'declined') && oneSentence(sourceText) && specificityReplySettles(false, sourceText)) return 'follow-up-reply-elsewhere';
     if (candidate.state === 'unknown' && !unknownWords.test(quote)) return 'unknown-without-wording';
     if (candidate.state === 'declined' && !declinedWords.test(quote)) return 'declined-without-wording';
     if (candidate.state === 'negative') {
@@ -840,7 +842,7 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
   const followUpPaths = settlesFollowUp ? context.displayed!.targetPaths : [];
   // Patient words the server could not place (not model padding) keep the source visible for review.
   // Words that only settle the follow-up ("Yes", "I'll bring the bottle") are accounted for wherever the model filed them.
-  const settlingOnly = (entry: AdaptiveRejectedCandidate) => settlesFollowUp && !!entry.evidence?.length && entry.evidence.every(span => specificityReplySettles(!!followUp!.spelling, sourceText.slice(span.start, span.end)));
+  const settlingOnly = (entry: AdaptiveRejectedCandidate) => settlesFollowUp && !!entry.evidence?.length && entry.evidence.every(span => { const words = sourceText.slice(span.start, span.end); return oneSentence(words) && specificityReplySettles(!!followUp!.spelling, words); });
   const unplaced = rejected.some(entry => !(entry.topicId === context.displayed?.topicId && entry.path && followUpPaths.includes(entry.path)) && !settlingOnly(entry) && entry.evidence && (entry.state === 'known' && !['relative-subject', 'question-not-answer', 'label-vs-actual'].includes(entry.reason) || ['unknown-field', 'unknown-topic'].includes(entry.reason)));
   if (ack && ack.length <= 160 && !ackForbidden.test(ack) && ackGrounded(ack, sourceText) && outcome.updates.length && !outcome.clarifications.length && !unplaced) outcome.acknowledgement = ack;
 

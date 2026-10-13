@@ -93,6 +93,16 @@ describe('specificity state', () => {
     const spelling = { system: 'rxnorm', code: '6809', display: 'metformin' };
     expect(settleSpecificityReply({}, { key: 'k', spelling }, { sourceId: 's', text, updatedPath: false }).k?.confirmed).toBeUndefined();
   });
+  it('settling a follow-up about a changed answer never brings back the earlier confirmation', () => {
+    const at = (value: string, states = {}) => specificityFindings({ Q08: { presented: true, answers: answering('medicines.name', value).answers } }, states)[0]!;
+    const key = at('metfromin').key, spelling = { system: 'rxnorm', code: '6809', display: 'metformin' };
+    let states = settleSpecificityReply(countSpecificityAsk({}, { key, spelling }, 'metfromin'), { key, spelling }, { sourceId: 's', text: 'Yes', updatedPath: false, value: 'metfromin' });
+    states = countSpecificityAsk(states, { key });
+    states = settleSpecificityReply(states, { key }, { sourceId: 's2', text: "I don't know", updatedPath: false, value: 'tiny blue medicine' });
+    expect(states[key]).toMatchObject({ terminal: 'unknown', value: 'tiny blue medicine' });
+    expect(states[key]?.confirmed).toBeUndefined();
+    expect(specificityNote(at('tiny blue medicine', states))?.code).toBeUndefined();
+  });
   it('a changed answer drops the earlier confirmation and settlement but keeps the follow-up count', () => {
     const at = (value: string, states = {}) => specificityFindings({ Q08: { presented: true, answers: answering('medicines.name', value).answers } }, states)[0]!;
     const key = at('metfromin').key, spelling = { system: 'rxnorm', code: '6809', display: 'metformin' };

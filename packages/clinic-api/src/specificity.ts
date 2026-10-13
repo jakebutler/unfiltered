@@ -63,8 +63,13 @@ export function specificityProbes(findings: readonly SpecificityFinding[], state
 }
 
 /** Settles the reply to a specificity follow-up that recorded no new value for its field. */
+/** The saved state for a field, without anything settled or confirmed for an earlier value of it. */
+function stateFor(states: SpecificityStates, key: string, value?: string): SpecificityState {
+  const saved = states[key];
+  return saved?.value !== undefined && value !== undefined && saved.value !== value ? { asked: saved.asked } : { ...saved, asked: saved?.asked ?? 0 };
+}
 export function settleSpecificityReply(states: SpecificityStates, mark: SpecificityPromptMark, reply: { sourceId: string; text: string; updatedPath: boolean; value?: string }): SpecificityStates {
-  const next = { ...states }, state: SpecificityState = { ...next[mark.key], asked: next[mark.key]?.asked ?? 0 };
+  const next = { ...states }, state = stateFor(states, mark.key, reply.value);
   if (mark.spelling) {
     state.spellingAsked = true;
     if (!reply.updatedPath && specificityPlainYes.test(reply.text)) Object.assign(state, { confirmed: { ...mark.spelling, sourceId: reply.sourceId }, ...(reply.value !== undefined ? { value: reply.value } : {}) });
@@ -76,7 +81,7 @@ export function settleSpecificityReply(states: SpecificityStates, mark: Specific
   return next;
 }
 export function countSpecificityAsk(states: SpecificityStates, mark: SpecificityPromptMark, value?: string): SpecificityStates {
-  const state: SpecificityState = { ...states[mark.key], asked: states[mark.key]?.asked ?? 0 };
+  const state = stateFor(states, mark.key, value);
   return { ...states, [mark.key]: mark.spelling ? { ...state, spellingAsked: true, ...(value !== undefined ? { value } : {}) } : { ...state, asked: state.asked + 1 } };
 }
 
