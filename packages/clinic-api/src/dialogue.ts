@@ -270,7 +270,8 @@ function selectDialogue(context: AdaptiveContext, outcome?: AdaptiveOutcome, rej
     response.status = 'interpretation-review';
     return response;
   }
-  const nominated = nomination && probes.find(probe => probe.topicId === nomination.topicId && probe.promptId === nomination.promptId && nomination.targetPaths.every(path => probe.targetPaths.includes(path)));
+  // A nomination never picks an optional detail follow-up ahead of the topic's core questions.
+  const nominated = nomination && probes.find(probe => !(probe.specificity && probe.optional) && probe.topicId === nomination.topicId && probe.promptId === nomination.promptId && nomination.targetPaths.every(path => probe.targetPaths.includes(path)));
   const preferredTopic = explicitTopic ?? state.suspended?.topicId ?? state.activeTopicId ?? context.displayed?.topicId;
   const selected = (explicitTopic ? probes.find(probe => probe.topicId === explicitTopic) : undefined)
     ?? (question && state.suspended ? probes.find(probe => probe.topicId === state.suspended!.topicId) : undefined)

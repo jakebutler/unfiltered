@@ -27,7 +27,7 @@ describe("fixed authored native Questionnaire", () => {
     expect(d.binding.digest).toMatch(/^[a-f0-9]{64}$/);
     // Pinned; extraction-only slot hints must not change it. E-0.2 safety and SP-0.1 specificity with its reference
     // releases (D1 re-qualification, published with stage8).
-    expect(d.binding.digest).toBe("37ff8ee95cc10bf40834902e4a9f9aa0a6ad2d49f67f3c356f549fe85870fce8");
+    expect(d.binding.digest).toBe("45ece585454dbda2226bf0bfd5a8ae4d352c0617edc24a267b50925686e60a8f");
     const specificity = JSON.parse(d.questionnaire.extension!.find((e) => e.url.endsWith("specificity-contract"))!.valueString!);
     expect(specificity).toMatchObject({ version: "SP-0.1", budget: { perField: 2, perTopic: 4, perTurn: 1 }, reference: { medications: "rxnorm-prescribe-2026-10-05", conditions: "CT-0.3+icd10cm-FY2027" } });
     expect(d.questionnaire.url).toBe(d.binding.canonical);
@@ -571,9 +571,13 @@ describe("E-0.2 safety floor", () => {
       // Independent re-review (codex, 2026-10-13).
       "My chest pain was severe this morning and still is now.": "E01",
       "I wrote that story because I am suicidal.": "E04",
+      // Independent review (cubic, second pass).
+      "I was suicidal years ago and can't breathe": "E01",
+      "The patient has a medical emergency": undefined,
     };
     for (const [text, rule] of Object.entries(expected)) expect(current.escalation(text), text).toBe(rule);
     // A scoped hit is never silently dropped: it is reported for the model gate.
     expect(current.safetyFloorHits("I have never had suicidal thoughts")).toEqual([{ rule: "E04", scope: "negated", term: "suicidal" }]);
+    expect(current.safetyFloorHits("In the movie a character is suicidal.")).toEqual([{ rule: "E04", scope: "media", term: "suicidal" }]);
   });
 });

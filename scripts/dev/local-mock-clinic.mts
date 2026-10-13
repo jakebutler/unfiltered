@@ -1,12 +1,14 @@
 /**
  * Local browser testing without the shared Medplum project: the real clinic handler over an in-memory FHIR store,
  * with the real DigitalOcean interpreter and safety reviewer. Synthetic data only; everything is lost on exit.
- * No speech transcription. DigitalOcean calls are hard-capped (LOCAL_DO_CALL_CAP, default 80) because this path
- * bypasses the hosted budget ledger.
+ * No speech transcription, and no final send: "Confirm and send" fails here because delivery needs a qualified
+ * Medplum project. DigitalOcean calls are hard-capped (LOCAL_DO_CALL_CAP, default 80) because this path bypasses the
+ * hosted budget ledger.
  *
  *   npx tsx scripts/dev/local-mock-clinic.mts   then   npm run clinic:dev   and open http://127.0.0.1:5173
  *
- * Reads DIGITALOCEAN_MODEL_ACCESS_KEY from LOCAL_ENV_FILE (default: the main checkout's .env.local) without printing it.
+ * Reads DIGITALOCEAN_MODEL_ACCESS_KEY from LOCAL_ENV_FILE (default: .env.local in the current directory) without printing it.
+ * LOCAL_LOG_INTERPRETER=1 prints each turn's raw model output (synthetic data only).
  */
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -22,10 +24,13 @@ import { defaultInterpreterModel } from '../../apps/clinic-server/src/providers.
 import { nodeHttpHandler } from '../../apps/clinic-server/src/http.ts';
 import { mockFhir } from '../qualification/mock-fhir.ts';
 
-const envFile = process.env.LOCAL_ENV_FILE ?? '/Volumes/rexy/GitHub/unfiltered/.env.local';
-const apiKey = readFileSync(envFile, 'utf8').split('\n').map(line => /^\s*DIGITALOCEAN_MODEL_ACCESS_KEY\s*=\s*"?([^"\s]+)"?/.exec(line)?.[1]).find(Boolean);
-if (!apiKey) throw new Error('DIGITALOCEAN_MODEL_ACCESS_KEY missing');
+const envFile = process.env.LOCAL_ENV_FILE ?? `${process.cwd()}/.env.local`;
+let envText: string;
+try { envText = readFileSync(envFile, 'utf8'); } catch { throw new Error(`env file not found: ${envFile} (set LOCAL_ENV_FILE)`); }
+const apiKey = envText.split('\n').map(line => /^\s*DIGITALOCEAN_MODEL_ACCESS_KEY\s*=\s*"?([^"\s]+)"?/.exec(line)?.[1]).find(Boolean);
+if (!apiKey) throw new Error(`DIGITALOCEAN_MODEL_ACCESS_KEY missing from ${envFile}`);
 const cap = Number(process.env.LOCAL_DO_CALL_CAP ?? 80);
+if (!Number.isInteger(cap) || cap < 1) throw new Error('LOCAL_DO_CALL_CAP must be a positive integer');
 let calls = 0;
 const capped: typeof fetch = async (input, init) => {
   if (++calls > cap) throw new Error(`local DigitalOcean call cap (${cap}) reached`);
@@ -39,7 +44,6 @@ const config = { origin, cookieSecret: randomBytes(32).toString('hex'), mentalHe
 const client = new MedplumClient({ baseUrl: 'http://localhost:8103/fhir/R4/', accessToken: 'synthetic', mode: 'local', timeoutMs: 5000 }, mockFhir({ atomic: false }).fetcher);
 const model = { endpoint: DO_ENDPOINT, model: defaultInterpreterModel, apiKey } as const;
 const interpreter = createIntakeInterpreter({ ...model, maxOutputTokens: 1500, timeoutMs: 20000 }, capped);
-// LOCAL_LOG_INTERPRETER=1 prints each turn's raw model output and what was kept (synthetic data only).
 const logged: typeof interpreter = { interpret: async (context, signal) => {
   const result = await interpreter.interpret(context, signal), outcome = result.outcome;
   console.log(JSON.stringify({ text: context.source.text, displayed: context.displayed, raw: result.rawProposal, unresolved: outcome?.hasUnresolvedInterpretation,
@@ -48,7 +52,7 @@ const logged: typeof interpreter = { interpret: async (context, signal) => {
 } };
 const handler = createClinicHandler(config, {
   runtime: async () => ({ client, qualification: {} } as unknown as Runtime),
-  adaptiveInterpreter: process.env.LOCAL_LOG_INTERPRETER ? logged : interpreter,
+  adaptiveInterpreter: process.env.LOCAL_LOG_INTERPRETER === '1' ? logged : interpreter,
   safetyReviewer: createSafetyReviewer({ ...model, maxOutputTokens: 800, timeoutMs: 15000 }, capped),
   adaptiveTimeoutMs: 25000,
 });

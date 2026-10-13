@@ -576,6 +576,8 @@ describe("compiler and real structured engine parity", () => {
     ).toHaveLength(22);
   });
   it("produces completed only for actual applicable required minimums and preserves all seven workflow captures", async () => {
+    // Time, frequency and relation answers must be specific to count as complete (SP-0.1).
+    const specific: Record<string, string> = { onset: "Since March 2026", timing: "In 2019", measuredWhen: "In March 2026", period: "In 2020", when: "In 2018", actualUse: "Twice a day", relationship: "My mother", frequency: "Three times a week", frequencyAmount: "Two drinks a week" };
     const { nativeTopics, createClinicContent, nativeScenarioTopics } =
       await import("../../clinic-content/src/index.js");
     const { evaluateTopic } =
@@ -607,7 +609,7 @@ describe("compiler and real structured engine parity", () => {
                         ? true
                         : slot.kind === "choice"
                           ? slot.choices![0]
-                          : "reported detail",
+                          : specific[slot.id.split(".").at(-1)!] ?? "reported detail",
                   ),
           ]),
       );

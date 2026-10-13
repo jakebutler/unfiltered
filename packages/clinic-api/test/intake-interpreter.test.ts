@@ -576,6 +576,12 @@ describe('intake-interpreter-v1 answer specificity', () => {
     const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q06', field: 'conditions.heartDisease', state: 'known', value: true, quote: 'pills for my heart because I had a heart attack' }] }, ctx);
     expect(answers(outcome, 'Q06')['conditions.heartDisease']).toMatchObject({ state: 'known' });
   });
+  it('"I don\'t take heart meds" is not a "no" to heart disease, and "arthritis meds" is not a reported condition', () => {
+    const negative = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q06', field: 'conditions.heartDisease', state: 'negative', value: false, quote: "I don't take heart meds" }] }, context("I don't take heart meds.", ['Q06']));
+    expect(answers(negative, 'Q06')['conditions.heartDisease']).toBeUndefined();
+    const term = interpretIntakeResponse({ ...empty, items: [{ topic: 'Q06', list: 'reportedConditions', existing: null, fields: [{ field: 'term', state: 'known', value: 'arthritis', quote: 'arthritis meds' }] }] }, context('I take arthritis meds.', ['Q06']));
+    expect(itemsOf(term, 'Q06', 'reportedConditions')).toEqual([]);
+  });
   it('a condition named outright next to a medicine purpose is still recorded', () => {
     const ctx = context('I have heart disease, so I take pills for my heart.', ['Q06']);
     const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q06', field: 'conditions.heartDisease', state: 'known', value: true, quote: 'I have heart disease' }] }, ctx);

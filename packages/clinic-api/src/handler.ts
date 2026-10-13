@@ -231,7 +231,7 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 const typed = input.text ?? Object.values(input.fields ?? {}).join(' ');
                 const freeText = input.action === 'answer' && /\p{L}/u.test(typed) && !typed.startsWith('__') && !content.view(guidedDraft).currentPrompt?.choices?.some(choice => choice.value === input.text);
                 const gated = source && freeText && !next.safety?.paused ? await safety.gate(p.r.client, next, source.id).catch(() => undefined) : undefined;
-                if (gated) applyGateOutcome(next, gated.entry, gated.signal);
+                if (gated) applyGateOutcome(next, gated.entry, gated.signal, gated.unsaved);
                 return reply(view(await persist(p.r, p.stored, next)));
             }
             if (path === '/api/clinic/topics' && request.method === 'POST') {
@@ -252,7 +252,7 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 // Only an escalation touches the draft, so background reviews never make the patient's next turn stale.
                 const escalated = !!result.entry?.escalated && !p.stored.draft.safety?.paused && !p.stored.draft.confirmed;
                 // The escalated (paused) view is returned directly: a session GET would drop identity confirmation.
-                const paused = escalated ? await safety.settleDraft(p.r.client, p.claims.sessionId, p.claims.patient, result.entry!) : undefined;
+                const paused = escalated ? await safety.settleDraft(p.r.client, p.claims.sessionId, p.claims.patient, result.entry!, result.unsaved) : undefined;
                 return reply({ signalId: input.signalId, state: result.pending ? 'pending' : 'reviewed', escalated, ...(paused ? { session: view(paused) } : {}) });
             }
             if (path === '/api/clinic/review' && request.method === 'POST') {

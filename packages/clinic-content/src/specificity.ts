@@ -92,12 +92,16 @@ const vagueQuantity = /\b(?:some|a (?:bit|little|lot|few|couple)|lots|plenty|a b
 const measuredQuantity = /\d|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|half|quarter|a (?:cup|glass|mug|bowl|plate|slice|piece|handful|can|bottle|pint|serving|spoonful|tablespoon|teaspoon|sandwich|bar|bag|box|scoop)|cups?|glass(?:es)?|mugs?|bowls?|plates?|slices?|pieces?|handfuls?|cans?|bottles?|pints?|servings?|spoons?|ounces?|oz|grams?|g|ml|liters?|litres?|portion|small|medium|large|whole|double|single)\b/i;
 const vagueFrequency = /\b(?:sometimes|occasionally|now and (?:then|again)|here and there|on and off|off and on|every so often|(?:every )?once in a (?:while|blue moon)|every now and (?:then|again)|whenever i feel like it|from time to time|when(?:ever)? i (?:can|remember|feel like it|get (?:a )?chance)|not (?:very |that )?often|rarely|a lot|socially|regularly|irregularly|depends|it varies|varies|on occasion)\b/i;
 /** A number counts for frequency only with a unit of time ("2 times a day", "every 8 hours", "3 days a week", "at 9 pm"). */
-const definiteFrequency = /\b\d+\s*(?:x|times?)\b|\b\d+\s*(?:days?|nights?|mornings?|evenings?)\s*(?:a|per|each|every)\s*(?:week|month)\b|\bevery\s+\d+\s*(?:hours?|hrs?|days?|weeks?)\b|\b\d+\s*(?:am|pm)\b|\b\d{1,2}:\d{2}\b|\b(?:once|twice|three times|daily|every ?day|each day|every (?:morning|night|evening|other day|week|weekend|day)|nightly|weekly|monthly|weekdays|weekends|(?:in the |each |every )?(?:morning|evening|night)s?|at (?:night|bedtime|breakfast|lunch|dinner)|with (?:breakfast|lunch|dinner|meals?)|before bed|bedtime|as needed|when needed|prn|(?:one|two|three|four|five|six|seven) (?:days?|times|nights?)|never|none|most days|most nights|(?:a|an|per|each|every) (?:day|week|month)|(?:on |every )?(?:mondays?|tuesdays?|wednesdays?|thursdays?|fridays?|saturdays?|sundays?|weekends?|weeknights?))\b/i;
+const definiteFrequency = /\b\d+\s*(?:x|times?)\s*(?:a|an|per|each|every|\/)\s*(?:day|week|month|night|morning|evening|year|d|wk|hours?)\b|\b\d+\s*(?:days?|nights?|mornings?|evenings?)\s*(?:a|per|each|every)\s*(?:week|month)\b|\bevery\s+\d+\s*(?:hours?|hrs?|days?|weeks?)\b|\b\d+\s*(?:am|pm)\b|\b\d{1,2}:\d{2}\b|\b(?:once|twice|three times|daily|every ?day|each day|every (?:morning|night|evening|other day|week|weekend|day)|nightly|weekly|monthly|weekdays|weekends|(?:in the |each |every )?(?:morning|evening|night)s?|at (?:night|bedtime|breakfast|lunch|dinner)|with (?:breakfast|lunch|dinner|meals?)|before bed|bedtime|as needed|when needed|prn|(?:one|two|three|four|five|six|seven) (?:days?|times|nights?)|never|none|most days|most nights|(?:a|an|per|each|every) (?:day|week|month)|(?:on |every )?(?:mondays?|tuesdays?|wednesdays?|thursdays?|fridays?|saturdays?|sundays?|weekends?|weeknights?))\b/i;
 const vagueTime = /\b(?:lately|these days|nowadays|for (?:a while|some time|years|ages)|over the years|the other day|a while(?: ago| back)?|some time ago|a long time ago|long ago|ages ago|years ago|way back|back then|in the past|a few years(?: ago)?|a couple (?:of )?years(?: ago)?|at some point|once|before|previously|recently|not long ago|i forget when|sometime)\b/i;
 /** A number anchors a time only as a year, an age, a date or a span ago ("2019", "at 30", "3/2021", "2 years ago"). */
 const anchoredTime = /\b(?:19|20)\d{2}\b|\b(?:at|age|aged|when i was)\s+\d{1,3}\b|\b\d{1,2}\/\d{1,4}\b|\b\d+\s*(?:days?|weeks?|months?|years?)\s+ago\b|\b(?:last|this|next) (?:week|month|year|spring|summer|fall|autumn|winter|january|february|march|april|may|june|july|august|september|october|november|december)|\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\b|\b(?:yesterday|today|this morning|in (?:high school|college|my (?:teens|twenties|thirties|forties|fifties|sixties)))\b|\b(?:when i was|at age|aged|as a (?:kid|child|teen|teenager))\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty) (?:days?|weeks?|months?|years?) ago\b|\bsince (?:birth|childhood|the|my|i)\b/i;
+/** "No", "none", "doesn't apply": an answer that the field does not apply, which is not vague ("no idea" is). */
+const notApplicable = /^\W*(?:no(?! idea)\b|none|never|nothing|not applicable|n\/a|(?:it )?(?:doesn'?t|does not) apply)/i;
+/** Some reference to when or how often ("when my knee hurts", "with lunch"); "two pills" or "10 minutes" has none. */
+const frequencyReference = /\b(?:(?:when(?:ever)?|if|as|after|before|during|until|while|with)\s+\w+|per|each|every|daily|nightly|weekly|monthly|hourly|days?|weeks?|months?|nights?|mornings?|evenings?|afternoons?|meals?|bed|bedtime|weekends?|never|none|not at all|stopped|quit)\b/i;
 /** Some reference to time or an event; an answer with none ("lost 20 pounds") does not say when. */
-const timeReference = /\b(?:after|before|when|during|since|until|around|while|ago|then|last|first|days?|weeks?|months?|years?|spring|summer|winter|fall|autumn|christmas|thanksgiving|easter|holidays?|birthday|wedding|pregnan\w*|born|birth|retire\w*|graduat\w*|school|college|covid|pandemic|teens?|twenties|thirties|forties|fifties|kid|child|baby)\b/i;
+const timeReference = /\b(?:(?:after|before|when|during|since|until|around|while)\s+\w+|ago|last|first|days?|weeks?|months?|years?|spring|summer|winter|fall|autumn|christmas|thanksgiving|easter|holidays?|birthday|wedding|pregnan\w*|born|birth|retire\w*|graduat\w*|school|college|covid|pandemic|teens?|twenties|thirties|forties|fifties|kid|child|baby)\b/i;
 const specificRelation = /\b(?:mom|mum|mother|dad|father|parents?|sister|brother|siblings?|son|daughter|kids?|children|grand(?:ma|pa|mother|father|parents?|mom|dad)|aunt|uncle|cousin|niece|nephew|half[- ](?:brother|sister)|twin|maternal|paternal)\b/i;
 const vagueCategory = /\b(?:issues?|problems?|stuff|things?|trouble|not (?:feeling )?(?:great|good|well|right)|feeling (?:off|bad|lousy|crappy|unwell|rough|blah)|bad(?:ly)?|poor(?:ly)?|off|funny|weird|terrible|awful|rough|so-so|meh|something|whatever|junk|snacks?|food|drinks?|a drink|a meal|leftovers|takeout|take-out|don'?t (?:sleep|feel) (?:well|good|great))\b/i;
 /** Words of a general description that add no detail of their own. */
@@ -153,10 +157,10 @@ export function assessSpecificity(contract: Pick<SpecificityContract, "kind" | "
     case "frequency": {
       // Idioms such as "once in a while" contain a definite word; only what is left after them can be definite.
       const rest = text.replace(new RegExp(vagueFrequency.source, "gi"), " ");
-      return definiteFrequency.test(rest) ? { level: "specific", reason: "definite-frequency" } : vagueFrequency.test(text) || vagueQuantity.test(text) || /^\W*whenever\W*$/i.test(text) ? { level: "approximate", reason: "vague-frequency" } : { level: "specific", reason: "described" };
+      return definiteFrequency.test(rest) ? { level: "specific", reason: "definite-frequency" } : vagueFrequency.test(text) || vagueQuantity.test(text) || /^\W*whenever\W*$/i.test(text) ? { level: "approximate", reason: "vague-frequency" } : frequencyReference.test(text) ? { level: "specific", reason: "described" } : notApplicable.test(text) ? { level: "specific", reason: "not-applicable" } : { level: "approximate", reason: "no-frequency" };
     }
     case "time":
-      return anchoredTime.test(text) ? { level: "specific", reason: "anchored" } : vagueTime.test(text) ? { level: "unanchored", reason: "unanchored-time" } : timeReference.test(text) ? { level: "specific", reason: "described" } : /^\W*(?:no(?! idea)\b|none|never|nothing|not applicable|n\/a|(?:it )?(?:doesn'?t|does not) apply)/i.test(text) ? { level: "specific", reason: "not-applicable" } : { level: "unanchored", reason: "no-time-reference" };
+      return anchoredTime.test(text) ? { level: "specific", reason: "anchored" } : vagueTime.test(text) ? { level: "unanchored", reason: "unanchored-time" } : timeReference.test(text) ? { level: "specific", reason: "described" } : notApplicable.test(text) ? { level: "specific", reason: "not-applicable" } : { level: "unanchored", reason: "no-time-reference" };
     case "relation":
       return specificRelation.test(text) ? { level: "specific", reason: "relative-named" } : { level: "category", reason: "relative-unnamed" };
   }
@@ -177,12 +181,22 @@ export function specificityQuestion(contract: SpecificityContract, value: string
 }
 /** Only a plain yes confirms a suggested spelling; "yes, but I'm not sure" does not. */
 export const specificityPlainYes = /^\s*(?:yes|yeah|yep|yup|correct|right|exactly|uh[- ]?huh|mm[- ]?hmm)(?:[\s,.!]+(?:yes|that'?s (?:it|right|correct|the one)|that one|it is|correct|right))*[\s.!]*$/i;
-const plainNo = /^\s*(?:no|nope|nah|not quite|wrong|that'?s not it)(?:[\s,.!]+(?:no|not that|that'?s not it|it'?s not))*[\s.!]*$/i;
-/** Whether a reply only settles a follow-up (a plain yes or no to a spelling, or a short "I don't know"/"I'll bring it"),
- * so it is not an unplaced answer. Anything longer carries content the interpreter must place. */
+export const specificityPlainNo = /^\s*(?:no|nope|nah|not quite|wrong|that'?s not it)(?:[\s,.!]+(?:no|not that|that'?s not it|it'?s not))*[\s.!]*$/i;
+/** Words that may surround a settling reply without adding anything ("I'll bring the bottle to my visit"). */
+const settlingFiller = new Set("i i'm im i'd i'll it it's its that the my a an to at of for on in and but so or this those them one sorry ok okay um uh well really honestly exactly what was is called sure just will can next time later then visit appointment bottle bottles label labels box list name names medicine medication condition procedure program thing there here know say share talk tell discuss about".split(" "));
+/** The terminal kind a reply settles a follow-up with, if the whole reply is only that (a plain "no" is not knowing). */
+export function specificityTerminalOf(text: string): keyof typeof specificityTerminal | undefined {
+  if (specificityPlainNo.test(text)) return "unknown";
+  const kind = (Object.keys(specificityTerminal) as (keyof typeof specificityTerminal)[]).find((key) => specificityTerminal[key].test(text));
+  if (!kind) return undefined;
+  // "I don't know, maybe lisinopril" carries a name: everything left after the settling words must be filler.
+  const rest = Object.values(specificityTerminal).reduce((value, pattern) => value.replace(new RegExp(pattern.source, "gi"), " "), text.toLowerCase().replace(/[’‘]/g, "'"));
+  return words(rest).every((word) => settlingFiller.has(word)) ? kind : undefined;
+}
+/** Whether a reply only settles a follow-up (a plain yes or no to a spelling, or "I don't know"/"I'll bring it" and
+ * nothing else), so it is not an unplaced answer. Anything more carries content the interpreter must place. */
 export function specificityReplySettles(spelling: boolean, text: string): boolean {
-  if (spelling) return specificityPlainYes.test(text) || plainNo.test(text);
-  return (text.match(/\S+/g)?.length ?? 0) <= 12 && Object.values(specificityTerminal).some((pattern) => pattern.test(text));
+  return spelling ? specificityPlainYes.test(text) || specificityPlainNo.test(text) : !!specificityTerminalOf(text);
 }
 /** A reply that ends the follow-ups for that field without adding detail. */
 export const specificityTerminal = {

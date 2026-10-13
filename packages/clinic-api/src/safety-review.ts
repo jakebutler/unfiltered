@@ -144,11 +144,12 @@ export function failSafeRule(categories: readonly SafetyCategory[]): EscalationR
   return categories.includes('self-harm') ? 'E04' : categories.includes('medication-substance') ? 'E03' : categories.includes('medical-urgent') ? 'E01' : undefined;
 }
 /** Synchronous gate (safety-gate-v1): copy a terminal review into the draft being committed with the turn. */
-export function applyGateOutcome(n: Draft, entry: SafetyReviewEntry, created?: NonNullable<Draft['safetySignals']>[number]) {
+/** unsaved: the staff record write failed, so the signal stays open and is reviewed and recorded again (pause and banner still apply). */
+export function applyGateOutcome(n: Draft, entry: SafetyReviewEntry, created?: NonNullable<Draft['safetySignals']>[number], unsaved?: boolean) {
   if (created && !n.confirmed && !n.safetySignals?.some(candidate => candidate.id === created.id)) n.safetySignals = [...(n.safetySignals ?? []), created];
   const signal = n.safetySignals?.find(candidate => candidate.id === entry.signalId);
   if (!signal || n.confirmed) return;
-  signal.review = { status: entry.status, level: entry.level };
+  if (!unsaved) signal.review = { status: entry.status, level: entry.level };
   if (entry.escalated) { if (n.phase !== 'review') applyModelEscalation(n, entry.escalated, entry.sourceId); return; }
   const rule = entry.failure ? failSafeRule(signal.categories) : undefined;
   if (rule && !n.safety?.paused) n.safetyBanner = { rule, sourceId: entry.sourceId, at: at() };
@@ -156,7 +157,7 @@ export function applyGateOutcome(n: Draft, entry: SafetyReviewEntry, created?: N
 
 export function safetyReviews(options: { reviewer?: SafetyReviewer }) {
   /** Patient-triggered, idempotent: an existing result is returned without another model call. */
-  async function review(client: MedplumClient, draft: Draft, signalId: string, mode: 'background' | 'final' = 'background'): Promise<{ entry?: SafetyReviewEntry; pending?: 'busy' }> {
+  async function review(client: MedplumClient, draft: Draft, signalId: string, mode: 'background' | 'final' = 'background'): Promise<{ entry?: SafetyReviewEntry; pending?: 'busy'; unsaved?: true }> {
     const signal = draft.safetySignals?.find(candidate => candidate.id === signalId);
     if (!signal) throw new ApiFailure('safety-signal-not-found', 404);
     const scope = { sessionId: draft.id, patient: draft.patient, scenario: draft.scenario };
@@ -178,14 +179,14 @@ export function safetyReviews(options: { reviewer?: SafetyReviewer }) {
     }
     // The draft carries the pause and clinician review; a failed staff-record save must not lose the decided entry.
     const saved = await updateSafetyRecord(client, scope, record => { if (!record.reviews[signalId]) record.reviews[signalId] = entry; }).catch(() => undefined);
-    return { entry: saved?.reviews[signalId] ?? entry };
+    return { entry: saved?.reviews[signalId] ?? entry, ...(saved ? {} : { unsaved: true as const }) };
   }
   /** Copies terminal outcomes into the draft and applies an escalation pause; saved with stale-session retry. */
-  async function settleDraft(client: MedplumClient, sessionId: string, patient: string, entry: SafetyReviewEntry) {
+  async function settleDraft(client: MedplumClient, sessionId: string, patient: string, entry: SafetyReviewEntry, unsaved?: boolean) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const stored = await readDraft(client, sessionId, patient), n = structuredClone(stored.draft), signal = n.safetySignals?.find(candidate => candidate.id === entry.signalId);
       if (!signal || stored.draft.phase === 'confirmed') return stored.draft;
-      applyGateOutcome(n, entry);
+      applyGateOutcome(n, entry, undefined, unsaved);
       if (canonicalJson(n) === canonicalJson(stored.draft)) return stored.draft;
       try { n.revision = stored.draft.revision + 1; n.savedAt = at(); return (await saveDraft(client, stored, n)).draft; }
       catch (error) { if (!(error instanceof ApiFailure) || error.code !== 'stale-session') throw error; }
@@ -196,7 +197,10 @@ export function safetyReviews(options: { reviewer?: SafetyReviewer }) {
   async function sweep(client: MedplumClient, draft: Draft): Promise<Draft> {
     const n = structuredClone(draft), open = (n.safetySignals ?? []).filter(signal => !signal.review);
     // Parallel and bounded by the reviewer's own timeout; a busy provider fails closed rather than delaying review.
-    const entries = await Promise.all(open.map(signal => review(client, draft, signal.id, 'final').then(result => result.entry!)));
+    const results = await Promise.all(open.map(signal => review(client, draft, signal.id, 'final')));
+    // Review never proceeds past a concern clinicians cannot see: without the staff record, the patient retries.
+    if (results.some(result => result.unsaved)) throw new ApiFailure('safety-record-unsaved', 503, true);
+    const entries = results.map(result => result.entry!);
     open.forEach((signal, index) => {
       signal.review = { status: entries[index].status, level: entries[index].level };
       if (entries[index].escalated) applyModelEscalation(n, entries[index].escalated!, entries[index].sourceId);
@@ -206,17 +210,17 @@ export function safetyReviews(options: { reviewer?: SafetyReviewer }) {
   /** The model gate for one free-text turn. A flagged turn reviews its signal (always terminal, failing closed).
    * An unflagged turn gets a direct check that records only a concern. When a configured reviewer fails, the turn
    * goes to clinician review; with no reviewer configured at all, the screen is the documented fallback. Never throws. */
-  async function gate(client: MedplumClient, draft: Draft, sourceId: string): Promise<{ signal?: SafetySignal; entry: SafetyReviewEntry } | undefined> {
+  async function gate(client: MedplumClient, draft: Draft, sourceId: string): Promise<{ signal?: SafetySignal; entry: SafetyReviewEntry; unsaved?: true } | undefined> {
     const scope = { sessionId: draft.id, patient: draft.patient, scenario: draft.scenario };
     const flagged = draft.safetySignals?.find(signal => signal.sourceId === sourceId && !signal.review);
     const failed = async (code: string) => {
-      if (flagged) return { entry: failClosed(flagged, code) };
-      const signal: SafetySignal = { id: crypto.randomUUID(), sourceId, categories: [], terms: [], at: at(), version: safetyGateSignalVersion }, entry = failClosed(signal, code);
-      await updateSafetyRecord(client, scope, record => { if (!record.reviews[signal.id]) record.reviews[signal.id] = entry; }).catch(() => undefined);
-      return { signal, entry };
+      const signal: SafetySignal = flagged ?? { id: crypto.randomUUID(), sourceId, categories: [], terms: [], at: at(), version: safetyGateSignalVersion }, entry = failClosed(signal, code);
+      // Fail-closed entries reach the clinician queue like any other review.
+      const saved = await updateSafetyRecord(client, scope, record => { if (!record.reviews[signal.id]) record.reviews[signal.id] = entry; }).catch(() => undefined);
+      return { ...(flagged ? {} : { signal }), entry: saved?.reviews[signal.id] ?? entry, ...(saved ? {} : { unsaved: true as const }) };
     };
     try {
-      if (flagged) return { entry: (await review(client, draft, flagged.id, 'final')).entry! };
+      if (flagged) { const result = await review(client, draft, flagged.id, 'final'); return { entry: result.entry!, ...(result.unsaved ? { unsaved: true as const } : {}) }; }
       const text = draft.turns.find(turn => turn.id === sourceId && turn.role === 'patient')?.text;
       if (!options.reviewer || !text?.trim()) return;
       const signalId = crypto.randomUUID();
@@ -230,7 +234,7 @@ export function safetyReviews(options: { reviewer?: SafetyReviewer }) {
       const entry: SafetyReviewEntry = { signalId, sourceId, screened: [], status, level: result.level, concern: result.concern, categories: result.categories, rationale: result.rationale, reviewer: `${safetyReviewProtocol}:${result.model}`.slice(0, 120), reviewedAt: at(), ...(escalated ? { escalated } : {}) };
       // The draft carries the pause; a failed staff-record save must not lose an imminent verdict.
       const saved = await updateSafetyRecord(client, scope, record => { if (!record.reviews[signalId]) record.reviews[signalId] = entry; }).catch(() => undefined);
-      return { signal, entry: saved?.reviews[signalId] ?? entry };
+      return { signal, entry: saved?.reviews[signalId] ?? entry, ...(saved ? {} : { unsaved: true as const }) };
     } catch { return await failed('review-unavailable'); }
   }
   return { review, settleDraft, sweep, gate };

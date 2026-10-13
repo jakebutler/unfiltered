@@ -13,7 +13,7 @@ Both. Typing always works. Voice is push-to-talk:
 
 Voice notes:
 - Recordings stop automatically just before one minute. Transcription uses Deepgram (medical model); the raw recording is not stored.
-- Your words are never lost by accident. If you press Stop, switch tabs, lose the microphone or the question changes, what you said so far is transcribed into the box (unsent).
+- Your words are never lost by accident. If you press Stop, switch tabs, lose the microphone or the question changes, what you said so far is transcribed into the box (unsent). Leaving or reloading the page is the exception: an unfinished recording is dropped then.
 - If transcription fails because of a network or server error, it retries once automatically. If it still fails, the recording is kept with **Try transcribing again** and **Discard recording**.
   - While a recording is kept, **Send answer** stays off, so it can't be dropped by accident.
   - Anything you type meanwhile stays; the retried words are added after it.
@@ -113,7 +113,7 @@ Safety is checked on every typed or dictated answer, before the next question ap
 |---|---|---|
 | Hard-stop floor (E-0.2) | Explicit, current, first-person emergencies ("I'm going to kill myself", "I can't breathe") pause at once with 988/911/Poison Help guidance, even if every model is down. A negated, past, someone else's, hypothetical or question mention ("I have never had suicidal thoughts", "my brother overdosed last year") is never paused by the floor. It is passed to the model gate instead. | none |
 | Model gate | One short DigitalOcean check per answer, run alongside interpretation, so there is no extra wait. Imminent or high risk pauses with the same authored guidance. Moderate or low continues and goes to a clinician. Clear "no risk" is cleared. It reads indirect wording ("everyone would be better off without me") and ignores figures of speech ("this diet is killing me"). | about 1 s, in parallel |
-| Fallback | If the model check fails on an urgent-sounding answer, the help guidance is shown as a non-blocking banner and the message goes to clinician review. Nothing fails silently to "clear". | none |
+| Fallback | If the model check fails, the message goes to clinician review. Nothing fails silently to "clear". The help guidance banner appears only when the quick screen flagged an urgent category; an unflagged message whose check fails goes to review without a banner. | none |
 | Clinician | Physicians (and NP/PA) see a **Safety review** list in the staff app with the message, the question shown, and the model's level and reason. They record **No concern**, **Contacted patient** or **Escalated** with a note. Dietitian and admin accounts cannot see it. | human |
 
 The gate is measured against a 300-message synthetic test set (paraphrase, slang, speech-to-text errors, negation, history, family, hypotheticals, figures of speech, mixed answers). New problem reports become test messages first; then the fix.

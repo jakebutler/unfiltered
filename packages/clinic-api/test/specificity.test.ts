@@ -80,6 +80,21 @@ describe('specificity state', () => {
     const key = findings()[0]!.key;
     expect(settleSpecificityReply({}, { key }, { sourceId: 's2', text, updatedPath: false })[key]).toMatchObject({ terminal, terminalSourceId: 's2' });
   });
+  it.each([["I don't know, maybe lisinopril", undefined], ['No.', 'unknown'], ['Nope', 'unknown']])('"%s" settles a name follow-up as %s', (text, terminal) => {
+    const key = findings()[0]!.key;
+    expect(settleSpecificityReply({}, { key }, { sourceId: 's2', text, updatedPath: false })[key]?.terminal).toBe(terminal);
+  });
+  it('a spelling near an ambiguous name never throws', () => {
+    expect(() => lookupReference('medication', 'limonena', ['limonena'])).not.toThrow();
+  });
+  it('the per-topic budget holds across fields', () => {
+    const answers = answering('medicines.name', 'pills for my heart').answers as Record<string, { items: { answers: Record<string, unknown> }[] }>;
+    answers.medicines!.items[0]!.answers.actualUse = known('sometimes');
+    const ctx = withPrior(context('Next', ['Q08']), 'Q08', answers as TopicResponse['answers']);
+    const keys = specificityFindings({ Q08: { presented: true, answers: answers as TopicResponse['answers'] } }).map(finding => finding.key);
+    ctx.specificity = { [keys[0]!]: { asked: 2 }, [keys[1]!]: { asked: 1, spellingAsked: true } };
+    expect(eligibleAdaptiveProbes(ctx).some(probe => probe.specificity)).toBe(false);
+  });
   it('a reply that added detail is not a terminal, even with "not sure" in it', () => {
     const key = findings()[0]!.key;
     expect(settleSpecificityReply({}, { key }, { sourceId: 's2', text: "Not sure, maybe lisinopril", updatedPath: true })[key]?.terminal).toBeUndefined();
@@ -109,7 +124,8 @@ describe('specificity state', () => {
     const states = settleSpecificityReply(countSpecificityAsk({}, { key, spelling }, 'metfromin'), { key, spelling }, { sourceId: 's', text: 'Yes', updatedPath: false, value: 'metfromin' });
     expect(specificityNote(at('metfromin', states))?.code).toMatchObject({ code: '6809', basis: 'patient-confirmed' });
     const edited = at('my tiny blue medicine', states);
-    expect(edited.state).toEqual({ asked: 0 });
+    // The spelling question already asked still counts toward the budgets.
+    expect(edited.state).toEqual({ asked: 1 });
     expect(specificityNote(edited)).toEqual({ needsDetail: 'Name of the medicine' });
     const settled = settleSpecificityReply({ [key]: { asked: 1 } }, { key }, { sourceId: 's2', text: "I don't know", updatedPath: false, value: 'pills for my heart' });
     expect(at('pills for my heart', settled).state?.terminal).toBe('unknown');

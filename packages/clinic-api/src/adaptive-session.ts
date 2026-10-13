@@ -88,7 +88,7 @@ export interface AdaptiveDraftStore {
     read(): Promise<StoredDraft>;
     save(previous: StoredDraft, next: Draft): Promise<StoredDraft>;
     /** Model safety gate for one free-text turn, run beside interpretation. Undefined: nothing to record. */
-    safetyGate?(draft: Draft, sourceId: string): Promise<{ signal?: NonNullable<Draft['safetySignals']>[number]; entry: SafetyReviewEntry } | undefined>;
+    safetyGate?(draft: Draft, sourceId: string): Promise<{ signal?: NonNullable<Draft['safetySignals']>[number]; entry: SafetyReviewEntry; unsaved?: true } | undefined>;
 }
 const pending = (op: AdaptiveOperation) => op.status === 'accepted' || op.status === 'processing';
 export function requireNoPendingInterpretation(d: Draft, allowDirectCorrection = false) {
@@ -258,14 +258,16 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         return { draft: saved.draft, operation: operation(saved.draft, id) };
     }
     /** Applies a safety-gate verdict on its own save (bounded stale-session retry), outside any interpretation result. */
-    async function settleGate(store: AdaptiveDraftStore, gated: { signal?: NonNullable<Draft['safetySignals']>[number]; entry: SafetyReviewEntry }) {
-        for (let attempt = 0; attempt < 3; attempt++) {
+    async function settleGate(store: AdaptiveDraftStore, gated: { signal?: NonNullable<Draft['safetySignals']>[number]; entry: SafetyReviewEntry; unsaved?: true }) {
+        for (let attempt = 0; attempt < 6; attempt++) {
             const stored = await store.read(), n = structuredClone(stored.draft);
-            applyGateOutcome(n, gated.entry, gated.signal);
+            applyGateOutcome(n, gated.entry, gated.signal, gated.unsaved);
             if (canonicalJson(n) === canonicalJson(stored.draft)) return;
             try { await commit(store, stored, n); return; }
             catch (error) { if (!(error instanceof ApiFailure) || error.code !== 'stale-session') throw error; }
         }
+        // Never continue as if the verdict were applied: the caller surfaces this and the patient retries.
+        throw new ApiFailure('safety-verdict-unsaved', 503, true);
     }
     async function reconcile(store: AdaptiveDraftStore, id: string) {
         const stored = await store.read(), op = operation(stored.draft, id);
@@ -332,18 +334,16 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         // The safety gate runs beside interpretation on every turn, so risk is decided before the next question is shown.
         const gate = store.safetyGate ? store.safetyGate(stored.draft, op.sourceId).catch(() => undefined) : undefined;
         if (options.groupedExtractor || options.streamProposer) {
-            // These paths save their own result; the gate verdict follows on its own save. An early reply is
-            // published only once the gate has answered, and never after an escalation.
-            const onReplySaved = options.onReplySaved && gate ? (draft: Draft) => { void gate.then(gated => { if (!gated?.entry.escalated) options.onReplySaved!(draft); }); } : options.onReplySaved;
+            // These paths save (and may publish) their next question themselves, so the gate decides first.
+            const gated = gate ? await gate : undefined;
+            if (gated) await settleGate(store, gated);
+            if (gated?.entry.escalated) { const paused = await store.read(); return { draft: paused.draft, operation: operation(paused.draft, id) }; }
+            const onReplySaved = options.onReplySaved;
             const saved = options.groupedExtractor
                 ? (await runGroupedExtractionOperation(store, stored, context, options.groupedExtractor, { now, timeoutMs, onReplySaved, recognitionContinuation: true,
                     navigationContext: draft => ({ responses: content.effective(draft, true).responses, nativeRouting: content.nativeNavigation(draft), qualification: content.navigationQualification }) })).stored
                 : await runAdaptiveStreamOperation(store, stored, context, options.streamProposer!, { now, timeoutMs, onReplySaved, fullCapture: options.fullCapture });
-            const gated = gate ? await gate : undefined;
-            if (!gated) return { draft: saved.draft, operation: operation(saved.draft, id) };
-            await settleGate(store, gated);
-            const fresh = await store.read();
-            return { draft: fresh.draft, operation: operation(fresh.draft, id) };
+            return { draft: saved.draft, operation: operation(saved.draft, id) };
         }
         let receipt: AdaptiveProposalReceipt | undefined, outcome: AdaptiveOutcome | undefined, rawProposalAudit: AdaptiveRawProposalAudit | undefined;
         let status: AdaptiveOperation['status'] = 'applied', errorCode: string | undefined;
@@ -423,7 +423,7 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
                 n.adaptive!.exchange.reply = { id: `ack-${outcome.sourceId}`, text: outcome.acknowledgement };
             delete n.activeTopic; delete n.activeSlot; delete n.preview;
         }
-        if (gated) applyGateOutcome(n, gated.entry, gated.signal);
+        if (gated) applyGateOutcome(n, gated.entry, gated.signal, gated.unsaved);
         try {
             const saved = await commit(store, fresh, n);
             return { draft: saved.draft, operation: operation(saved.draft, id) };
@@ -432,9 +432,16 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             // readback: accept the exact result, or retain processing/terminal status; never re-infer.
             try {
                 const saved = await store.read(), recovered = operation(saved.draft, id);
-                if (recovered.status !== 'processing') return { draft: saved.draft, operation: recovered };
+                // A stop or discard that won the race keeps its status, but never drops the safety verdict.
+                if (recovered.status !== 'processing') {
+                    if (!gated) return { draft: saved.draft, operation: recovered };
+                    await settleGate(store, gated);
+                    const settled = await store.read();
+                    return { draft: settled.draft, operation: operation(settled.draft, id) };
+                }
                 if (recovered.attemptId === attemptId && recovered.sourceId === op.sourceId && recovered.fingerprint === op.fingerprint && canonicalJson(recovered.binding) === canonicalJson(op.binding) && saved.draft.revision === fresh.draft.revision) {
                     const unresolved = structuredClone(saved.draft);
+                    if (gated) applyGateOutcome(unresolved, gated.entry, gated.signal, gated.unsaved);
                     Object.assign(operation(unresolved, id), { status: 'unresolved', errorCode: 'result-save-outcome-unknown', updatedAt: at(), ...(receipt ? { receipt } : {}), ...(rawProposalAudit ? { rawProposalAudit: fitAdaptiveRawAudit(unresolved, id, rawProposalAudit) } : {}), ...(result.resultDigest ? { resultDigest: result.resultDigest } : {}) });
                     const recoveredSave = await commit(store, saved, unresolved);
                     return { draft: recoveredSave.draft, operation: operation(recoveredSave.draft, id) };

@@ -1,5 +1,5 @@
 {
- "version": "SPC-0.3",
+ "version": "SPC-0.4",
  "note": "Synthetic patient answers, one per row, labelled by whether the answer alone is specific enough for the field (gap = needs a follow-up). Authored for the SP-0.1 gate; not patient data. Rows H-* and H2-* were holdouts labelled before first run: H-* scored 31/40 before the lexicon fixes it prompted; H2-* scored 45/47 on first run (2026-10-12). Rows R-* are independent-review reports (codex and cubic, 2026-10-13), added with the fixes they prompted; all scored as labelled after those fixes.",
  "items": [
   {
@@ -2520,6 +2520,55 @@
    "topicId": "Q08",
    "path": "medicines.name",
    "value": "lisinopril from Walgreens",
+   "expect": "specific"
+  },
+  {
+   "id": "R-Q14-frequency-1",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "two pills",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q14-frequency-2",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "10 minutes",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q14-frequency-3",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "2x",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q14-frequency-4",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "2x a day",
+   "expect": "specific"
+  },
+  {
+   "id": "R-Q07-events.when-3",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "after",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q02-onset-0",
+   "topicId": "Q02",
+   "path": "onset",
+   "value": "No current difficulty",
+   "expect": "specific"
+  },
+  {
+   "id": "R-Q10-familyHistory.relationship-0",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "my mother",
    "expect": "specific"
   }
  ]

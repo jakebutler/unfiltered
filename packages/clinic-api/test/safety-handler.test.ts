@@ -45,6 +45,13 @@ async function fixture(reviewer?: SafetyReviewer, interpreter?: IntakeInterprete
 const verdict = (result: object): SafetyReviewer => ({ review: vi.fn(async () => ({ concern: true, level: 'moderate', categories: ['mental-distress'], rationale: 'Low mood.', model: 'qwen3.8-max', ...result })) }) as never;
 const interpreter = (): IntakeInterpreter => ({ interpret: vi.fn(async context => ({ outcome: interpretIntakeResponse(emptyProposal, context) })) });
 
+describe('tier-1 screen wording (cubic, second pass)', () => {
+  it('"full sentences" counts only with a difficulty cue', () => {
+    expect(safetySignalSeed('I can speak in full sentences again.')?.categories ?? []).not.toContain('medical-urgent');
+    expect(safetySignalSeed('I can barely speak in full sentences.')?.categories).toContain('medical-urgent');
+  });
+});
+
 describe('safety gate through the clinic handler', () => {
   it('reviews flagged free text on the same turn and routes the handoff to a clinician', async () => {
     const reviewer = verdict({}), f = await fixture(reviewer);
@@ -188,6 +195,14 @@ describe('safety gate through the clinic handler', () => {
     expect(result.status).toBe(200);
     expect(reviewer.review).toHaveBeenCalledTimes(1);
     expect((await f.draft()).draft.safety).toMatchObject({ rule: 'E04', via: 'model-review', paused: true });
+  });
+  it('a concern whose staff record cannot be saved stays open, and review waits for the record', async () => {
+    const f = await fixture(verdict({}), undefined, { failSafetyRecordWrites: true });
+    await f.answer('I gave my cat to my neighbour and wrote letters to everyone this week.');
+    expect((await f.draft()).draft.safetySignals).toEqual([expect.not.objectContaining({ review: expect.anything() })]);
+    const review = await f.call<{ error?: { code: string } }>('/api/clinic/review', { expectedRevision: f.current().revision });
+    expect(review.status).toBe(503);
+    expect(review.body.error?.code).toBe('safety-record-unsaved');
   });
   it('a structured field answer is reviewed like typed text', async () => {
     const reviewer = verdict({ level: 'imminent', categories: ['self-harm'] }), f = await fixture(reviewer);

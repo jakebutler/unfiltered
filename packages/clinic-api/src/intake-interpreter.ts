@@ -514,8 +514,13 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
       const named = (words: string) => conditionNames[conditionKey]?.test(conditionKey === 'diabetes' ? words.replace(/\bpre[- ]?diabet(?:es|ic)\b/gi, '') : words) ?? false;
       const mention = named(quote);
       if (!mention && !(scopedSingle && quote.split(/\s+/).length <= 6)) return 'condition-not-named';
-      // "Pills for my heart" or "arthritis meds" says what a medicine is for, not that the patient was told they have the condition.
-      if (mention && candidate.state !== 'negative' && !named(quote.replace(medicinePurpose, ' '))) return 'condition-from-medicine-purpose';
+      // "Pills for my heart" or "arthritis meds" says what a medicine is for, not that the patient was told they have the
+      // condition; "I don't take heart meds" is not a "no" to heart disease either.
+      if (mention && !named(quote.replace(medicinePurpose, ' '))) return 'condition-from-medicine-purpose';
+    }
+    if (/^reportedConditions\[[^\]]+\]\.term$/.test(candidate.path) && typeof candidate.value === 'string') {
+      const term = norm(candidate.value);
+      if (term && quote.includes(term) && !quote.replace(medicinePurpose, ' ').includes(term)) return 'condition-from-medicine-purpose';
     }
     const ownCondition = candidate.topicId === 'Q06' && (conditionKey || /^reportedConditions\[[^\]]+\]\.term$/.test(candidate.path));
     if (ownCondition && candidate.state !== 'negative' && (relativeWords.test(clause) || thirdPerson.test(clause)) && !firstPerson.test(clause)) return 'relative-subject';

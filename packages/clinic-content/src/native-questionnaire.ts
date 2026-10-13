@@ -6,8 +6,8 @@ import {
   type ClinicContent,
 } from "./register.js";
 import { escalation, escalationCopy, safetyDefinition } from "./safety.js";
-import { specificityDefinition } from "./specificity.js";
-import { referenceRelease } from "../../clinic-reference/src/index.js";
+import { assessSpecificity, specificityContracts, specificityDefinition } from "./specificity.js";
+import { lookupReference, referenceRelease } from "../../clinic-reference/src/index.js";
 /** Answer specificity contracts with the exact offline reference releases they consult (D1). */
 const specificityContract = { ...specificityDefinition, reference: referenceRelease };
 import { scenarios } from "./scenarios.js";
@@ -1603,8 +1603,24 @@ export function nativeCaptureComplete(
           topic,
           capture.topics[topic.id] ?? emptyResponse(),
           evidence,
-        ).sufficient,
+        ).sufficient && !vagueAnswer(topic.id, capture.topics[topic.id]),
     );
+}
+
+/** Whether a recorded answer is still non-specific under its specificity contract (SP-0.1); then the capture is not complete. */
+function vagueAnswer(topicId: string, response: TopicResponse | undefined): boolean {
+  if (!response) return false;
+  return specificityContracts.filter((contract) => contract.topicId === topicId).some((contract) => {
+    const values: unknown[] = [];
+    const scalar = response.answers[contract.path];
+    if (scalar) { if (scalar.state === "known" && !scalar.items) values.push(scalar.value); }
+    else {
+      const [list, field] = contract.path.split(".");
+      const collection = field ? response.answers[list!] : undefined;
+      if (collection?.state === "known") for (const item of collection.items ?? []) { const answer = item.answers[field!]; if (answer?.state === "known") values.push(answer.value); }
+    }
+    return values.some((value) => typeof value === "string" && value.trim() && assessSpecificity(contract, value, lookupReference).level !== "specific");
+  });
 }
 
 export interface NativeAnswerTreeItem {

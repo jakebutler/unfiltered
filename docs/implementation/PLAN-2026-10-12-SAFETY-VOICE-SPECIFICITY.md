@@ -7,7 +7,7 @@ Progress (2026-10-12):
 - **P2 (voice V1): done**, commit 91868c9.
 - **P3a + P3b (specificity): done in one pass.** All 22 contracts across Q02–Q19 shipped together.
   - **Source change, for a public repository:**
-    - RxClass and ATC classes are not used. They carry WHO licence limits, and D6 needs no classes.
+    - RxClass classes are not used, because D6 needs no classes. ATC, one of the RxClass sources, also carries WHO licence limits.
     - The Clinical Tables conditions list is not used, because it has no explicit redistribution grant.
     - Conditions are instead our own authored terms, validated against CMS ICD-10-CM. See `packages/clinic-reference/SOURCES.md`.
   - **Gate:**
@@ -47,6 +47,13 @@ Progress (2026-10-12):
   - A follow-up reply that also states a new fact keeps it.
   - Settling never brings back an earlier value's code.
   - Known gap: the native final-review completeness override has no automated test. The test fixtures cannot bind a representation authority for a full first intake. It shares the same `specificityIncomplete` check as the guided path, which is tested.
+- **cubic second pass (2026-10-13):** 28 findings on 533b3f8; valid ones fixed:
+  - A safety verdict that can't be saved is never dropped: the signal stays open and the request returns 503 so the client retries.
+  - Grouped and stream replies are gated before anything runs.
+  - A follow-up settles only when the whole reply is a terminal answer; a plain "No" settles as unknown.
+  - "2x" needs an interval; "after" alone isn't a time; a vague answer keeps the native response `stopped`.
+  - A medicine's purpose ("heart meds", "arthritis meds") is never read as a reported condition.
+  - Optional detail probes can't be nominated ahead of a required question.
 - **P4 and P5: next.** Voice article review triage: `VOICE-ARTICLE-REVIEW-2026-10-12.md`.
 Constraints carried forward:
 - Reasoning runs on DigitalOcean inference only.

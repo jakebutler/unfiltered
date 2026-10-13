@@ -1,7 +1,7 @@
 /** Answer specificity (SP-0.1) for the clinic session: which recorded answers are still non-specific, which
  * authored follow-up may be asked next, and how a reply to that follow-up settles it. One mechanism for every
  * contracted field; no field-specific code. Patient words are never replaced and nothing is diagnosed. */
-import { assessSpecificity, specificityBudget, specificityContracts, specificityPlainYes, specificityQuestion, specificityTerminal, type SpecificityAssessment, type SpecificityContract } from '../../clinic-content/src/specificity.js';
+import { assessSpecificity, specificityBudget, specificityContracts, specificityPlainYes, specificityQuestion, specificityTerminal, specificityTerminalOf, type SpecificityAssessment, type SpecificityContract } from '../../clinic-content/src/specificity.js';
 import type { TopicResponse } from '../../clinic-content/src/index.js';
 import { lookupReference } from '../../clinic-reference/src/index.js';
 
@@ -23,7 +23,8 @@ export function specificityFindings(responses: Readonly<Record<string, TopicResp
     if (typeof value !== 'string' || !value.trim()) return;
     const key = specificityKey(contract.topicId, path), saved = states[key];
     // A changed answer keeps its follow-up count but not how the earlier words were settled or confirmed.
-    const state = saved && saved.value !== undefined && saved.value !== value ? { asked: saved.asked } : saved;
+    // A spelling question already asked still counts toward the budgets after the answer changes.
+    const state = saved && saved.value !== undefined && saved.value !== value ? { asked: saved.asked + (saved.spellingAsked ? 1 : 0) } : saved;
     found.push({ key, topicId: contract.topicId, path, contract, value, state, ...assessSpecificity(contract, value, lookupReference) });
   };
   for (const contract of specificityContracts) {
@@ -66,7 +67,7 @@ export function specificityProbes(findings: readonly SpecificityFinding[], state
 /** The saved state for a field, without anything settled or confirmed for an earlier value of it. */
 function stateFor(states: SpecificityStates, key: string, value?: string): SpecificityState {
   const saved = states[key];
-  return saved?.value !== undefined && value !== undefined && saved.value !== value ? { asked: saved.asked } : { ...saved, asked: saved?.asked ?? 0 };
+  return saved?.value !== undefined && value !== undefined && saved.value !== value ? { asked: saved.asked + (saved.spellingAsked ? 1 : 0) } : { ...saved, asked: saved?.asked ?? 0 };
 }
 export function settleSpecificityReply(states: SpecificityStates, mark: SpecificityPromptMark, reply: { sourceId: string; text: string; updatedPath: boolean; value?: string }): SpecificityStates {
   const next = { ...states }, state = stateFor(states, mark.key, reply.value);
@@ -74,7 +75,7 @@ export function settleSpecificityReply(states: SpecificityStates, mark: Specific
     state.spellingAsked = true;
     if (!reply.updatedPath && specificityPlainYes.test(reply.text)) Object.assign(state, { confirmed: { ...mark.spelling, sourceId: reply.sourceId }, ...(reply.value !== undefined ? { value: reply.value } : {}) });
   } else if (!reply.updatedPath) {
-    const terminal = (Object.keys(specificityTerminal) as SpecificityTerminal[]).find(kind => specificityTerminal[kind].test(reply.text));
+    const terminal = specificityTerminalOf(reply.text);
     if (terminal) Object.assign(state, { terminal, terminalSourceId: reply.sourceId, ...(reply.value !== undefined ? { value: reply.value } : {}) });
   }
   next[mark.key] = state;

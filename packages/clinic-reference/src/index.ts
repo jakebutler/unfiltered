@@ -29,7 +29,7 @@ function add(index: Index, name: string, entry: Entry) {
   // Names that normalize alike ("limonene, (-)-", "limonene, (+)-") keep the plain-name row; with none, the name is ambiguous and never coded.
   if (existing?.kind === 'exact') {
     if (existing.plain || entry.kind !== 'exact' || existing.concept.code === entry.concept.code) return;
-    if (!entry.plain) { index.names.delete(key); index.ambiguous.add(key); return; }
+    if (!entry.plain) { index.names.delete(key); index.ambiguous.add(key); for (const token of key.split(' ')) index.tokens.get(token)?.delete(key); return; }
   }
   index.names.set(key, entry);
   index.maxWords = Math.max(index.maxWords, key.split(' ').length);

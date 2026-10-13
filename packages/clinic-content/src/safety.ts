@@ -41,7 +41,7 @@ export const safetyRules: ReadonlyArray<{ id: EscalationRule; pattern: RegExp }>
 export const safetyScopeCues = {
   negated: /\b(?:no|not|never|dont|without|deny|denies|none|nor|no longer|free of|zero)\b|n't\b/g,
   otherPerson:
-    /\b(?:he|she|they|his|her|their|him|them|someone|somebody|people|(?:my|a|our|his|her|their) (?:best |close |older |younger |little |big |ex-?)?(?:mom|mum|mother|dad|father|parents?|sister|brother|siblings?|son|daughter|kids?|child(?:ren)?|husband|wife|partner|boyfriend|girlfriend|friend|cousin|aunt|uncle|grand\w+|coworker|co-worker|neighbou?r|roommate|patient))\b/g,
+    /\b(?:he|she|they|his|her|their|him|them|someone|somebody|people|(?:my|a|the|our|his|her|their) (?:best |close |older |younger |little |big |ex-?)?(?:mom|mum|mother|dad|father|parents?|sister|brother|siblings?|son|daughter|kids?|child(?:ren)?|husband|wife|partner|boyfriend|girlfriend|friend|cousin|aunt|uncle|grand\w+|coworker|co-worker|neighbou?r|roommate|patient))\b/g,
   firstPerson: /\b(?:i|i'm|i've|i'd|i'll|me|myself)\b/g,
   historical:
     /\b(?:years? ago|decades? ago|last year|in the past|used to|when i was (?:a |in )?(?:\d+|kid|teen|teenager|child|younger|little|high school|school|college)|in a long time|(?:last|past) (?:month|year|summer|winter|spring|fall)|months ago|as a (?:kid|teen|teenager|child)|in (?:high school|college)|back (?:in|then)|a long time ago|long ago|history of|previously|in my (?:teens|twenties|20s))\b/,
@@ -81,7 +81,10 @@ function scopeOf(value: string, start: number, end: number): SafetyScope {
   if (scoped(safetyScopeCues.otherPerson) && !/\bmy (?:own )?$/.test(before)) return "other-person";
   // "...last year, still think about it": the time cue covers the sentence; "now"-type cues only count in the hit's own phrase.
   const phrase = clause.slice(before.lastIndexOf(",") + 1).split(",")[0];
-  if (safetyScopeCues.historical.test(clause) && !safetyScopeCues.current.test(phrase)) return "historical";
+  // A time cue in another coordinated part ("I was suicidal years ago and can't breathe") does not date this hit.
+  const coordinator = /\b(?:and|but|so|then|because)\b/;
+  const segment = clause.slice(before.length - before.split(coordinator).at(-1)!.length).split(coordinator)[0]!;
+  if (safetyScopeCues.historical.test(segment) && !safetyScopeCues.current.test(phrase)) return "historical";
   if (safetyScopeCues.hypothetical.test(clause)) return "hypothetical";
   if (clause.trimEnd().endsWith("?")) return "question";
   // "I wrote that story because I am suicidal": the patient's own present-tense statement is not about the media.
