@@ -26,11 +26,11 @@ function recognition(value: unknown): RecognitionSegment {
 }
 
 /** `upload` posts one recording on finish for hosted deployments without WebSocket support. Upload keeps captured audio when capture ends for any reason other than an explicit discard.
- * `direct` streams like `stream`, but to Deepgram with a server-minted token; `onFallback` reports that it could not connect. */
-export function useSpeechCapture({ getScope, getText, onText, onInterruptPlayback, onEvent, onFallback, scopeKey, mediaSource, input }: {
-  getScope: () => CaptureScope | undefined; getText: () => string; onText: (text: string, hasTranscript: boolean, conversation?: boolean) => void; onInterruptPlayback: () => void; onEvent?: (event: CaptureEvent) => void; onFallback?: () => void; scopeKey: string; mediaSource?: CaptureMediaSource; input?: 'stream' | 'upload' | 'direct';
+ * `direct` streams like `stream`, but to Deepgram with a server-minted token; `onFallback` reports that it could not connect. `getKeyterms` supplies the patient's own names for Deepgram keyterm prompting on direct connections, read when the socket connects. */
+export function useSpeechCapture({ getScope, getText, onText, onInterruptPlayback, onEvent, onFallback, scopeKey, mediaSource, input, getKeyterms }: {
+  getScope: () => CaptureScope | undefined; getText: () => string; onText: (text: string, hasTranscript: boolean, conversation?: boolean) => void; onInterruptPlayback: () => void; onEvent?: (event: CaptureEvent) => void; onFallback?: () => void; scopeKey: string; mediaSource?: CaptureMediaSource; input?: 'stream' | 'upload' | 'direct'; getKeyterms?: () => readonly string[];
 }) {
-  const callbacks = useRef({ getScope, getText, onText, onInterruptPlayback, onEvent, onFallback, mediaSource, input }); callbacks.current = { getScope, getText, onText, onInterruptPlayback, onEvent, onFallback, mediaSource, input };
+  const callbacks = useRef({ getScope, getText, onText, onInterruptPlayback, onEvent, onFallback, mediaSource, input, getKeyterms }); callbacks.current = { getScope, getText, onText, onInterruptPlayback, onEvent, onFallback, mediaSource, input, getKeyterms };
   const epoch = useRef(new CaptureEpoch()), run = useRef<CaptureRun | undefined>(undefined), kept = useRef<CaptureRun | undefined>(undefined);
   const [status, setStatus] = useState<CaptureStatus>('idle');
   const [interim, setInterim] = useState('');
@@ -161,7 +161,7 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
       const upload = callbacks.current.input === 'upload';
       const uploadSocket = upload ? new UploadSpeechSocket(socketUrl) : undefined;
       capture.upload = uploadSocket;
-      const socket = (uploadSocket ?? (callbacks.current.input === 'direct' ? new DirectSpeechSocket(socketUrl) : new WebSocket(socketUrl))) as unknown as WebSocket; socket.binaryType = 'arraybuffer';
+      const socket = (uploadSocket ?? (callbacks.current.input === 'direct' ? new DirectSpeechSocket(socketUrl, { keyterms: () => callbacks.current.getKeyterms?.() ?? [] }) : new WebSocket(socketUrl))) as unknown as WebSocket; socket.binaryType = 'arraybuffer';
       capture.resources.own(() => { if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close(1000, 'capture-ended'); });
       capture.transport = new PcmTransport(socket, context.sampleRate);
       capture.flush = () => processor.port.postMessage('finish');

@@ -1,5 +1,6 @@
 /** Hosted hands-free: a WebSocket-shaped client that opens Deepgram live directly with a short-lived token, reproducing the relay's event semantics in the browser. */
-import { deepgramDirectListenUrl, directCaptureMs, SpeechError, speechTokenPath, validScope, type SpeechInputEvent, type SpeechTurnScope } from '../../../packages/speech/src/contracts';
+import { directCaptureMs, SpeechError, speechTokenPath, validScope, type SpeechInputEvent, type SpeechTurnScope } from '../../../packages/speech/src/contracts';
+import { directListenUrl } from '../../../packages/speech/src/keyterms';
 import { parseDeepgramMessage } from '../../../packages/speech/src/turn';
 
 const tokenTimeoutMs = 10_000;
@@ -37,9 +38,11 @@ export interface DirectSpeechSocketOptions {
   schedule?: (fn: () => void) => void;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
+  /** Patient-specific keyterm prompts, read when the provider connects so they are current; common clinic terms are always added. */
+  keyterms?: () => readonly string[];
 }
 
-/** Implements only the WebSocket subset used by useSpeechCapture and PcmTransport. The URL argument is kept for shape compatibility; the provider URL is always deepgramDirectListenUrl. */
+/** Implements only the WebSocket subset used by useSpeechCapture and PcmTransport. The URL argument is kept for shape compatibility; the provider URL is always directListenUrl(keyterms). */
 export class DirectSpeechSocket {
   readyState = 0;
   binaryType = 'arraybuffer';
@@ -55,6 +58,7 @@ export class DirectSpeechSocket {
   private schedule: (fn: () => void) => void;
   private setTimer: (fn: () => void, ms: number) => unknown;
   private clearTimer: (handle: unknown) => void;
+  private keyterms?: () => readonly string[];
 
   private readonly onOpen = () => this.providerOpened();
   private readonly onMessage = (event: ProviderEvent) => this.providerMessage(event);
@@ -67,6 +71,7 @@ export class DirectSpeechSocket {
     this.schedule = options.schedule ?? (fn => { setTimeout(fn, 0); });
     this.setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = options.clearTimer ?? (handle => clearTimeout(handle as number));
+    this.keyterms = options.keyterms;
     this.schedule(() => this.open());
   }
 
@@ -167,7 +172,7 @@ export class DirectSpeechSocket {
 
   private openProvider(token: string) {
     let provider: ProviderSocket;
-    try { provider = this.connect(deepgramDirectListenUrl, ['bearer', token]); }
+    try { provider = this.connect(this.listenUrl(), ['bearer', token]); }
     catch { return this.fallback('provider-unavailable'); }
     this.provider = provider;
     provider.binaryType = 'arraybuffer';
@@ -176,6 +181,16 @@ export class DirectSpeechSocket {
     provider.addEventListener('close', this.onClose);
     provider.addEventListener('error', this.onError);
     this.arm('open', providerOpenTimeoutMs, () => this.fallback('provider-timeout'));
+  }
+
+  /** A throwing or malformed keyterm getter degrades to the common terms; it never blocks voice. */
+  private listenUrl(): string {
+    let extra: readonly string[] = [];
+    try {
+      const value = this.keyterms?.();
+      if (Array.isArray(value)) extra = value;
+    } catch { /* Common clinic terms only. */ }
+    return directListenUrl(extra);
   }
 
   private providerOpened() {

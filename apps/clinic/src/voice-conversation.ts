@@ -36,6 +36,8 @@ const browserClock: Clock = { after: (ms, fn) => setTimeout(fn, ms), clear: time
 const sameScope = (a?: CaptureScope, b?: CaptureScope) => Boolean(a && b && a.sessionId === b.sessionId && a.promptId === b.promptId && a.expectedRevision === b.expectedRevision && a.requestId === b.requestId);
 const endpointCues = new Set(['um', 'uh', 'er', 'erm', 'hmm', 'wait', 'no wait', 'hold on', 'i mean', 'actually', 'sorry', 'let me think', 'and', 'or', 'but', 'so', 'like']);
 const pauseCommands = new Set(['stop', 'stop listening', 'pause', 'wait', 'hold on', 'wait a moment', 'wait a second']);
+/** Backchannels and fillers. Answer words (okay, yes, no, sure) are deliberately absent: each can be the whole answer. */
+const backchannels = new Set(['uh', 'um', 'er', 'erm', 'hmm', 'hm', 'mm', 'mmm', 'mhm', 'mm-hmm', 'mmhmm', 'uh-huh', 'ah', 'oh', 'uhh', 'umm']);
 const spokenCommand = (text: string) => text.trim().toLowerCase().replace(/[\p{P}\s]+$/u, '').replace(/(^|\s)please$/, '').replace(/[\p{P}\s]+$/u, '');
 /** Silence after the provider's endpoint before a turn is taken. Conservative: a cut-off answer costs more than a wait, and Done skips it. */
 export const endpointGrace = Object.freeze({ base: 1000, hold: 2500 });
@@ -48,6 +50,11 @@ export function endpointGraceMs(text: string): number {
   const tail = raw.toLowerCase().replace(/[\p{P}\s]+$/u, ''), words = tail.split(/\s+/);
   return [1, 2, 3].some(n => endpointCues.has(words.slice(-n).join(' '))) || amountEnding.test(tail) ? endpointGrace.hold : endpointGrace.base;
 }
+/** True when every recognized word is a backchannel or filler, so no answer has been given yet. */
+export function fillerOnly(text: string): boolean {
+  const words = text.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').split(/\s+/).map(word => word.replace(/^-+|-+$/g, '')).filter(Boolean);
+  return words.length > 0 && words.every(word => backchannels.has(word));
+}
 
 /** Explicit opt-in coordinator. Speech final events alone never submit in dictation mode. */
 export class VoiceConversation {
@@ -57,7 +64,7 @@ export class VoiceConversation {
   private grace?: unknown;
   private idle?: unknown;
   private submitted = new Set<string>();
-  private finals = new Map<string, string>();
+  private finals = new Map<string, { start: number; text: string; speechFinal: boolean }>();
   private latestFinalEnd = -1;
   private latestFinalText = '';
   private endpointEnd?: number;
@@ -83,7 +90,7 @@ export class VoiceConversation {
   }
   /** "Done speaking": take the turn now instead of waiting out the endpoint grace. */
   done() {
-    if (!['listening', 'speaking'].includes(this.state.status) || !this.heardVoice) return;
+    if (!['listening', 'speaking'].includes(this.state.status) || !this.heardVoice || fillerOnly(this.finalText())) return;
     this.clearTimers(); this.set('finishing', 'Finishing your words · microphone off'); this.ports.stopPlayback(); this.ports.finishCapture();
   }
   stop(reason = 'Voice conversation paused. Your available words remain in the draft.', preservePlayback = false) {
@@ -117,6 +124,8 @@ export class VoiceConversation {
     this.awaiting = { sessionId: result.session.id, revision: result.session.revision, promptId: result.session.currentPrompt?.id };
     this.ports.changed({ ...this.state });
   }
+  /** Final words of this capture in audio order. Network delivery order is not audio order. */
+  private finalText() { return [...this.finals.values()].sort((a, b) => a.start - b.start).map(segment => segment.text.trim()).filter(Boolean).join(' '); }
   private valid(scope: CaptureScope) { return this.state.active && sameScope(scope, this.scope) && sameScope(scope, this.ports.context().scope); }
   event(event: CaptureEvent) {
     if (!this.valid(event.scope)) return;
@@ -144,9 +153,9 @@ export class VoiceConversation {
       if (!['listening', 'speaking'].includes(this.state.status)) return;
       const { segment } = event;
       if (segment.text.trim()) { this.heardVoice = true; this.clock.clear(this.idle); this.idle = undefined; }
-      const key = `${segment.start}:${segment.duration}`;
-      const changedFinal = segment.isFinal && this.finals.get(key) !== JSON.stringify([segment.text, segment.speechFinal]);
-      if (segment.isFinal) this.finals.set(key, JSON.stringify([segment.text, segment.speechFinal]));
+      const key = `${segment.start}:${segment.duration}`, previous = this.finals.get(key);
+      const changedFinal = segment.isFinal && (previous?.text !== segment.text || previous?.speechFinal !== segment.speechFinal);
+      if (segment.isFinal) this.finals.set(key, { start: segment.start, text: segment.text, speechFinal: segment.speechFinal });
       // Network delivery order is not audio order. Only a new latest final or
       // unresolved words in the production reducer invalidate an existing endpoint.
       if (changedFinal && segment.start + segment.duration >= this.latestFinalEnd) {
@@ -159,6 +168,8 @@ export class VoiceConversation {
         this.grace = this.clock.after(endpointGraceMs(this.latestFinalText), () => {
           this.grace = undefined;
           if (!this.valid(event.scope) || !['listening', 'speaking'].includes(this.state.status)) return;
+          // A backchannel is not an answer: keep listening, with the quiet timeout re-armed.
+          if (fillerOnly(this.finalText())) { this.endpointEnd = undefined; this.armIdle(); return; }
           this.clearTimers(); this.set('finishing', 'Finishing your words · microphone off'); this.ports.stopPlayback(); this.ports.finishCapture();
         });
       }

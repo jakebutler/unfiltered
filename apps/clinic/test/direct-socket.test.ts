@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DirectSpeechSocket, type ProviderEvent, type ProviderSocket } from '../src/direct-socket';
 import { deepgramDirectListenUrl, directCaptureMs, speechTokenPath } from '../../../packages/speech/src/contracts';
+import { commonClinicKeyterms, directListenUrl } from '../../../packages/speech/src/keyterms';
 
 type Fetch = (input: string, init: RequestInit) => Promise<Response>;
 type Listener = (event: ProviderEvent) => void;
@@ -62,7 +63,7 @@ class ManualTimers {
   }
 }
 
-function harness(fetcher: Fetch = okToken, connectOverride?: () => ProviderSocket) {
+function harness(fetcher: Fetch = okToken, connectOverride?: () => ProviderSocket, keyterms?: () => readonly string[]) {
   const tasks: (() => void)[] = [];
   const timers = new ManualTimers();
   const providers: FakeProvider[] = [];
@@ -74,7 +75,7 @@ function harness(fetcher: Fetch = okToken, connectOverride?: () => ProviderSocke
   });
   const fetcherSpy = vi.fn<Fetch>(fetcher);
   const socket = new DirectSpeechSocket('wss://clinic.example/api/clinic/speech/input', {
-    fetcher: fetcherSpy, connect, schedule: fn => { tasks.push(fn); }, setTimer: timers.set, clearTimer: timers.clear,
+    fetcher: fetcherSpy, connect, schedule: fn => { tasks.push(fn); }, setTimer: timers.set, clearTimer: timers.clear, keyterms,
   });
   const log: LogEvent[] = [];
   for (const type of ['open', 'message', 'close', 'error']) socket.addEventListener(type, event => { log.push({ type, data: event.data }); });
@@ -128,10 +129,30 @@ describe('DirectSpeechSocket', () => {
     const { connect, provider, messages, ready } = harness();
     await ready();
     expect(connect).toHaveBeenCalledTimes(1);
-    expect(connect).toHaveBeenCalledWith(deepgramDirectListenUrl, ['bearer', token]);
+    expect(connect).toHaveBeenCalledWith(directListenUrl(), ['bearer', token]);
     expect(provider().binaryType).toBe('arraybuffer');
     expect(messages()).toEqual([{ type: 'ready', sampleRate: 16000, channels: 1, maxCaptureMs: 59000 }]);
     expect(directCaptureMs).toBe(59000);
+  });
+
+  it('connects with patient keyterms before the common clinic terms, read when the provider connects', async () => {
+    const keyterms = vi.fn(() => ['Sertraline', 'Metoprolol succinate']);
+    const { connect, ready } = harness(okToken, undefined, keyterms);
+    await ready();
+    const url = connect.mock.calls[0][0];
+    expect(url.startsWith(`${deepgramDirectListenUrl}&keyterm=`)).toBe(true);
+    expect(keyterms).toHaveBeenCalledTimes(1);
+    const terms = new URL(url).searchParams.getAll('keyterm');
+    expect(terms).toEqual(['Sertraline', 'Metoprolol succinate', ...commonClinicKeyterms]);
+    expect(url).toContain('keyterm=Metoprolol%20succinate');
+  });
+
+  it('a throwing keyterm getter falls back to the common-only URL and still reaches ready', async () => {
+    const { connect, ready, messages } = harness(okToken, undefined, () => { throw new Error('getter failed'); });
+    await ready();
+    expect(connect).toHaveBeenCalledWith(directListenUrl([]), ['bearer', token]);
+    expect(connect.mock.calls[0][0]).toBe(directListenUrl());
+    expect(messages()).toEqual([{ type: 'ready', sampleRate: 16000, channels: 1, maxCaptureMs: 59000 }]);
   });
 
   it('the direct listen URL asks for nova-3-medical, an 800ms endpoint, and filler words so the endpoint grace can hear "um"', () => {

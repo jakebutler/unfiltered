@@ -8,6 +8,7 @@ import { useAdaptiveConversation } from './useAdaptiveConversation';
 import { isPendingInterpretation, metadataOnlyStreamAdvance } from './adaptive-state';
 import { AdaptiveReadback, AdaptiveStatus, AssistantActivity, ChatTranscript, UnresolvedSources } from './AdaptiveViews';
 import { useSpeechCapture, type CaptureMediaSource } from './useSpeechCapture';
+import { sessionKeyterms } from '../../../packages/speech/src/keyterms';
 import { useSpeechPlayback } from './useSpeechPlayback';
 import { VoiceControls } from './VoiceControls';
 import { useVoiceConversation } from './useVoiceConversation';
@@ -90,7 +91,7 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
   });
   const capture = useSpeechCapture({
     mediaSource: captureMediaSource,
-    scopeKey: voiceScopeKey, getScope: currentCaptureScope, getText: () => textRef.current, input: voiceInput, onFallback: () => setDirectFallback(true),
+    scopeKey: voiceScopeKey, getScope: currentCaptureScope, getText: () => textRef.current, input: voiceInput, onFallback: () => setDirectFallback(true), getKeyterms: () => sessionKeyterms(sessionRef.current),
     onText: (value, hasTranscript, conversationCapture) => { textRef.current = value; setText(value); if (hasTranscript) setAnswerChannel(conversationCapture ? 'unreviewed-transcript' : 'confirmed-transcript'); },
     onInterruptPlayback: playback.stop, onEvent: event => voice.controller.event(event),
   });

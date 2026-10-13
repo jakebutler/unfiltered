@@ -50,3 +50,23 @@ The article is about contact-center and booking agents. Clinical safety, medicat
   - Keyterms come from the patient's own named medicines and conditions, plus a short list of common ones.
   - One correlation ID per answer, from token mint to transcript to turn.
 - **P5:** the hosted voice run reports field exact match for numbers, negations and names separately from transcript similarity, and checks that no voice path reaches PHQ-4.
+
+## Status (2026-10-13, after P4)
+
+| Recommendation | Status |
+|---|---|
+| Partials never commit | Done. Only a clean final utterance is saved; partials are display text. |
+| Safety gate on final text | Done. Every saved turn goes through the gate. |
+| Conservative endpointing, longer hold on amounts, Done button | Done. Deepgram endpointing 800 ms with filler words kept; grace 1.0 s, or 2.5 s after a filler, correction cue or amount; **Done speaking** skips the wait. Live: "ten milligrams, uh, [1.2 s] no wait, twenty" stays one turn (3/3). |
+| Backchannels don't end a turn; speech cancels read-aloud | Done. A filler-only utterance ("uh", "mm-hmm") never becomes an answer. Barge-in verified live (read-aloud stops within 0.5 s). |
+| Keyterms | Done. The patient's own reference-coded names first, then 36 common clinic terms, within Deepgram's 500-token limit. |
+| Self-correction after the field is written | Covered by the interpreter: an explicit correction replaces the value; otherwise both are kept as `conflicting` and the patient is asked. Never a silent overwrite. |
+| No voice path into PHQ-4 | Done. Token mint refuses PHQ-4 and exact-choice items; the client keeps them as buttons. |
+| Field-level exact match gate | `scripts/dev/voice-eval.mts` + `scripts/dev/fixtures/voice-eval.json` (VE-0.1, 36 cases: numbers, negations, names). Gates: numbers 100%, negations 100%, names ≥ 95%, non-compensable. |
+| Latency p95, correlation ID | Not instrumented. Live runs show about 1 s from endpoint to save, plus interpreter time. |
+
+**Voice eval results (synthetic macOS voices, keyterms on, 2026-10-13):**
+- `nova-3-medical`: negations and names pass every run. One number case fails in 4 of 5 runs with the default voice: "two hundred twelve pounds" is transcribed "two twelve pounds". It passes with a second voice.
+- `nova-3` (general) heard that number correctly but missed two medicine names (Contrave, atorvastatin). We keep `nova-3-medical`.
+- End to end, the "two twelve pounds" transcript fails safe: the interpreter records the unit but no number, and the topic stays "More detail needed", so the patient is asked again rather than a wrong weight being saved.
+- **The number gate is therefore not met at the ASR layer.** It is mitigated downstream, not solved. Real-voice testing is still needed.

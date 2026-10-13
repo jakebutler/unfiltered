@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { AdaptiveTurnResult, PromptView, SourceTurn } from '../../../packages/clinic-contract/src/index';
 import { conversationSpeech } from '../../../packages/clinic-contract/src/index';
-import { VoiceConversation, endpointGrace, endpointGraceMs, type ConversationVoiceContext } from '../src/voice-conversation';
+import { VoiceConversation, endpointGrace, endpointGraceMs, fillerOnly, type ConversationVoiceContext } from '../src/voice-conversation';
 import { promptAllowsFreeText } from '../src/prompt-input';
 import { SourceInspector } from '../src/components';
 
@@ -25,7 +25,7 @@ function harness(speech = true) {
   const ports = { context: () => context, startCapture: vi.fn(), finishCapture: vi.fn(), stopCapture: vi.fn(), stopPlayback: vi.fn(), speak: vi.fn(), save: vi.fn(async () => result()), interpret: vi.fn(async () => result('applied', 7)), restoreDraft: vi.fn(), changed: vi.fn() };
   const controller = new VoiceConversation(ports, timer);
   const ready = () => controller.event({ type: 'ready', scope: context.scope! });
-  const final = (text = 'I take five milligrams', speechFinal = true) => controller.event({ type: 'recognition', scope: context.scope!, segment: { start: 0, duration: 1, text, isFinal: true, speechFinal }, interim: '' });
+  const final = (text = 'I take five milligrams', speechFinal = true, start = 0) => controller.event({ type: 'recognition', scope: context.scope!, segment: { start, duration: 1, text, isFinal: true, speechFinal }, interim: '' });
   const completed = (clean = true, text = 'I take five milligrams', extra: { utterance?: string; prefix?: string } = {}) => controller.event({ type: 'completed', scope: context.scope!, text, clean, ...extra });
   return { timer, ports, controller, ready, final, completed, setContext(value: ConversationVoiceContext) { context = value; } };
 }
@@ -141,6 +141,31 @@ describe('endpoint cues and spoken pause commands', () => {
     const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(hold);
     h.completed(true, 'stop taking aspirin', { utterance: 'stop taking aspirin', prefix: '' }); await tick();
     expect(h.ports.save).toHaveBeenCalledWith('stop taking aspirin', initial); expect(h.ports.restoreDraft).not.toHaveBeenCalled();
+  });
+});
+
+describe('backchannels and fillers never end a turn', () => {
+  it.each([['uh', true], ['Mm-hmm.', true], ['um, uh', true], ['uh-huh', true], ['', false], ['okay', false], ['uh, ten milligrams', false], ['no', false]])('fillerOnly(%j) is %s', (text, expected) => {
+    expect(fillerOnly(text)).toBe(expected);
+  });
+  it('a filler-only endpoint keeps listening; a later answer finishes on its own grace and saves with the filler', async () => {
+    const h = harness(false); h.controller.start(); h.ready(); h.final('Mm-hmm.', true, 0);
+    h.timer.advance(endpointGrace.hold + endpointGrace.base);
+    expect(h.ports.finishCapture).not.toHaveBeenCalled(); expect(h.controller.state.status).toBe('listening');
+    h.final('I take metformin', true, 1); h.timer.advance(endpointGrace.base);
+    expect(h.ports.finishCapture).toHaveBeenCalledOnce(); h.completed(true, 'Mm-hmm. I take metformin.'); await tick();
+    expect(h.ports.save).toHaveBeenCalledWith(expect.stringContaining('I take metformin'), initial);
+  });
+  it('a filler-only endpoint re-arms the quiet timeout, so a silent backchannel still pauses', () => {
+    const h = harness(false); h.controller.start(); h.ready(); h.final('uh', true, 0);
+    h.timer.advance(endpointGrace.hold); expect(h.controller.state.status).toBe('listening');
+    h.timer.advance(15000); expect(h.controller.state.status).toBe('paused'); expect(h.ports.finishCapture).not.toHaveBeenCalled();
+  });
+  it('done() after only a backchannel is a no-op, and done() works once an answer follows', () => {
+    const h = harness(false); h.controller.start(); h.ready(); h.final('uh', true, 0); h.controller.done();
+    expect(h.controller.state.status).toBe('listening'); expect(h.ports.finishCapture).not.toHaveBeenCalled(); expect(h.ports.stopPlayback).not.toHaveBeenCalled();
+    h.final('I take metformin', false, 1); h.controller.done();
+    expect(h.ports.finishCapture).toHaveBeenCalledOnce();
   });
 });
 
