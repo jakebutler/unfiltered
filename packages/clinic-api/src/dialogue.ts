@@ -2,6 +2,8 @@ import { guardNativePrompt, nextNativeGuidedField } from '../../clinic-content/s
 import { evaluateTopic, mentalHealthOptions, promptsById, scenarios, type TopicDefinition, type TopicResponse } from '../../clinic-content/src/index.js';
 import { adaptiveSlot, adaptiveHistoryScopes, adaptiveHistoryWindowUncertainty, type AdaptiveContext, type AdaptiveOutcome, type DialogueState, type DisplayedPrompt } from './adaptive-validation.js';
 import { assertValidatedAdaptiveGroups, type ValidatedAdaptiveGroups } from './adaptive-group-compile.js';
+import { specificityFindings, specificityProbes } from './specificity.js';
+import { assessSpecificity, specificityContracts } from '../../clinic-content/src/specificity.js';
 
 export interface EligibleProbe extends DisplayedPrompt {
   kind: 'question' | 'instrument' | 'list-completion';
@@ -30,7 +32,8 @@ export function scopedQuestion(topic: TopicDefinition, response: TopicResponse, 
   const ids = paths.map(child);
   const date = response.answers['lastMeasuredWeight.measuredWhen'];
   const measuredDate = date?.state === 'known' && typeof date.value === 'string' ? date.value : undefined;
-  const med = name ?? 'this medicine or product';
+  // A description ("pills for my heart") is not a name to put in a question.
+  const med = name && assessSpecificity(specificityContracts.find(contract => contract.path === 'medicines.name')!, name).level === 'specific' ? name : 'this medicine or product';
   const conditions: Record<string, string> = { diabetes: 'diabetes', prediabetes: 'prediabetes', bloodPressure: 'high blood pressure', cholesterol: 'high cholesterol', heartDisease: 'heart disease', stroke: 'a stroke', sleepApnea: 'sleep apnea', liver: 'a fatty liver or another liver condition', kidney: 'kidney disease', joint: 'arthritis or another joint condition', thyroidHormone: 'a thyroid or other hormone condition', digestive: 'a digestive condition' };
   if (topic.id === 'Q06' && ids.every(id => id.startsWith('conditions.'))) {
     const names = ids.map(id => conditions[id.slice('conditions.'.length)]);
@@ -93,8 +96,16 @@ export function eligibleAdaptiveProbes(context: AdaptiveContext, rejectedTargets
         if (exact) probes.push({ topicId: topic.id, promptId: field.promptIds[0], targetPaths: [field.path], kind: /^MH0[1-4]$/.test(field.promptIds[0]) ? 'instrument' : 'question', text: /^MH0[1-4]$/.test(field.promptIds[0]) ? `${promptsById['MH.stem'].text}\n${exact.text}` : exact.text, labels: [field.label], optional: topic.presentation === 'O' });
       }
     }
+    // Authored specificity follow-ups (opt-in per context): naming questions lead their topic in order; other detail is optional and follows it.
+    const identity: EligibleProbe[] = [], detail: EligibleProbe[] = [];
+    if (context.specificity) for (const { finding, text, mark } of specificityProbes(specificityFindings({ [topic.id]: response }, context.specificity), context.specificity)) {
+      const promptId = adaptiveSlot(topic, response, finding.path).definition.promptIds[0];
+      if (!promptId || rejectedTargets.some(target => target.topicId === topic.id && target.path === finding.path)) continue;
+      (finding.contract.kind === 'entity' ? identity : detail).push({ topicId: topic.id, promptId, targetPaths: [finding.path], kind: 'question', text, labels: [finding.contract.missing], optional: topic.presentation === 'O' || finding.contract.kind !== 'entity', specificity: mark });
+    }
+    probes.push(...identity);
     const readiness = evaluateTopic(topic, response, evidence);
-    if (readiness.sufficient || readiness.collection === 'not-applicable' || topic.presentation === 'C' && response.applicability !== 'applicable') continue;
+    if (readiness.sufficient || readiness.collection === 'not-applicable' || topic.presentation === 'C' && response.applicability !== 'applicable') { probes.push(...detail); continue; }
     const missing = readiness.slots.filter(slot => slot.state === 'unresolved' && slot.promptIds.length && !['unanswered', 'invalid-evidence', 'condition-unresolved'].includes(slot.reason ?? ''));
     const groups = new Map<string, EligibleProbe>();
     for (const slot of missing) {
@@ -145,7 +156,7 @@ export function eligibleAdaptiveProbes(context: AdaptiveContext, rejectedTargets
         else if (detail && !/\[[^\]]+\]/.test(detail)) group.text = detail;
       }
     }
-    probes.push(...[...groups.values()].filter(group => !/\[[^\]]+\]/.test(group.text)));
+    probes.push(...[...groups.values()].filter(group => !/\[[^\]]+\]/.test(group.text)), ...detail);
   }
   return probes.filter(probe => {
     if (!context.nativeRouting) return true;

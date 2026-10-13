@@ -15,6 +15,8 @@ import { safetySignalSeed } from './safety-screen.js';
 import { ApiFailure, type Draft, type ClinicApiConfig } from './types.js';
 import { adaptiveView, requireNoPendingInterpretation } from './adaptive-session.js';
 import { scopedQuestion } from './dialogue.js';
+import { specificityFindings, specificityGaps, specificityNote } from './specificity.js';
+import { specificityQuote } from '../../clinic-content/src/specificity.js';
 import { interpretationReview } from './interpretation-review.js';
 import { projectProvisional, policyQualified, focusedPolicyRevision, typedPolicyRevision, type ProvisionalQualification } from './provisional-projection.js';
 export const scenarioTitles: Record<ScenarioId, string> = { 'first-intake': 'First visit intake', 'pre-visit': 'Before your visit', 'non-visit': 'Check in with your care team', 'post-visit': 'After your visit', billing: 'Billing help', scheduling: 'Scheduling help', refill: 'Prescription refill request' };
@@ -207,27 +209,30 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         const projected = effective(d), required = definitions(d), requiredIds = new Set(required.map(topic => topic.id));
         const admittedSources = new Set(Object.values(d.adaptive?.operations ?? {}).filter(op => op.status === 'applied' && op.stream?.capture === 'saved' && typedCaptureBound(d,op) && op.stream.provisional?.policy === options.provisionalQualification?.policy && (op.stream.provisional?.interpretationProfile ?? op.stream.sourceInterpretation?.protocol) === (typedQualified ? 'turn-bound-typed-v1' : focusedQualified ? 'source-first-focused-v1' : undefined)).map(op => op.sourceId));
         const shown = [...required, ...captureDefinitions(d).filter(topic => !requiredIds.has(topic.id) && projected.claims.some(claim => claim.topicId === topic.id && claim.status !== 'superseded'))];
+        const findings = specificityFindings(projected.responses, d.specificity);
         return shown.map(t => {
             const r = projected.responses[t.id] ?? { presented: false, answers: {} }, ready = evaluateTopic(t, topicResponse(d, t), evidence(d));
             const details = rows(t.slots, r.answers).map(row => {
                 const proposed = projected.provenance.filter(item => item.topicId === t.id && item.path === row.id);
                 const provenance = [...detailProvenance(d, t.id, row.id, row.sourceIds), ...proposed.flatMap(item => [...item.evidence.map(span => ({ ...span, transform: 'provisional-patient-report' })), ...(item.supersededEvidence ?? []).map(span => ({ ...span, transform: 'superseded-patient-report' }))])];
-                return { ...row, sourceIds: [...new Set([...row.sourceIds, ...proposed.flatMap(item => item.sourceIds)])], ...(provenance.length ? { provenance } : {}), ...(proposed.length ? { interpretation: { qualified: qualified && proposed.every(item => item.sourceIds.every(id => admittedSources.has(id))), status: row.state === 'conflicting' ? 'conflicting' as const : 'proposed' as const } } : {}) };
+                const finding = findings.find(item => item.topicId === t.id && item.path === row.id), specificity = finding && specificityNote(finding);
+                return { ...row, sourceIds: [...new Set([...row.sourceIds, ...proposed.flatMap(item => item.sourceIds)])], ...(provenance.length ? { provenance } : {}), ...(proposed.length ? { interpretation: { qualified: qualified && proposed.every(item => item.sourceIds.every(id => admittedSources.has(id))), status: row.state === 'conflicting' ? 'conflicting' as const : 'proposed' as const } } : {}), ...(specificity ? { specificity } : {}) };
             });
+            const vague = specificityGaps(findings.filter(item => item.topicId === t.id));
             const answered = details.filter(detail => detail.state !== 'not-asked');
             const sourceIds = [...new Set([...details.flatMap(detail => detail.sourceIds), ...(r.applicabilitySourceIds ?? [])])];
             const gaps = projected.gaps.filter(gap => gap.topicId ? gap.topicId === t.id : gap.evidence.some(span => projected.claims.some(claim => claim.topicId === t.id && claim.sourceId === span.sourceId)));
             const directScreen = d.topics.Q16 ?? { presented: false, answers: {} }; // PHQ is direct exact choice only.
             return { id: t.id, title: titles[t.id] ?? scenarioTitles[d.scenario], required: requiredIds.has(t.id) && t.presentation !== 'O', ...(r.stopped ? { stopReason: r.stopped } : {}),
-                status: requiredIds.has(t.id) && ready.sufficient ? 'ready-for-review' : r.stopped || gaps.length ? 'stopped-with-gaps' : answered.length || r.presented ? 'more-detail-needed' : 'not-started',
-                missingDetails: [...ready.unresolvedSlotIds.map(id => details.find(detail => detail.id === id)?.label ?? id), ...(details.some(detail => detail.interpretation?.qualified === false) ? ['Proposed interpretation has not been qualified for completeness.'] : [])], details,
+                status: requiredIds.has(t.id) && ready.sufficient && !vague.length ? 'ready-for-review' : r.stopped || gaps.length || vague.length && vague.every(item => item.state?.terminal) ? 'stopped-with-gaps' : answered.length || r.presented ? 'more-detail-needed' : 'not-started',
+                missingDetails: [...ready.unresolvedSlotIds.map(id => details.find(detail => detail.id === id)?.label ?? id), ...vague.map(item => `${item.contract.missing}: “${specificityQuote(item.value)}”`), ...(details.some(detail => detail.interpretation?.qualified === false) ? ['Proposed interpretation has not been qualified for completeness.'] : [])], details,
                 ...(t.id === 'Q16' ? { screening: { ...scorePhq4(directScreen.answers, screenContext(d, directScreen)), title: 'PHQ-4 for clinician review', text: screenText(d, t, directScreen).trim() } } : {}),
                 ...(r.applicability === 'not-applicable' ? { answer: { text: 'Patient explicitly marked this topic not applicable.', state: 'negative' as const, sourceIds } }
-                    : answered.length ? { answer: { text: answered.map(detail => `${detail.label}: ${detail.interpretation ? 'Proposed patient report — ' : ''}${detail.text ?? detail.state}`).join('\n') + screenText(d, t, directScreen),
+                    : answered.length ? { answer: { text: answered.map(detail => `${detail.label}: ${detail.interpretation ? 'Proposed patient report — ' : ''}${detail.text ?? detail.state}${detail.specificity?.needsDetail ? ` [needs detail: ${detail.specificity.needsDetail}]` : ''}`).join('\n') + screenText(d, t, directScreen),
                         state: (ready.sufficient ? 'answered' : answered.every(detail => detail.state === 'declined') ? 'declined' : answered.every(detail => detail.state === 'unknown') ? 'unknown' : answered.some(detail => detail.state === 'conflicting') ? 'conflicting' : 'answered') as NonNullable<TopicView['answer']>['state'], sourceIds } } : {}) };
         });
     }
-    function complete(d: Draft) { return !unresolvedRecognitionSourceIds(d.turns.filter(turn => turn.role === 'patient').map(turn => ({ id: turn.id, patient: d.patient, kind: turn.corrects ? 'patient-correction' as const : 'patient-statement' as const, text: turn.text, capturedAt: turn.at, ...(turn.channel ? { channel: turn.channel } : {}), ...(turn.corrects ? { corrects: turn.corrects } : {}), ...(turn.displayedPromptId ? { displayedPromptId: turn.displayedPromptId } : {}) })), effective(d, true).responses).length && !d.safety && !unresolvedSources(d).length && !effective(d, true).gaps.length && definitions(d).filter(t => t.presentation !== 'O').every(t => evaluateTopic(t, topicResponse(d, t), evidence(d)).sufficient); }
+    function complete(d: Draft) { return !unresolvedRecognitionSourceIds(d.turns.filter(turn => turn.role === 'patient').map(turn => ({ id: turn.id, patient: d.patient, kind: turn.corrects ? 'patient-correction' as const : 'patient-statement' as const, text: turn.text, capturedAt: turn.at, ...(turn.channel ? { channel: turn.channel } : {}), ...(turn.corrects ? { corrects: turn.corrects } : {}), ...(turn.displayedPromptId ? { displayedPromptId: turn.displayedPromptId } : {}) })), effective(d, true).responses).length && !d.safety && !unresolvedSources(d).length && !effective(d, true).gaps.length && definitions(d).filter(t => t.presentation !== 'O').every(t => evaluateTopic(t, topicResponse(d, t), evidence(d)).sufficient) && !specificityGaps(specificityFindings(effective(d, true).responses, d.specificity)).some(gap => definitions(d).some(t => t.id === gap.topicId && t.presentation !== 'O')); }
     function view(d: Draft, identity = true, adaptiveAvailable = false): ClinicSessionView {
         let exchange = d.adaptive?.exchange?.prompt;
         if (native && exchange) {

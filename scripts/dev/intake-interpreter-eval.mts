@@ -21,7 +21,7 @@ const register = createClinicContent({ mentalHealth: 'phq4' });
 // Same topic set the server offers in first-intake adaptive mode: register topics (minus Q18) plus condition branches (COND excluded for PHQ-4).
 const topics = [...register.topics.filter(topic => topic.id !== 'Q18'), ...Object.values(register.branches).map(branch => branch.topic).filter(topic => topic.id !== 'COND')];
 
-interface Case { id: string; displayed: { topicId: string; promptId: string; targetPaths: string[] }; question: string; text: string; prior?: Record<string, TopicResponse>; check(outcome: AdaptiveOutcome): string[]; }
+interface Case { id: string; displayed: { topicId: string; promptId: string; targetPaths: string[]; specificity?: { key: string } }; question: string; text: string; prior?: Record<string, TopicResponse>; check(outcome: AdaptiveOutcome): string[]; }
 const value = (outcome: AdaptiveOutcome, topicId: string, path: string) => { const answer = outcome.responses[topicId]?.answers[path]; return answer?.state === 'known' ? answer.value : answer?.state; };
 const items = (outcome: AdaptiveOutcome, topicId: string, path: string) => { const answer = outcome.responses[topicId]?.answers[path]; return answer?.state === 'known' ? answer.items ?? [] : []; };
 const changedTopics = (outcome: AdaptiveOutcome) => [...new Set(outcome.updates.map(update => update.topicId))];
@@ -88,6 +88,27 @@ const cases: Case[] = [
     check: o => { const occ = items(o, 'Q11', 'occasions'); const foods = occ.map(i => String((i.answers.foods as { value?: unknown })?.value ?? '')).join(' ');
       return [...(/sandwich|salad|chips|pizza|cereal|eggs/i.test(foods) ? [`invented foods ${foods}`] : []), ...o.updates.filter(u => u.topicId !== 'Q11').map(u => `unexpected ${u.topicId}.${u.path}`),
         ...(o.updates.some(u => u.answer.state === 'negative') ? ['resistance recorded as negative'] : [])]; } },
+  // Answer specificity (SP-0.1): descriptions stay verbatim as names, purposes never become conditions, follow-up replies attach to the same item.
+  { id: 'spec-heart-pills', displayed: { topicId: 'Q08', promptId: 'Q08', targetPaths: ['medicines'] }, question: 'What medicines, vitamins, supplements, or weight-loss products do you currently use, if any? Share the names and how you take them as best you know.',
+    text: 'I take a couple of pills for my heart in the morning, and something for my sugar at night.',
+    check: o => { const names = items(o, 'Q08', 'medicines').map(i => String((i.answers.name as { value?: unknown })?.value ?? ''));
+      return [...(names.length === 2 ? [] : [`${names.length} medicines ${JSON.stringify(names)}`]), ...(names.some(n => /heart/i.test(n)) ? [] : ['heart description lost']), ...(names.some(n => /sugar/i.test(n)) ? [] : ['sugar description lost']),
+        ...(['heartDisease', 'diabetes', 'prediabetes'].filter(c => o.responses.Q06?.answers[`conditions.${c}`]).map(c => `condition from purpose ${c}`)), ...noPadding(o)]; } },
+  { id: 'spec-name-reply', displayed: { topicId: 'Q08', promptId: 'B02', targetPaths: ['medicines[m1].name'], specificity: { key: 'Q08:medicines[m1].name' } }, question: "You mentioned “pills for my heart”. Do you know the name of that medicine? It's printed on the label. It's fine to say you don't know, or that you'll bring it to your visit.",
+    prior: { Q08: { presented: true, answers: { medicines: { state: 'known', complete: false, sourceIds: ['prior'], items: [{ id: 'm1', answers: { name: { state: 'known', value: 'pills for my heart', sourceIds: ['prior'] } } }] } } } },
+    text: "Oh, it's metoprolol, 25 mg.",
+    check: o => { const meds = items(o, 'Q08', 'medicines'); const m1 = meds.find(i => i.id === 'm1');
+      return [...(meds.length === 1 ? [] : [`${meds.length} medicines (expected the same item)`]), ...(m1 && /metoprolol/i.test(String((m1.answers.name as { value?: unknown })?.value)) ? [] : ['name not on m1']), ...(m1 && /25/.test(String((m1.answers.strength as { value?: unknown })?.value)) ? [] : ['strength']), ...o.clarifications.map(c => `clarification ${c.path}:${c.reason}`), ...noPadding(o)]; } },
+  { id: 'spec-bring-reply', displayed: { topicId: 'Q08', promptId: 'B02', targetPaths: ['medicines[m1].name'], specificity: { key: 'Q08:medicines[m1].name' } }, question: "You mentioned “pills for my heart”. Do you know the name of that medicine? It's printed on the label. It's fine to say you don't know, or that you'll bring it to your visit.",
+    prior: { Q08: { presented: true, answers: { medicines: { state: 'known', complete: false, sourceIds: ['prior'], items: [{ id: 'm1', answers: { name: { state: 'known', value: 'pills for my heart', sourceIds: ['prior'] } } }] } } } },
+    text: "I'm not sure, I'll bring the bottle next time.",
+    check: o => { const meds = items(o, 'Q08', 'medicines'); const name = meds.find(i => i.id === 'm1')?.answers.name;
+      return [...(meds.length === 1 ? [] : [`${meds.length} medicines`]), ...(name?.state === 'known' && /heart/.test(String(name.value)) ? [] : [`name became ${JSON.stringify(name)}`]), ...o.clarifications.map(c => `clarification ${c.path}:${c.reason}`), ...(o.hasUnresolvedInterpretation ? ['marked unresolved'] : [])]; } },
+  { id: 'spec-family-vague', displayed: { topicId: 'Q10', promptId: 'Q10', targetPaths: ['familyHistory'] }, question: 'Has anyone in your close family had health conditions you know about?',
+    text: "Heart stuff runs on my dad's side.",
+    check: o => { const fam = items(o, 'Q10', 'familyHistory');
+      return [...(fam.length === 1 ? [] : [`${fam.length} family items`]), ...(fam.some(i => /heart/i.test(String((i.answers.condition as { value?: unknown })?.value))) ? [] : ['condition lost']),
+        ...(o.responses.Q06?.answers['conditions.heartDisease'] ? ['recorded as own condition'] : []), ...noPadding(o)]; } },
 ];
 
 const args = process.argv.slice(2).filter(arg => arg !== '--');
@@ -97,11 +118,11 @@ for (const model of models) if (!DO_MODELS.includes(model)) throw new Error(`uns
 const summary: string[] = [];
 for (const model of models) {
   let passed = 0, total = 0, latency = 0;
-  for (const testCase of cases.filter(entry => only ? only.includes(entry.id) : !entry.id.startsWith('holdout-'))) {
+  for (const testCase of cases.filter(entry => only ? only.includes(entry.id) : !entry.id.startsWith('holdout-') && !entry.id.startsWith('spec-'))) {
     const at = '2026-10-10T12:00:00.000Z';
     const current = { id: 'eval-turn', role: 'patient' as const, text: testCase.text, at };
     const sources = [...(testCase.prior ? [{ id: 'prior', role: 'patient' as const, text: 'Earlier answer.', at: '2026-10-10T11:50:00.000Z' }] : []), current];
-    const context: AdaptiveContext = { binding: { operationId: 'eval', sessionId: 'eval', patient: 'eval', scenario: 'first-intake', revision: 1, contentVersion: 'eval', snapshotDigest: 'eval' }, source: current, sources, topics, responses: testCase.prior ?? {}, displayed: testCase.displayed, displayedText: testCase.question };
+    const context: AdaptiveContext = { binding: { operationId: 'eval', sessionId: 'eval', patient: 'eval', scenario: 'first-intake', revision: 1, contentVersion: 'eval', snapshotDigest: 'eval' }, source: current, sources, topics, responses: testCase.prior ?? {}, displayed: testCase.displayed, displayedText: testCase.question, ...(testCase.id.startsWith('spec-') ? { specificity: {} } : {}) };
     const messages = buildIntakeInterpreterMessages(context);
     const started = Date.now();
     let line: string;

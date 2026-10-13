@@ -125,6 +125,8 @@ export interface Draft {
     }>;
     /** Fail-safe: the model gate could not decide on an urgent flag, so authored help copy is shown without pausing. */
     safetyBanner?: { rule: import('./safety.js').EscalationRule; sourceId: string; at: string };
+    /** Answer specificity follow-ups (SP-0.1): per recorded answer, follow-ups asked and how the patient settled it. */
+    specificity?: import('./specificity.js').SpecificityStates;
     topics: Record<string, TopicResponse>;
     requests: Record<string, {
         fingerprint: string;

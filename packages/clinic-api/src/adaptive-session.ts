@@ -4,6 +4,7 @@ import { canonicalJson, digest } from '../../clinical-core/src/domain.js';
 import { AdaptiveError, applyValidatedTurn, validateAdaptiveProposal, type AdaptiveContext, type AdaptiveOutcome } from './adaptive-validation.js';
 import { AdaptiveProposalFailure, buildAdaptiveMessages, type AdaptiveProposer, type AdaptiveProposalReceipt } from './adaptive.js';
 import { eligibleAdaptiveProbes, selectAdaptiveDialogue } from './dialogue.js';
+import { countSpecificityAsk, settleSpecificityReply } from './specificity.js';
 import type { conversation } from './conversation.js';
 import { escalation, escalationCopy, safetyVersion } from './safety.js';
 import { safetySignalSeed } from './safety-screen.js';
@@ -155,6 +156,8 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             displayed: op?.displayed ?? d.adaptive?.exchange?.prompt,
             dialogue: op?.dialogue ?? d.adaptive?.exchange?.state,
             safetyPaused: d.safety?.paused,
+            // Specificity follow-ups run with the single-call interpreter, which settles their replies.
+            ...(interpreter ? { specificity: d.specificity ?? {} } : {}),
             displayedText: content.view(d).currentPrompt?.text,
             ...(content.register.mentalHealth === 'phq4' ? { nativeRouting: content.nativeNavigation(d) } : {}),
         };
@@ -185,7 +188,10 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         const context = baseContext(next);
         // Explicit topic/detail selection is trusted UI state, never a model binding.
         if (next.activeTopic) context.dialogue = { activeTopicId: next.activeTopic };
+        const shown = next.adaptive!.exchange?.prompt?.specificity?.key;
         next.adaptive!.exchange = selectAdaptiveDialogue(context, outcome);
+        const asked = next.adaptive!.exchange.prompt?.specificity;
+        if (asked && asked.key !== shown) next.specificity = countSpecificityAsk(next.specificity ?? {}, asked);
         return next;
     }
     function initialize(d: Draft) {
@@ -217,7 +223,7 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             ? { kind: 'question' as const, topicId: fallback.topic.id, promptId: fallback.field.promptIds[0], targetPaths: [fallback.field.path], text: fallbackText, labels: [fallback.field.label], optional: false } : undefined);
         if (displayed) n.turns.push({ id: `p-${sourceId}`, role: 'assistant', text: displayed.text, at: time });
         n.turns.push({ id: sourceId, role: 'patient', text: input.text, at: time, channel: input.channel, ...(displayed ? { displayedPromptId: displayed.promptId } : {}) });
-        const op: AdaptiveOperation = { id, requestId: input.requestId, sourceId, fingerprint, status: 'accepted', acceptedAt: time, updatedAt: time, binding: { operationId: id, sessionId: n.id, patient: n.patient, scenario: n.scenario, revision: d.revision + 1, contentVersion: `${content.register.provenance.version}.${content.register.mentalHealth}`, snapshotDigest: '' }, ...(displayed ? { displayed: { topicId: displayed.topicId, promptId: displayed.promptId, targetPaths: [...displayed.targetPaths], ...(displayed.wording ? { wording: structuredClone(displayed.wording) } : {}) } } : {}), dialogue: structuredClone(n.adaptive!.exchange?.state) };
+        const op: AdaptiveOperation = { id, requestId: input.requestId, sourceId, fingerprint, status: 'accepted', acceptedAt: time, updatedAt: time, binding: { operationId: id, sessionId: n.id, patient: n.patient, scenario: n.scenario, revision: d.revision + 1, contentVersion: `${content.register.provenance.version}.${content.register.mentalHealth}`, snapshotDigest: '' }, ...(displayed ? { displayed: { topicId: displayed.topicId, promptId: displayed.promptId, targetPaths: [...displayed.targetPaths], ...(displayed.wording ? { wording: structuredClone(displayed.wording) } : {}), ...('specificity' in displayed && displayed.specificity ? { specificity: structuredClone(displayed.specificity) } : {}) } } : {}), dialogue: structuredClone(n.adaptive!.exchange?.state) };
         const predecessor = Object.values(d.adaptive!.operations).find(candidate => pending(candidate));
         if (predecessor) { op.queuedAfter = predecessor.id; op.queuedWaiting = true; }
         n.adaptive!.operations[id] = op;
@@ -368,7 +374,10 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             Object.assign(result, { updates: outcome.updates, provenance: outcome.provenance, clarifications: outcome.clarifications, ...(outcome.coveredCandidates ? { coveredCandidates: outcome.coveredCandidates } : {}), ...(outcome.unresolvedQuestions ? { unresolvedQuestions: outcome.unresolvedQuestions } : {}), ...(outcome.unmapped ? { unmapped: outcome.unmapped } : {}), ...(outcome.rejectedCandidates ? { rejectedCandidates: outcome.rejectedCandidates } : {}), hasUnresolvedInterpretation: outcome.hasUnresolvedInterpretation, resultDigest: await digest(outcome) });
             content.synchronize(n);
             outcome = { ...outcome, responses: n.topics };
-            const dialogueContext = { ...context, nativeRouting: content.nativeNavigation(n) };
+            // A reply to a specificity follow-up that added no new detail may still settle it ("I'll bring the bottle", "yes").
+            const mark = op.displayed?.specificity;
+            if (interpreter && mark) n.specificity = settleSpecificityReply(n.specificity ?? {}, mark, { sourceId: op.sourceId, text: context.source.text, updatedPath: outcome.updates.some(update => update.topicId === op.displayed!.topicId && op.displayed!.targetPaths.includes(update.path)) });
+            const dialogueContext = { ...context, nativeRouting: content.nativeNavigation(n), ...(interpreter ? { specificity: n.specificity ?? {} } : {}) };
             n.adaptive!.exchange = selectAdaptiveDialogue(dialogueContext, outcome);
             // Interpreter path: never show the same question a third time, in a short window (A/B cycles) or for the same topic all session.
             // Park that topic for now and continue with others; its gaps stay visible in review.
@@ -389,6 +398,8 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
                 if (!next || !text || /^MH0[1-4]$/.test(next.field.path) || n.turns.filter(turn => turn.role === 'assistant' && turn.text === text).length < 2) break;
                 n.adaptive!.parkedTopicIds = [...new Set([...(n.adaptive!.parkedTopicIds ?? []), next.topic.id])];
             }
+            const asked = n.adaptive!.exchange.prompt?.specificity;
+            if (asked) n.specificity = countSpecificityAsk(n.specificity ?? {}, asked);
             // A guarded acknowledgement precedes the next AUTHORED question; approved replies always win.
             if (outcome.acknowledgement && !n.adaptive!.exchange.reply && n.adaptive!.exchange.prompt && n.adaptive!.exchange.status === 'question')
                 n.adaptive!.exchange.reply = { id: `ack-${outcome.sourceId}`, text: outcome.acknowledgement };

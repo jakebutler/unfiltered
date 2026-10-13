@@ -48,7 +48,8 @@ it('accepts one exact idempotent queued source after durable early reply and del
   // Deliberately do not dispatch the ready child in this test; the browser owns that initial attempt.
 });
 it('unknown predecessor keeps queued words saved; explicit Stop releases review/guided without redispatch or source loss', async () => {
-  const f = fixture(20), first = await f.accept('Improve my energy.'), running = f.api.interpret(f.store, first.operation.id);
+  // The predecessor must time out only after the queued accept saves; 20 ms raced that accept under parallel load.
+  const f = fixture(200), first = await f.accept('Improve my energy.'), running = f.api.interpret(f.store, first.operation.id);
   await f.reply.promise; const queued = await f.accept('My knee hurts.'); await running;
   expect(f.current().draft.adaptive!.operations[first.operation.id].status).toBe('unresolved');
   expect(f.current().draft.adaptive!.operations[queued.operation.id].queuedWaiting).toBe(true);

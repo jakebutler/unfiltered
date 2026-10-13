@@ -15,6 +15,8 @@ export interface DisplayedPrompt {
   topicId: string; promptId: string; targetPaths: readonly string[];
   /** Exact scoped copy has its own proposed wording provenance; clinical requirements are unchanged. */
   wording?: { version: 'S2.scoped.2'; status: 'proposed-detail'; sourcePromptId: string };
+  /** An authored specificity follow-up (SP-0.1) about this one recorded answer. */
+  specificity?: import('./specificity.js').SpecificityPromptMark;
 }
 export interface DialogueState {
   activeTopicId?: string; suspended?: DisplayedPrompt;
@@ -37,6 +39,8 @@ export interface AdaptiveContext {
   displayed?: DisplayedPrompt;
   dialogue?: DialogueState;
   safetyPaused?: boolean;
+  /** Specificity follow-up state; when present, authored follow-ups about non-specific answers become eligible. */
+  specificity?: import('./specificity.js').SpecificityStates;
   /** Server-selected prototype evidence profile, never a provider/client flag. */
   sourceQuoteProtocol?: 'unique-anchor-v1';
   displayedText?: string;

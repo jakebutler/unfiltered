@@ -6,6 +6,8 @@ import type { Fetch } from '../../clinical-core/src/transport.js';
 import { AdaptiveProposalFailure, type AdaptiveProposalReceipt } from './adaptive.js';
 import { activateAdaptiveBranch, AdaptiveError, adaptiveSlot, conditionalReady, parseExplicitHeight, type AdaptiveClarification, type AdaptiveContext, type AdaptiveOutcome, type AdaptiveRejectedCandidate, type EvidenceSpan, type ValidatedAct } from './adaptive-validation.js';
 import { escalation } from './safety.js';
+import { scanReference } from '../../clinic-reference/src/index.js';
+import { specificityTerminal } from '../../clinic-content/src/specificity.js';
 
 /**
  * Simple single-call intake interpreter (protocol intake-interpreter-v1).
@@ -53,6 +55,8 @@ RULES
 13. Never diagnose or give advice. Never fill MH01-MH04 or any field not in the FIELD CATALOG.
 14. ack (optional): one short neutral sentence saying what you noted (max 20 words). No advice, no opinion, no question.
 15. Patients often volunteer things beyond the current question. Record each one in whichever catalog field fits best (any topic), e.g. a concern or kind of help they want goes in the matching concern/request field.
+16. A medicine the patient describes without naming it ("some pills for my heart", "my water pill", "the shot") is still a medicine item: put their description in name, verbatim. Never record a condition only because of what a medicine is for ("pills for my heart" is not heart disease).
+17. REFERENCE (when present) lists words in this message that match a medicine or condition name list. Use it only to tell medicine names from condition names. Never add a name the patient did not say, never correct their spelling, and never use it to choose a diagnosis.
 
 OUTPUT exactly one JSON object, no markdown:
 {"facts":[{"topic":"Q04","field":"height.value","state":"known","value":"5 ft 8 in","quote":"I'm 5'8\\"","corrects":null}],
@@ -166,6 +170,9 @@ function catalogText(context: AdaptiveContext): string {
   for (const item of known.items) if (!known.lines.some(line => line.topicId === item.topicId && line.path.startsWith(`${item.path}[${item.id}].`))) out.push(`${item.topicId} ${item.path}[${item.id}] (item with no details yet)`);
   const stopped = context.topics.filter(topic => context.responses[topic.id]?.stopped).map(topic => topic.id);
   if (stopped.length) out.push(`Topics the patient stopped (do not extract): ${stopped.join(', ')}`);
+  // Retrieve-then-interpret (D5): offline exact name matches in this message only; no patient text leaves the server.
+  const reference = scanReference(context.source.text);
+  if (reference.length) out.push('', 'REFERENCE (exact name matches in this message)', ...reference.map(entry => `"${entry.mention}" = ${entry.domain} name${entry.display.toLowerCase() !== entry.mention ? ` (${entry.display})` : ''}`));
   return out.join('\n');
 }
 
@@ -329,6 +336,8 @@ const conditionNames: Record<string, RegExp> = {
   sleepApnea: /\b(?:sleep )?apn[oe]+a\b/i, liver: /\bliver\b/i, kidney: /\bkidney\b/i, joint: /\b(?:arthritis|joint)\b/i,
   thyroidHormone: /\b(?:thyroid|hormone)\b/i, digestive: /\b(?:digestive|crohn'?s|colitis|ibs|reflux|celiac|coeliac|gerd)\b/i,
 };
+/** A medicine described by its purpose: "pills for my heart", "something for my blood pressure", "arthritis meds". */
+const medicinePurpose = /\b(?:pills?|meds?|medicines?|medications?|tablets?|capsules?|drugs?|shots?|injections?|prescriptions?|inhalers?|something|stuff)\b[^.;,]{0,12}?\b(?:for|to help(?: with)?|to treat|to control|to lower)\b[^.;,]*|\b[\w']+(?: [\w']+)? (?:pills?|meds?|medicines?|medications?|tablets?|drugs?|shots?)\b/gi;
 const smallNumbers: Record<string, number> = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11 };
 const unitAliases: Record<string, string> = { pound: 'lb', pounds: 'lb', lb: 'lb', lbs: 'lb', kilogram: 'kg', kilograms: 'kg', kilo: 'kg', kilos: 'kg', kg: 'kg', kgs: 'kg', stone: 'st', stones: 'st', st: 'st', centimetre: 'cm', centimetres: 'cm', centimeter: 'cm', centimeters: 'cm', cm: 'cm', metre: 'm', metres: 'm', meter: 'm', meters: 'm', m: 'm', inch: 'in', inches: 'in', in: 'in', foot: 'ft', feet: 'ft', ft: 'ft', 'ft-in': 'ft-in' };
 const stopWords = new Set(['the', 'and', 'with', 'that', 'this', 'have', 'from', 'about', 'they', 'them', 'their', 'would', 'like', 'into', 'your', 'what', 'when', 'will', 'been', 'were', 'some', 'more', 'very', 'just', 'also', 'then', 'than', 'because', 'for', 'but', 'not', 'was', 'are', 'has', 'had', 'its', "it's", "i'm", 'patient', 'reports', 'reported', 'states', 'said', 'says', 'wants', 'want', 'currently', 'takes', 'take']);
@@ -492,8 +501,11 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     const asked = norm(sentence).trim();
     if (['presence', 'choice'].includes(definition.kind) && (clause.includes('?') || asked.endsWith('?') && /^(?:do|does|did|can|could|should|would|will|is|am|are|have|has|what|why|how|when|where|which|who)\b/.test(asked))) return 'question-not-answer';
     if (conditionKey) {
-      const mention = (conditionNames[conditionKey]?.test(conditionKey === 'diabetes' ? quote.replace(/\bpre[- ]?diabet(?:es|ic)\b/gi, '') : quote)) ?? false;
+      const named = (words: string) => conditionNames[conditionKey]?.test(conditionKey === 'diabetes' ? words.replace(/\bpre[- ]?diabet(?:es|ic)\b/gi, '') : words) ?? false;
+      const mention = named(quote);
       if (!mention && !(scopedSingle && quote.split(/\s+/).length <= 6)) return 'condition-not-named';
+      // "Pills for my heart" or "arthritis meds" says what a medicine is for, not that the patient was told they have the condition.
+      if (mention && candidate.state !== 'negative' && !named(quote.replace(medicinePurpose, ' '))) return 'condition-from-medicine-purpose';
     }
     const ownCondition = candidate.topicId === 'Q06' && (conditionKey || /^reportedConditions\[[^\]]+\]\.term$/.test(candidate.path));
     if (ownCondition && candidate.state !== 'negative' && (relativeWords.test(clause) || thirdPerson.test(clause)) && !firstPerson.test(clause)) return 'relative-subject';
@@ -587,6 +599,8 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     // "Keep the first thing I said" refers to an alternative; it is never itself clinical content.
     if (answer.state === 'known' && typeof answer.value === 'string' && pointerAnswer.test(answer.value)) { clarify('ambiguous-value'); return false; }
     const asked = context.displayed?.topicId === t.id && context.displayed.promptId !== '__clarify-record' && (context.displayed.targetPaths ?? []).includes(candidate.path);
+    // "I don't know" to a specificity follow-up keeps the description already given; the session records the reply.
+    if (asked && context.displayed?.specificity && prior?.state === 'known' && answer.state !== 'known') return false;
     // Two values for one field in the same message with a correction cue between them: the later one replaces the earlier.
     const earlier = prior?.state === 'known' && prior.sourceIds.includes(sourceId) ? outcome.provenance.filter(entry => entry.topicId === t.id && entry.path === candidate.path).flatMap(entry => entry.evidence).filter(span => span.sourceId === sourceId) : [];
     const order = earlier.length ? selfCorrection(earlier, spans) : undefined;
@@ -599,7 +613,8 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     else if (prior && sameAnswer(prior, answer)) answer = { ...answer, sourceIds: [...new Set([...(prior.sourceIds ?? []), ...(answer.sourceIds ?? [])])] } as SlotAnswer;
     // Several parts of one message for the same text field ("more energy, and to stop eating at night") are one answer, not a conflict.
     // A follow-up that asks for more about an answered text field gets an elaboration, not a contradiction.
-    else if (prior?.state === 'known' && answer.state === 'known' && definition.kind === 'text' && (prior.sourceIds.includes(sourceId) || asked && !candidate.corrects) && typeof prior.value === 'string' && typeof answer.value === 'string')
+    // A reply to a specificity follow-up adds the detail it asked for, even when the model labels it a correction.
+    else if (prior?.state === 'known' && answer.state === 'known' && definition.kind === 'text' && (prior.sourceIds.includes(sourceId) || asked && (!candidate.corrects || !!context.displayed?.specificity)) && typeof prior.value === 'string' && typeof answer.value === 'string')
       answer = { ...answer, value: norm(prior.value).includes(norm(answer.value)) ? prior.value : `${prior.value}; ${answer.value}` } as SlotAnswer;
     // Answering a field already marked conflicting is the patient's clarification: it resolves the conflict, keeping both earlier sources on record.
     else if (prior?.state === 'conflicting') correctsSourceIds = [...(prior.sourceIds ?? [])];
@@ -813,8 +828,10 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
   if (ack && ack.length <= 160 && !ackForbidden.test(ack) && ackGrounded(ack, sourceText) && outcome.updates.length && !outcome.clarifications.length && !unplaced) outcome.acknowledgement = ack;
 
   if (rejected.length) outcome.rejectedCandidates = rejected.slice(0, 64);
+  // "I'll bring the bottle" or "yes" to a specificity follow-up settles it in the session; it is not an unplaced answer.
+  const followUp = context.displayed?.specificity, settlesFollowUp = !!followUp && (!!followUp.spelling || Object.values(specificityTerminal).some(pattern => pattern.test(sourceText)));
   outcome.hasUnresolvedInterpretation = !!outcome.unresolvedQuestions?.length || outcome.clarifications.length > 0 || unplaced
-    || outcome.updates.length === 0 && !outcome.acts.some(act => ['question', 'move-on', 'topic-switch'].includes(act.kind));
+    || outcome.updates.length === 0 && !settlesFollowUp && !outcome.acts.some(act => ['question', 'move-on', 'topic-switch'].includes(act.kind));
   return outcome;
 }
 

@@ -1,6 +1,20 @@
 # Plan: safety gate, voice robustness, and answer specificity
 
 Status: **approved 2026-10-12** (decisions recorded in §5; D2 changed by the reviewer, see §2 V2). Synthetic demo only; no HIPAA claims.
+
+Progress (2026-10-12):
+- **P1 (safety): done**, commit 65f053f.
+- **P2 (voice V1): done**, commit 91868c9.
+- **P3a + P3b (specificity): done in one pass.** All 22 contracts across Q02–Q19 shipped together.
+  - **Source change, for a public repository:**
+    - RxClass and ATC classes are not used. They carry WHO licence limits, and D6 needs no classes.
+    - The Clinical Tables conditions list is not used, because it has no explicit redistribution grant.
+    - Conditions are instead our own authored terms, validated against CMS ICD-10-CM. See `packages/clinic-reference/SOURCES.md`.
+  - **Gate:**
+    - 344-answer deterministic corpus. Vague recall must be at least 95%, and needless follow-ups at most 5%.
+    - Two holdouts were labelled before running. The first scored 31/40 and drove general lexicon rules. The second scored 45/47 (95.7%) on first run.
+    - 6 bounded live interpreter calls (qwen3.8-max). They found and fixed two real defects: a named reply raised a conflict, and "I'll bring the bottle" was marked unresolved.
+- **P4 and P5: next.** Voice article review triage: `VOICE-ARTICLE-REVIEW-2026-10-12.md`.
 Constraints carried forward:
 - Reasoning runs on DigitalOcean inference only.
 - Authored questions only; the agent never writes clinical wording.

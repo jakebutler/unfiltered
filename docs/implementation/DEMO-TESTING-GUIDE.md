@@ -74,6 +74,21 @@ Paste these when the matching question comes up, or out of order, to test volunt
   - Any other facts in the same message are still captured.
 - Compare with "Can we skip this one?", which is a plain skip: staff see "skipped for now".
 
+### Vague answers get one gentle follow-up (natural conversation)
+The same rule applies to every field where a real answer can still be vague: medicine names, conditions, family history, procedures, allergies, programs tried, clinicians, timing, amounts and how often. The follow-up quotes your own words. If the detail never comes, the answer is kept as you said it, the review lists it as "needs detail", and the intake stays partial.
+
+Naming follow-ups ("which medicine?") come when the conversation reaches that topic. Timing, amount and frequency follow-ups come after the topic's main questions.
+
+- **Say**, on the medicines question: "I take some pills for my heart in the morning."
+- **Expect:** "You mentioned “pills for my heart”. Do you know the name of that medicine? …"
+  - **Reply** "It's metoprolol, 25 mg." Expect the name to become "pills for my heart; metoprolol", the strength 25 mg, and a matching RxNorm code on the detail. You won't be asked to choose between the two statements.
+  - **Or reply** "I'll bring the bottle to my visit." Expect no repeat of that question. The review shows "Name of the medicine (patient will bring or check it)".
+  - **Or reply** "I don't know." The description is kept, not overwritten, and nothing is flagged as conflicting.
+- **Say:** "I take metfromin." **Expect:** "Did you mean “metformin”? …" asked once. "Yes" attaches the code. Your spelling stays as you typed it.
+- **Say**, on family history: "Heart stuff runs on my dad's side." **Expect:** a family-history item, not your own heart condition, and then "You mentioned “heart stuff”. Do you know what condition it was …"
+- **Say:** "I take arthritis meds." **Expect:** a medicine, never a recorded arthritis diagnosis.
+- **Limits:** at most two follow-ups per answer and four per topic. You'll never get a suggested drug or diagnosis, only a spelling check of your own word.
+
 ### Not knowing
 - **Say:** "I honestly can't remember when I last weighed myself."
 - **Expect:** recorded as "Not sure / don't know". It is not invented, and not treated as a refusal.

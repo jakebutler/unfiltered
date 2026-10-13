@@ -81,3 +81,6 @@ worker-configuration.d.ts
 # Local qualification/extraction build outputs
 .extraction-*-build/
 .stream-*-build/
+
+# Offline reference-data build cache (scripts/reference/build-reference.mjs)
+/.cache/

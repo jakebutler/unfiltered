@@ -535,3 +535,52 @@ describe('intake-interpreter-v1 list identity and cycle guard', () => {
     expect(shown.length).toBeGreaterThan(30);
   }, 60000);
 });
+
+describe('intake-interpreter-v1 answer specificity', () => {
+  it('a medicine described by its purpose is a medicine, never the condition it is for', () => {
+    const ctx = context('I take some pills for my heart and arthritis meds.', ['Q06', 'Q08']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [
+      { topic: 'Q06', field: 'conditions.heartDisease', state: 'known', value: true, quote: 'pills for my heart' },
+      { topic: 'Q06', field: 'conditions.joint', state: 'known', value: true, quote: 'arthritis meds' },
+    ], items: [
+      { topic: 'Q08', list: 'medicines', existing: null, fields: [{ field: 'name', state: 'known', value: 'pills for my heart', quote: 'pills for my heart' }] },
+      { topic: 'Q08', list: 'medicines', existing: null, fields: [{ field: 'name', state: 'known', value: 'arthritis meds', quote: 'arthritis meds' }] },
+    ] }, ctx);
+    expect(answers(outcome, 'Q06')['conditions.heartDisease']).toBeUndefined();
+    expect(answers(outcome, 'Q06')['conditions.joint']).toBeUndefined();
+    expect(outcome.rejectedCandidates?.map(candidate => candidate.reason)).toEqual(['condition-from-medicine-purpose', 'condition-from-medicine-purpose']);
+    expect(itemsOf(outcome, 'Q08', 'medicines').map(item => item.answers.name)).toMatchObject([{ value: 'pills for my heart' }, { value: 'arthritis meds' }]);
+  });
+  it('a condition named outright next to a medicine purpose is still recorded', () => {
+    const ctx = context('I have heart disease, so I take pills for my heart.', ['Q06']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q06', field: 'conditions.heartDisease', state: 'known', value: true, quote: 'I have heart disease' }] }, ctx);
+    expect(answers(outcome, 'Q06')['conditions.heartDisease']).toMatchObject({ state: 'known' });
+  });
+  it('the prompt carries a REFERENCE block of exact names in this message only', () => {
+    const [system] = buildIntakeInterpreterMessages(context('I take Ozempic and metformin for type 2 diabetes. Lots of water too.', ['Q08']));
+    const text = String(system!.content);
+    expect(text).toContain('REFERENCE (exact name matches in this message)\n"ozempic" = medication name\n"metformin" = medication name\n"type 2 diabetes" = condition name (Type 2 diabetes mellitus without complications)');
+    expect(text).not.toContain('"water"');
+    expect(String(buildIntakeInterpreterMessages(context('I walk every day.', ['Q14']))[0]!.content)).not.toContain('REFERENCE (exact');
+  });
+  const followUp = (text: string) => {
+    const ctx = context(text, ['Q08']);
+    ctx.sources = [{ id: 'prior', role: 'patient', text: 'I take some pills for my heart.', at: '2026-10-09T11:00:00.000Z' }, ...ctx.sources];
+    ctx.responses = { Q08: { presented: true, answers: { medicines: { state: 'known', complete: false, sourceIds: ['prior'], items: [{ id: 'm1', answers: { name: { state: 'known', value: 'pills for my heart', sourceIds: ['prior'] } } }] } } } };
+    ctx.displayed = { topicId: 'Q08', promptId: 'B02', targetPaths: ['medicines[m1].name'], specificity: { key: 'Q08:medicines[m1].name' } };
+    return ctx;
+  };
+  it('a named reply to a follow-up adds to the description even when the model calls it a correction (recorded live output)', () => {
+    const ctx = followUp("Oh, it's metoprolol, 25 mg.");
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q08', field: 'medicines[m1].name', state: 'known', value: 'metoprolol', quote: "it's metoprolol", corrects: 1 }],
+      items: [{ topic: 'Q08', list: 'medicines', existing: 'm1', fields: [{ field: 'name', state: 'known', value: 'metoprolol', quote: "it's metoprolol" }, { field: 'strength', state: 'known', value: '25 mg', quote: '25 mg' }] }] }, ctx);
+    expect(outcome.clarifications).toEqual([]);
+    expect(itemsOf(outcome, 'Q08', 'medicines')[0]!.answers).toMatchObject({ name: { state: 'known', value: 'pills for my heart; metoprolol' }, strength: { value: '25 mg' } });
+  });
+  it('"I\'ll bring the bottle" to a follow-up keeps the description and is not an unresolved turn (recorded live output)', () => {
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q08', field: 'medicines[m1].name', state: 'unknown', value: null, quote: "I'm not sure" }] }, followUp("I'm not sure, I'll bring the bottle next time."));
+    expect(outcome.updates).toEqual([]);
+    expect(outcome.clarifications).toEqual([]);
+    expect(outcome.hasUnresolvedInterpretation).toBe(false);
+  });
+});

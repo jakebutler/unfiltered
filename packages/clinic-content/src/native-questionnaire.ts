@@ -6,6 +6,10 @@ import {
   type ClinicContent,
 } from "./register.js";
 import { escalation, escalationCopy, safetyDefinition } from "./safety.js";
+import { specificityDefinition } from "./specificity.js";
+import { referenceRelease } from "../../clinic-reference/src/index.js";
+/** Answer specificity contracts with the exact offline reference releases they consult (D1). */
+const specificityContract = { ...specificityDefinition, reference: referenceRelease };
 import { scenarios } from "./scenarios.js";
 import { conditionBranches } from "./branches.js";
 import {
@@ -1498,6 +1502,7 @@ export function getNativeQuestionnaireDefinition(): Promise<NativeQuestionnaireD
       aliases: nativeAliases,
       stopSemantics,
       safetyDefinition,
+      specificityContract,
       sourceRecognition: nativeSourceRecognition,
       items,
       mapperContract: "typed-state-repeats-history-v4",
@@ -1549,6 +1554,10 @@ export function getNativeQuestionnaireDefinition(): Promise<NativeQuestionnaireD
           {
             url: `${NATIVE_EXTENSION}safety-contract`,
             valueString: nativeCanonicalJson(safetyDefinition),
+          },
+          {
+            url: `${NATIVE_EXTENSION}specificity-contract`,
+            valueString: nativeCanonicalJson(specificityContract),
           },
         ],
       },

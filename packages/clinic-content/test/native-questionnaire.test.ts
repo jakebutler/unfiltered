@@ -25,8 +25,11 @@ describe("fixed authored native Questionnaire", () => {
   it("compiles every fixed prompt with unique reachable acyclic link IDs and binds all semantics", async () => {
     const d = await getNativeQuestionnaireDefinition();
     expect(d.binding.digest).toMatch(/^[a-f0-9]{64}$/);
-    // Pinned; extraction-only slot hints must not change it. E-0.2 safety (D1 re-qualification, published with stage8).
-    expect(d.binding.digest).toBe("42b52a96007c176179943b57edcad9a3b39b3e35002f0f123e124b9e9ba65902");
+    // Pinned; extraction-only slot hints must not change it. E-0.2 safety and SP-0.1 specificity with its reference
+    // releases (D1 re-qualification, published with stage8).
+    expect(d.binding.digest).toBe("442fa9ed9da87ec6895720a7d086e2cc41b036a6a9c074df1111cd46088bd1a6");
+    const specificity = JSON.parse(d.questionnaire.extension!.find((e) => e.url.endsWith("specificity-contract"))!.valueString!);
+    expect(specificity).toMatchObject({ version: "SP-0.1", budget: { perField: 2, perTopic: 4, perTurn: 1 }, reference: { medications: "rxnorm-prescribe-2026-10-05", conditions: "CT-0.1+icd10cm-FY2027" } });
     expect(d.questionnaire.url).toBe(d.binding.canonical);
     validateNativeDefinitionStructure(d.questionnaire.item);
     expect(d.promptTargets["MH.unscored"]).toBeUndefined();
