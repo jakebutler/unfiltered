@@ -22,11 +22,11 @@ function result(status = 'accepted', revision = 5): AdaptiveTurnResult {
 }
 function harness(speech = true) {
   const timer = clock(); let context: ConversationVoiceContext = { scope: initial, eligible: true, blocked: false, ...(speech ? { speech: { id: 'Q01', text: 'Question' } } : {}) };
-  const ports = { context: () => context, startCapture: vi.fn(), finishCapture: vi.fn(), stopCapture: vi.fn(), stopPlayback: vi.fn(), speak: vi.fn(), save: vi.fn(async () => result()), interpret: vi.fn(async () => result('applied', 7)), changed: vi.fn() };
+  const ports = { context: () => context, startCapture: vi.fn(), finishCapture: vi.fn(), stopCapture: vi.fn(), stopPlayback: vi.fn(), speak: vi.fn(), save: vi.fn(async () => result()), interpret: vi.fn(async () => result('applied', 7)), restoreDraft: vi.fn(), changed: vi.fn() };
   const controller = new VoiceConversation(ports, timer);
   const ready = () => controller.event({ type: 'ready', scope: context.scope! });
   const final = (text = 'I take five milligrams', speechFinal = true) => controller.event({ type: 'recognition', scope: context.scope!, segment: { start: 0, duration: 1, text, isFinal: true, speechFinal }, interim: '' });
-  const completed = (clean = true, text = 'I take five milligrams') => controller.event({ type: 'completed', scope: context.scope!, text, clean });
+  const completed = (clean = true, text = 'I take five milligrams', extra: { utterance?: string; prefix?: string } = {}) => controller.event({ type: 'completed', scope: context.scope!, text, clean, ...extra });
   return { timer, ports, controller, ready, final, completed, setContext(value: ConversationVoiceContext) { context = value; } };
 }
 
@@ -123,6 +123,17 @@ describe('endpoint cues and spoken pause commands', () => {
   it('a sentence that merely starts with stop is saved normally', async () => {
     const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(600); h.completed(true, 'stop taking aspirin last week'); await tick();
     expect(h.ports.save).toHaveBeenCalledWith('stop taking aspirin last week', initial); expect(h.controller.state.status).toBe('thinking');
+  });
+  it('a spoken pause after typed words pauses, keeps the typed draft, and never saves the command', async () => {
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(600);
+    h.completed(true, 'Earlier typed words. Pause.', { utterance: 'Pause.', prefix: 'Earlier typed words.' }); await tick();
+    expect(h.controller.state.status).toBe('paused'); expect(h.controller.state.message).toBe("Voice paused. Resume when you’re ready, or keep typing.");
+    expect(h.ports.restoreDraft).toHaveBeenCalledExactlyOnceWith('Earlier typed words.'); expect(h.ports.save).not.toHaveBeenCalled();
+  });
+  it('a sentence saved from a recording with an empty prefix is not treated as a command or restored', async () => {
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(600);
+    h.completed(true, 'stop taking aspirin', { utterance: 'stop taking aspirin', prefix: '' }); await tick();
+    expect(h.ports.save).toHaveBeenCalledWith('stop taking aspirin', initial); expect(h.ports.restoreDraft).not.toHaveBeenCalled();
   });
 });
 

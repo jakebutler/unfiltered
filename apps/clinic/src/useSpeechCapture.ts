@@ -216,7 +216,7 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
             settle(capture); setInterim(''); setSlow(false);
             setStatus(completed ? 'review' : 'interrupted');
             setMessage(!capture.draft.text && completed ? noWordsNotice : capture.notice ?? (completed ? 'Check and edit the transcript below, especially names, amounts, units and “not”. Then send your reviewed answer.' : 'Recording ended. Check the transcript carefully; the last words may be missing. Nothing has been sent as an answer.'));
-            if (capture.conversation) callbacks.current.onEvent?.({ type: 'completed', scope, text, clean });
+            if (capture.conversation) callbacks.current.onEvent?.({ type: 'completed', scope, text, clean, utterance: capture.draft.text, prefix: base });
           } else if (value.type === 'error') {
             if ('retained' in value && value.retained === true) keep(capture);
             else if ('fallback' in value && value.fallback === true) { callbacks.current.onFallback?.(); end('Hands-free voice could not connect. Nothing was lost: dictate one answer instead, or keep typing.'); }

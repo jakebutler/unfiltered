@@ -9,10 +9,10 @@ const sessionId = '6f1f3d3e-2d4b-4c1e-9a53-3c1b2a4d5e6f';
 const requestId = '0b8f6a4e-7c2d-4e91-8f3a-1d2c3b4a5e6f';
 const body = { requestId, sessionId, promptId: 'prompt-a', expectedRevision: 3 };
 const accessToken = 'synthetic.access-token_value-123';
-function setup() {
+function setup(grantImpl: (...args: never[]) => Promise<{ accessToken: string; expiresIn: number }> = async () => ({ accessToken, expiresIn: 30 })) {
   const authenticate = vi.fn(async () => ({ sessionId }));
   const token = vi.fn(async () => ({ sessionId, promptId: 'prompt-a', revision: 3 }));
-  const grant = vi.fn(async () => ({ accessToken, expiresIn: 30 }));
+  const grant = vi.fn(grantImpl);
   const handler = createSpeechTokenHandler({ access: { authenticate, token } as never, grant: grant as never });
   return { authenticate, token, grant, handler };
 }
@@ -79,8 +79,11 @@ describe('hosted speech token route', () => {
     expect(response?.status).toBe(200);
     expect(response?.headers.get('cache-control')).toBe('no-store');
     expect(await response?.json()).toEqual({ accessToken, expiresIn: 30 });
-    expect(token).toHaveBeenCalledExactlyOnceWith(expect.any(Request), { sessionId, promptId: 'prompt-a', expectedRevision: 3, requestId });
-    expect(grant).toHaveBeenCalledExactlyOnceWith({ sessionId, requestId }, expect.anything());
+    // Authorized before the grant and again after it; the grant receives the same check as its recheck.
+    expect(token).toHaveBeenCalledTimes(2);
+    expect(token).toHaveBeenNthCalledWith(1, expect.any(Request), { sessionId, promptId: 'prompt-a', expectedRevision: 3, requestId });
+    expect(token).toHaveBeenNthCalledWith(2, expect.any(Request), { sessionId, promptId: 'prompt-a', expectedRevision: 3, requestId });
+    expect(grant).toHaveBeenCalledExactlyOnceWith({ sessionId, requestId }, expect.anything(), expect.any(Function));
   });
   it('refuses an unauthenticated caller before any body read or scope check', async () => {
     const { handler, authenticate, token, grant } = setup();
@@ -95,6 +98,28 @@ describe('hosted speech token route', () => {
     expect(response?.status).toBe(409);
     expect(await response?.json()).toEqual({ error: { code: 'stale-prompt', message: expect.any(String), retryable: false } });
     expect(grant).not.toHaveBeenCalled();
+  });
+  it('refuses with 409 and no token when the conversation changes while the grant is running', async () => {
+    const recheckingGrant = async (_input: unknown, _signal?: unknown, recheck?: () => Promise<unknown>) => { await recheck?.(); return { accessToken: 'synthetic-token-abcdefghijklmnop', expiresIn: 30 }; };
+    const { handler, token } = setup(recheckingGrant);
+    token.mockResolvedValueOnce({ sessionId, promptId: 'prompt-a', revision: 3 }).mockRejectedValueOnce(new ApiFailure('speech-conversation-required', 409));
+    const response = await handler.handle(mint());
+    expect(response?.status).toBe(409);
+    const text = await response?.text();
+    expect(JSON.parse(text ?? '')).toEqual({ error: { code: 'speech-conversation-required', message: expect.any(String), retryable: false } });
+    expect(text).not.toContain('accessToken'); expect(text).not.toContain('synthetic-token-abcdefghijklmnop');
+    expect(token).toHaveBeenCalledTimes(2);
+  });
+  it('refuses with 409 and no token when the final post-grant check rejects', async () => {
+    const recheckingGrant = async (_input: unknown, _signal?: unknown, recheck?: () => Promise<unknown>) => { await recheck?.(); return { accessToken: 'synthetic-token-abcdefghijklmnop', expiresIn: 30 }; };
+    const { handler, token, grant } = setup(recheckingGrant);
+    token.mockResolvedValueOnce({ sessionId, promptId: 'prompt-a', revision: 3 }).mockResolvedValueOnce({ sessionId, promptId: 'prompt-a', revision: 3 }).mockRejectedValueOnce(new ApiFailure('stale-prompt', 409));
+    const response = await handler.handle(mint());
+    expect(response?.status).toBe(409);
+    const text = await response?.text();
+    expect(JSON.parse(text ?? '')).toMatchObject({ error: { code: 'stale-prompt', retryable: false } });
+    expect(text).not.toContain('accessToken'); expect(text).not.toContain('synthetic-token-abcdefghijklmnop');
+    expect(token).toHaveBeenCalledTimes(3); expect(grant).toHaveBeenCalledOnce();
   });
   it('maps a busy or exhausted provider budget to 429 speech-budget', async () => {
     const { handler, grant } = setup();

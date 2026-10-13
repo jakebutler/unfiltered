@@ -102,6 +102,37 @@ describe('admitted, bounded Deepgram token grant', () => {
     await expect(grant({ sessionId: 'session-a', requestId })).rejects.toThrow('provider-busy');
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it('settles interrupted and never calls the provider when the caller cancels while admission is pending', async () => {
+    const settle = vi.fn(), caller = new AbortController();
+    let admit!: () => void;
+    const reserve = vi.fn(() => new Promise<SpeechLease>(resolve => { admit = () => resolve({ settle }); }));
+    const { grant, fetcher } = setup({ reserve, settle });
+    const pending = grant({ sessionId: 'session-a', requestId }, caller.signal);
+    caller.abort();
+    admit();
+    await expect(pending).rejects.toMatchObject({ name: 'SpeechError', code: 'interrupted' });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(settle).toHaveBeenCalledExactlyOnceWith('interrupted');
+  });
+  it('fails closed when the recheck after admission rejects: no provider call, settled failed, same error', async () => {
+    const settle = vi.fn(), failure = new Error('paused');
+    const recheck = vi.fn(async () => { throw failure; });
+    const { grant, reserve, fetcher } = setup({ settle });
+    await expect(grant({ sessionId: 'session-a', requestId }, undefined, recheck)).rejects.toBe(failure);
+    expect(reserve).toHaveBeenCalledOnce(); expect(recheck).toHaveBeenCalledOnce();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(settle).toHaveBeenCalledExactlyOnceWith('failed');
+  });
+  it('runs the recheck once after admission and before the provider POST when it resolves', async () => {
+    const recheck = vi.fn(async () => undefined);
+    const { grant, reserve, fetcher, settle } = setup();
+    expect(await grant({ sessionId: 'session-a', requestId }, undefined, recheck)).toEqual({ accessToken, expiresIn: speechTokenTtlSeconds });
+    expect(recheck).toHaveBeenCalledOnce();
+    expect(reserve.mock.invocationCallOrder[0]).toBeLessThan(recheck.mock.invocationCallOrder[0]);
+    expect(recheck.mock.invocationCallOrder[0]).toBeLessThan(fetcher.mock.invocationCallOrder[0]);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(settle).toHaveBeenCalledExactlyOnceWith('completed');
+  });
   it('keeps the grant result when bookkeeping throws or rejects', async () => {
     const throwing = setup({ settle: vi.fn(() => { throw new Error('ledger down'); }) });
     expect(await throwing.grant({ sessionId: 'session-a', requestId })).toEqual({ accessToken, expiresIn: speechTokenTtlSeconds });

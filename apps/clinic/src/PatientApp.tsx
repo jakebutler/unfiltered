@@ -82,6 +82,7 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     prepareChoiceCapture: () => { answerRequestId.current = crypto.randomUUID(); textRef.current = ''; setText(''); setAnswerChannel('text'); },
     abandonCapture: () => capture.stop('', false),
     speakChoiceConfirmation: value => listen(activePrompt!.id, value),
+    restoreDraft: value => { textRef.current = value; setText(value); if (!value) setAnswerChannel('text'); },
     restoreChoiceDraft: candidate => { const value = candidate.optionTranscript + (textRef.current ? `\nConfirmation attempt: ${textRef.current}` : ''); textRef.current = value; setText(value); setAnswerChannel('unreviewed-transcript'); },
     saveChoiceAttempt: (value, scope, prior) => saveVoiceChoiceAttempt(value, scope, prior),
     saveChoice: (candidate, scope, confirmation) => saveVoiceChoice(candidate, scope, confirmation),

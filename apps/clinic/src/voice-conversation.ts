@@ -7,7 +7,8 @@ export type ConversationVoiceState = { active: boolean; status: 'off' | 'connect
 export type CaptureEvent =
   | { type: 'ready' | 'voice'; scope: CaptureScope }
   | { type: 'recognition'; scope: CaptureScope; segment: RecognitionSegment; interim: string }
-  | { type: 'completed'; scope: CaptureScope; text: string; clean: boolean }
+  /** `utterance` is this recording's words alone; `prefix` is the draft that was already in the box. */
+  | { type: 'completed'; scope: CaptureScope; text: string; clean: boolean; utterance?: string; prefix?: string }
   | { type: 'interrupted'; scope: CaptureScope; reason: string };
 export interface ConversationVoiceContext {
   scope?: CaptureScope; eligible: boolean; blocked: boolean;
@@ -23,6 +24,8 @@ export interface ConversationVoicePorts {
   prepareChoiceCapture?(): void;
   abandonCapture?(): void;
   speakChoiceConfirmation?(value: string): void;
+  /** Puts the composer back to the draft it held before a command utterance. */
+  restoreDraft?(text: string): void;
   saveChoice?(candidate: VoiceChoiceCandidate, scope: CaptureScope, confirmation: { method: 'voice' | 'control'; transcript: string }): Promise<ClinicSessionView | undefined>;
   restoreChoiceDraft?(candidate: VoiceChoiceCandidate): void;
   saveChoiceAttempt?(text: string, scope: CaptureScope, priorChoiceTranscript?: string): Promise<ClinicSessionView | undefined>;
@@ -173,7 +176,11 @@ export class VoiceConversation {
         this.heardVoice = false;
         this.choiceCapturePending = true; this.set('thinking', 'Your choice is not saved yet. Confirm it by voice or with the controls below.'); this.ports.prepareChoiceCapture?.(); return;
       }
-      if (pauseCommands.has(spokenCommand(event.text))) { this.stop("Voice paused. Resume when you’re ready, or keep typing."); return; }
+      // A spoken pause is a command, not an answer: its words leave the draft so a resumed answer can't absorb them.
+      if (pauseCommands.has(spokenCommand(event.utterance ?? event.text))) {
+        if (event.prefix !== undefined) this.ports.restoreDraft?.(event.prefix);
+        this.stop("Voice paused. Resume when you’re ready, or keep typing."); return;
+      }
       this.submitted.add(event.scope.requestId); void this.submit(event.text, event.scope);
     }
   }

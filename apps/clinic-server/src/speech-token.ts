@@ -60,8 +60,11 @@ export function createSpeechTokenHandler(options: { access: ReturnType<typeof cr
         if (!parsed.success) throw new ApiFailure('invalid-speech-request');
         const { sessionId, promptId, expectedRevision, requestId } = parsed.data;
         // Authorization runs first; a refused scope never reaches the provider grant.
-        await options.access.token(request, { sessionId, promptId, expectedRevision, requestId });
-        const minted = await options.grant({ sessionId, requestId }, request.signal);
+        const authorize = () => options.access.token(request, { sessionId, promptId, expectedRevision, requestId });
+        await authorize();
+        // Re-checked after admission and again before release: a pause, confirmation or new question can land meanwhile.
+        const minted = await options.grant({ sessionId, requestId }, request.signal, authorize);
+        await authorize();
         return json({ accessToken: minted.accessToken, expiresIn: minted.expiresIn }, 200);
       } catch (error) { return failure(error); }
     },

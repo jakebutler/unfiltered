@@ -28,7 +28,8 @@ export function createSpeechGrant(options: SpeechGrantOptions) {
   if (!options.deepgramApiKey) throw new SpeechError('unavailable');
   const fetcher = options.fetcher ?? fetch;
   const timeoutMs = Math.min(options.timeoutMs ?? grantTimeoutCapMs, grantTimeoutCapMs);
-  return async (input: SpeechGrantInput, signal?: AbortSignal): Promise<{ accessToken: string; expiresIn: number }> => {
+  /** `recheck` runs after admission, before the provider call: authorization can change while admission waits. */
+  return async (input: SpeechGrantInput, signal?: AbortSignal, recheck?: () => Promise<unknown>): Promise<{ accessToken: string; expiresIn: number }> => {
     if (!input || typeof input.requestId !== 'string' || !requestIdPattern.test(input.requestId)
         || typeof input.sessionId !== 'string' || !input.sessionId || input.sessionId.length > 100) throw new SpeechError('invalid-request');
     if (signal?.aborted) throw new SpeechError('interrupted');
@@ -43,11 +44,15 @@ export function createSpeechGrant(options: SpeechGrantOptions) {
       try { void Promise.resolve(lease.settle(outcome)).catch(() => undefined); }
       catch { /* The full stream bound remains charged. */ }
     };
+    // A cancel that landed while admission was pending never reaches the provider.
+    if (signal?.aborted) { settle('interrupted'); throw new SpeechError('interrupted'); }
+    try { await recheck?.(); } catch (error) { settle('failed'); throw error; }
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
     const interrupted = () => controller.abort();
     signal?.addEventListener('abort', interrupted, { once: true });
+    if (signal?.aborted) controller.abort();
     let outcome: SpeechOutcome = 'unknown';
     try {
       const response = await fetcher(deepgramGrantUrl, {
