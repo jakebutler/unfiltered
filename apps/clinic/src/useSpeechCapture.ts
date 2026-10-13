@@ -196,10 +196,12 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
             if (capture.conversation) callbacks.current.onEvent?.({ type: 'ready', scope });
           } else if (value.type === 'recognition' && capture.ready) {
             const next = reduceVoiceDraft(capture.draft, { type: 'recognition', generation: capture.draft.generation, segment: recognition(value.segment) });
-            const final = appendTranscript(capture.prefix, next.text);
+            // A retried recording is added once, when it ends, to whatever the patient has typed since; it never replaces that text.
+            const final = appendTranscript(capture.kept ? callbacks.current.getText() : capture.prefix, next.text);
             if (appendTranscript(final, next.interim).length > 8000) throw new Error('transcript-too-long');
             capture.draft = next;
-            callbacks.current.onText(final, Boolean(capture.draft.text), capture.conversation); setInterim(capture.draft.interim);
+            if (!capture.kept) callbacks.current.onText(final, Boolean(capture.draft.text), capture.conversation);
+            setInterim(capture.draft.interim);
             if (capture.conversation) callbacks.current.onEvent?.({ type: 'recognition', scope, segment: recognition(value.segment), interim: next.interim });
           } else if (value.type === 'speech-started' && capture.ready) { callbacks.current.onInterruptPlayback(); if (capture.conversation) callbacks.current.onEvent?.({ type: 'voice', scope }); }
           else if (value.type === 'ended') {
@@ -207,7 +209,6 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
             callbacks.current.onInterruptPlayback();
             const completed = value.outcome === 'completed', clean = completed && Boolean(capture.finishRequested) && !capture.draft.interim;
             capture.draft = reduceVoiceDraft(capture.draft, { type: 'finish' });
-            // A retried recording is appended to whatever the patient has typed since, not to the text from before recording.
             const base = capture.kept ? callbacks.current.getText() : capture.prefix, text = appendTranscript(base, capture.draft.text);
             callbacks.current.onText(text, Boolean(capture.draft.text), capture.conversation);
             settle(capture); setInterim(''); setSlow(false);

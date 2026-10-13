@@ -15,8 +15,11 @@ const patient = { reference: 'Patient/fixture', displayName: 'Synthetic', descri
 const config = { origin, cookieSecret: 'test-secret-'.repeat(5), mentalHealth: 'phq4', patients: Object.fromEntries(['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill'].map(id => [id, patient])) } as ClinicApiConfig;
 const emptyProposal = { facts: [], items: [], listsDone: [], questions: [], moveOn: null, ack: null };
 
-async function fixture(reviewer?: SafetyReviewer, interpreter?: IntakeInterpreter) {
-  const client = new MedplumClient({ baseUrl: 'http://localhost:8103/fhir/R4/', accessToken: 'synthetic', mode: 'local', timeoutMs: 1000 }, mockFhir({ atomic: false }).fetcher);
+async function fixture(reviewer?: SafetyReviewer, interpreter?: IntakeInterpreter, options: { failSafetyRecordWrites?: boolean } = {}) {
+  const fhir = mockFhir({ atomic: false }).fetcher;
+  // Optionally fail every write of the staff safety record, to prove the draft still carries the verdict.
+  const fetcher: typeof fhir = async (input, init) => options.failSafetyRecordWrites && init?.method && init.method !== 'GET' && String(init.body ?? '').includes('urn:corvo:clinic:safety-review') ? new Response('{}', { status: 503 }) : fhir(input, init);
+  const client = new MedplumClient({ baseUrl: 'http://localhost:8103/fhir/R4/', accessToken: 'synthetic', mode: 'local', timeoutMs: 1000 }, fetcher);
   const handler = createClinicHandler(config, { runtime: async () => ({ client, qualification: {} } as unknown as Runtime), safetyReviewer: reviewer, adaptiveInterpreter: interpreter });
   let cookie = '', current: ClinicSessionView;
   const call = async <T = ClinicSessionView>(path: string, data: unknown) => {
@@ -151,5 +154,63 @@ describe('safety gate through the clinic handler', () => {
     const f = await fixture(verdict({}));
     expect((await f.call('/api/clinic/safety-reviews', { signalId: 'nope' })).status).toBe(400);
     expect((await f.call('/api/clinic/safety-reviews', { signalId: crypto.randomUUID() })).status).toBe(404);
+  });
+
+  // Independent review (codex, 2026-10-12): the gate must fail closed on reviewer, storage and cancellation failures.
+  it('a reviewer failure on an unflagged turn goes to clinician review instead of nothing', async () => {
+    const failing: SafetyReviewer = { review: vi.fn(async () => { throw new Error('provider down'); }) } as never;
+    const f = await fixture(failing);
+    const text = 'I gave my cat to my neighbour and wrote letters to everyone this week.';
+    expect(safetySignalSeed(text)).toBeUndefined();
+    await f.answer(text);
+    expect((await f.draft()).draft.safetySignals).toEqual([expect.objectContaining({ version: 'safety-gate-v1', review: { status: 'needs-human-review', level: 'moderate' } })]);
+    const review = await f.call<{ session: ClinicSessionView }>('/api/clinic/review', { expectedRevision: f.current().revision });
+    expect(review.body.session.topics.some(topic => topic.id === 'SAFETY-REVIEW')).toBe(true);
+  });
+  // Independent review (cubic, 2026-10-13).
+  it('after continuing past an eating-concern pause, later guided free text is still reviewed', async () => {
+    const reviewer = verdict({ level: 'imminent', categories: ['self-harm'] }), f = await fixture(reviewer);
+    const paused = await f.answer('I make myself throw up after meals.');
+    expect(paused.notice).toMatchObject({ tone: 'attention' });
+    const resumed = (await f.call('/api/clinic/topics', { expectedRevision: paused.revision, topicId: 'Q01' })).body;
+    expect(resumed.currentPrompt).toBeDefined();
+    const calls = vi.mocked(reviewer.review).mock.calls.length;
+    const next = await f.call('/api/clinic/turns', { requestId: crypto.randomUUID(), expectedRevision: resumed.revision, promptId: resumed.currentPrompt!.id, action: 'answer', text: 'I gave my cat to my neighbour and wrote letters to everyone this week.', channel: 'text' });
+    expect(next.status).toBe(200);
+    expect(reviewer.review).toHaveBeenCalledTimes(calls + 1);
+    expect((await f.draft()).draft.safety).toMatchObject({ rule: 'E04', via: 'model-review', paused: true });
+  });
+  it('a spoken reply that cannot fill a fixed-choice item is still reviewed', async () => {
+    const reviewer = verdict({ level: 'imminent', categories: ['self-harm'] }), f = await fixture(reviewer);
+    const mood = (await f.call('/api/clinic/topics', { expectedRevision: f.current().revision, topicId: 'Q16' })).body;
+    expect(mood.currentPrompt?.choices?.length).toBeGreaterThan(0);
+    const result = await f.call('/api/clinic/turns', { requestId: crypto.randomUUID(), expectedRevision: mood.revision, promptId: mood.currentPrompt!.id, action: 'answer', text: 'Honestly everyone would be better off without me.', channel: 'unreviewed-transcript', choiceTranscriptOnly: true });
+    expect(result.status).toBe(200);
+    expect(reviewer.review).toHaveBeenCalledTimes(1);
+    expect((await f.draft()).draft.safety).toMatchObject({ rule: 'E04', via: 'model-review', paused: true });
+  });
+  it('an imminent verdict still pauses when the staff safety record cannot be saved', async () => {
+    const f = await fixture(verdict({ level: 'imminent', categories: ['self-harm'] }), undefined, { failSafetyRecordWrites: true });
+    const view = await f.answer('I gave my cat to my neighbour and wrote letters to everyone this week.');
+    expect(view.notice).toMatchObject({ tone: 'urgent' });
+    expect(view.currentPrompt).toBeUndefined();
+    expect((await f.draft()).draft.safety).toMatchObject({ rule: 'E04', paused: true, via: 'model-review' });
+  });
+  it('stopping an interpretation while its safety check is pending still applies the verdict', async () => {
+    let release!: () => void;
+    const gateOpen = new Promise<void>(resolve => { release = resolve; });
+    const slow: SafetyReviewer = { review: vi.fn(async () => { await gateOpen; return { concern: true, level: 'imminent', categories: ['self-harm'], rationale: 'Preparation.', model: 'qwen3.8-max' }; }) } as never;
+    const f = await fixture(slow, interpreter());
+    const accepted = await f.call<{ session: ClinicSessionView; operation: { id: string } }>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: f.current().revision, text: 'I gave my cat to my neighbour and wrote letters to everyone this week.', channel: 'text' });
+    const running = f.call(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+    await vi.waitFor(() => expect(slow.review).toHaveBeenCalled());
+    const saved = (await f.draft()).draft;
+    const stopped = await f.call(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/discard`, { expectedRevision: saved.revision });
+    expect(stopped.status).toBe(200);
+    release();
+    await running;
+    const after = (await f.draft()).draft;
+    expect(after.safety).toMatchObject({ rule: 'E04', paused: true, via: 'model-review' });
+    expect(after.safetySignals).toEqual([expect.objectContaining({ review: { status: 'needs-human-review', level: 'imminent' } })]);
   });
 });

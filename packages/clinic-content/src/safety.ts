@@ -17,7 +17,7 @@ export const safetyRules: ReadonlyArray<{ id: EscalationRule; pattern: RegExp }>
   {
     id: "E01",
     pattern:
-      /\b(?:can'?t breathe?|cannot breathe|struggling to breathe|(?:i'?m|i am|i think i'?m|i think i am) having a (?:heart attack|stroke)|medical emergency|(?:vomiting|throwing up|coughing up) blood|uncontrolled bleeding|(?:won'?t|will not) stop bleeding|(?:my )?chest (?:is|feels) (?:like it'?s being )?crush(?:ing|ed)|crushing (?:chest )?pain|severe (?:chest|abdominal|stomach|belly) pain|(?:chest|abdominal|stomach|belly) pain (?:is|was|feels) (?:so |really |very )?severe|(?:just|today|tonight) (?:fainted|passed out|collapsed)|(?:fainted|passed out|collapsed) (?:just now|today|tonight|this morning|a few minutes ago))/g,
+      /\b(?:can'?t breathe?|cannot breathe|struggling to breathe|(?:i'?m|i am|i think i'?m|i think i am) having a (?:heart attack|stroke)|medical emergency|(?:vomiting|throwing up|coughing up) blood|uncontrolled bleeding|(?:won'?t|will not) stop bleeding|(?:my )?chest (?:is|feels) (?:like it'?s being )?crush(?:ing|ed)|crushing (?:chest )?pain|severe (?:chest|abdominal|stomach|belly) pain|(?:chest|abdominal|stomach|belly) pain (?:is|feels) (?:so |really |very )?severe|(?:just|today|tonight) (?:fainted|passed out|collapsed)|(?:fainted|passed out|collapsed) (?:just now|today|tonight|this morning|a few minutes ago))/g,
   },
   {
     id: "E04",
@@ -27,7 +27,7 @@ export const safetyRules: ReadonlyArray<{ id: EscalationRule; pattern: RegExp }>
   {
     id: "E03",
     pattern:
-      /\b(?:overdos(?:e|ed|ing)|od'?d|(?:took|taken|swallowed|injected|had) (?:way |far )?too many (?:of my )?(?:pills|tablets|doses)|(?:took|taken|injected|gave my ?self) (?:an? |my )?(?:extra|double) (?:dose|shot|injection)|twice by (?:accident|mistake)|(?:took|taken|swallowed|injected) (?:the )?wrong (?:medicine|medication|pills?|dose)|swallowed (?:some |a |the )?(?:cleaner|bleach|poison|detergent))/g,
+      /\b(?:overdos(?:e|ed|ing)|od'd|od'?ed|(?:took|taken|swallowed|injected|had) (?:way |far )?too many (?:of my )?(?:pills|tablets|doses)|(?:took|taken|injected|gave my ?self) (?:an? |my )?(?:extra|double) (?:dose|shot|injection)|twice by (?:accident|mistake)|(?:took|taken|swallowed|injected) (?:the )?wrong (?:medicine|medication|pills?|dose)|swallowed (?:some |a |the )?(?:cleaner|bleach|poison|detergent))/g,
   },
   {
     id: "E02",
@@ -48,7 +48,7 @@ export const safetyScopeCues = {
   current:
     /\b(?:now|right now|today|tonight|currently|again|still|lately|recently|this (?:week|morning|evening|afternoon)|these days|anymore|just)\b/,
   hypothetical: /\b(?:if|what if|hypothetical(?:ly)?|in case|suppose|supposing|imagine)\b/,
-  media: /\b(?:movie|film|show|book|song|tv|series|novel|article|news|podcast|character)\b/,
+  media: /\b(?:(?:a|an|the|this|that|in|on|from|watched|watching|reading|read) (?:movie|film|show|book|song|tv|series|novel|article|news|podcast|character|episode|story))\b/,
 } as const;
 export type SafetyScope = "direct" | "negated" | "other-person" | "historical" | "hypothetical" | "question" | "media";
 export interface SafetyFloorHit { rule: EscalationRule; scope: SafetyScope; term: string; }
@@ -71,28 +71,31 @@ function lastCue(cue: RegExp, text: string): number {
 }
 function scopeOf(value: string, start: number, end: number): SafetyScope {
   const { before, clause } = clauseAround(value, start, end);
-  const near = before.split(/\s+/).filter(Boolean).slice(-6).join(" ");
+  // Negation and other-person cues never reach across a coordinated clause: "I can't sleep and want to kill myself".
+  const near = before.split(/\b(?:and|so|then|because|or)\b|,/).at(-1)!.split(/\s+/).filter(Boolean).slice(-6).join(" ");
   // A cue only scopes the hit when the patient has not restarted as the subject after it ("I told my husband I want to...").
   const restart = lastCue(safetyScopeCues.firstPerson, near);
   const scoped = (cue: RegExp) => { const at = lastCue(cue, near); return at >= 0 && restart < at; };
   if (scoped(safetyScopeCues.negated)) return "negated";
-  if (scoped(safetyScopeCues.otherPerson)) return "other-person";
+  // "I told my husband about my suicidal thoughts": the patient's own "my" right before the hit re-centres it on them.
+  if (scoped(safetyScopeCues.otherPerson) && !/\bmy (?:own )?$/.test(before)) return "other-person";
   // "...last year, still think about it": the time cue covers the sentence; "now"-type cues only count in the hit's own phrase.
   const phrase = clause.slice(before.lastIndexOf(",") + 1).split(",")[0];
   if (safetyScopeCues.historical.test(clause) && !safetyScopeCues.current.test(phrase)) return "historical";
   if (safetyScopeCues.hypothetical.test(clause)) return "hypothetical";
   if (clause.trimEnd().endsWith("?")) return "question";
-  if (safetyScopeCues.media.test(clause)) return "media";
+  if (safetyScopeCues.media.test(clause) && !safetyScopeCues.current.test(phrase)) return "media";
   return "direct";
 }
-const normalize = (text: string) => text.toLowerCase().replace(/[’‘`´]/g, "'").replace(/\s+/g, " ");
+/** Line breaks are kept (one per whitespace run) so they still end a clause; matching sees them as spaces at the same positions. */
+const normalize = (text: string) => text.toLowerCase().replace(/[’‘`´]/g, "'").replace(/\s+/g, run => run.includes("\n") ? "\n" : " ");
 
 /** Every hard-stop mention with its scope. Only "direct" hits pause; the rest go to the model gate. */
 export function safetyFloorHits(text: string): SafetyFloorHit[] {
-  const value = normalize(text), hits: SafetyFloorHit[] = [];
+  const lines = normalize(text), value = lines.replace(/\n/g, " "), hits: SafetyFloorHit[] = [];
   for (const rule of safetyRules)
     for (const match of value.matchAll(rule.pattern))
-      hits.push({ rule: rule.id, scope: scopeOf(value, match.index!, match.index! + match[0].length), term: match[0].trim().slice(0, 80) });
+      hits.push({ rule: rule.id, scope: scopeOf(lines, match.index!, match.index! + match[0].length), term: match[0].trim().slice(0, 80) });
   return hits;
 }
 export function escalation(text: string): EscalationRule | undefined {
@@ -115,7 +118,7 @@ export const safetyDefinition = {
   copies: escalationCopy,
   rules: safetyRules.map((rule) => ({ id: rule.id, pattern: rule.pattern.source })),
   scope: Object.fromEntries(Object.entries(safetyScopeCues).map(([key, pattern]) => [key, pattern.source])),
-  scopeWindow: "clause bounded by . ! ? ; newline but though although; negation and other-person cues within the 6 preceding words unless the patient restarts as subject",
+  scopeWindow: "clause bounded by . ! ? ; newline but though although; negation and other-person cues within the 6 preceding words of the same coordinated segment (split at and/so/then/because/or/comma) unless the patient restarts as subject; media needs a media noun phrase and yields to a current-time cue in the hit's phrase",
   scopePolicy: "a scoped hit is downgraded to the model gate and never cleared by the floor",
   gate: safetyGateContract,
   interruptionPrecedesCollection: true,

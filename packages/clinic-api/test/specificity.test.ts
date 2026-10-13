@@ -3,7 +3,7 @@ import { assessSpecificity, specificityBudget, specificityContract, specificityC
 import { guardNativePrompt } from '../../clinic-content/src/native-questionnaire.js';
 import { lookupReference, scanReference } from '../../clinic-reference/src/index.js';
 import { eligibleAdaptiveProbes } from '../src/dialogue.js';
-import { countSpecificityAsk, settleSpecificityReply, specificityFindings, specificityGaps } from '../src/specificity.js';
+import { countSpecificityAsk, settleSpecificityReply, specificityFindings, specificityGaps, specificityNote } from '../src/specificity.js';
 import type { TopicResponse } from '../../clinic-content/src/index.js';
 import { context, register, withPrior } from './fixtures/adaptive.js';
 
@@ -89,6 +89,22 @@ describe('specificity state', () => {
     expect(settleSpecificityReply({}, { key: 'k', spelling }, { sourceId: 's', text: 'Yes, that one', updatedPath: false }).k).toMatchObject({ spellingAsked: true, confirmed: { code: '6809', sourceId: 's' } });
     expect(settleSpecificityReply({}, { key: 'k', spelling }, { sourceId: 's', text: 'No, it is something else', updatedPath: false }).k).toEqual({ asked: 0, spellingAsked: true });
   });
+  it.each(['Yes, but I am not sure that is the right medicine', 'Yes? Maybe', 'yes no I mean the other one'])('a qualified "%s" does not confirm a spelling', text => {
+    const spelling = { system: 'rxnorm', code: '6809', display: 'metformin' };
+    expect(settleSpecificityReply({}, { key: 'k', spelling }, { sourceId: 's', text, updatedPath: false }).k?.confirmed).toBeUndefined();
+  });
+  it('a changed answer drops the earlier confirmation and settlement but keeps the follow-up count', () => {
+    const at = (value: string, states = {}) => specificityFindings({ Q08: { presented: true, answers: answering('medicines.name', value).answers } }, states)[0]!;
+    const key = at('metfromin').key, spelling = { system: 'rxnorm', code: '6809', display: 'metformin' };
+    const states = settleSpecificityReply(countSpecificityAsk({}, { key, spelling }, 'metfromin'), { key, spelling }, { sourceId: 's', text: 'Yes', updatedPath: false, value: 'metfromin' });
+    expect(specificityNote(at('metfromin', states))?.code).toMatchObject({ code: '6809', basis: 'patient-confirmed' });
+    const edited = at('my tiny blue medicine', states);
+    expect(edited.state).toEqual({ asked: 0 });
+    expect(specificityNote(edited)).toEqual({ needsDetail: 'Name of the medicine' });
+    const settled = settleSpecificityReply({ [key]: { asked: 1 } }, { key }, { sourceId: 's2', text: "I don't know", updatedPath: false, value: 'pills for my heart' });
+    expect(at('pills for my heart', settled).state?.terminal).toBe('unknown');
+    expect(at('heart pills', settled).state).toEqual({ asked: 1 });
+  });
 });
 
 describe('specificity assessment', () => {
@@ -104,6 +120,9 @@ describe('specificity assessment', () => {
     ['Q17', 'substances[a].frequencyAmount', 'two glasses of wine on weekends', 'specific'], ['Q17', 'substances[a].frequencyAmount', 'socially', 'approximate'],
     ['Q11', 'occasions[a].foods', 'turkey sandwich', 'specific'], ['Q11', 'occasions[a].foods', 'snacks', 'category'], ['Q11', 'occasions[a].foodAmounts', 'a handful', 'specific'],
     ['Q19', 'clinicians[a].owner', 'Dr. Patel at Northside', 'specific'], ['Q19', 'clinicians[a].owner', 'my heart doctor', 'category'],
+    // Numbers only count with the detail they qualify; pharmacies and colours never name a medicine.
+    ['Q14', 'frequency', '2 pills sometimes', 'approximate'], ['Q14', 'frequency', '3 times a week', 'specific'], ['Q07', 'events[a].when', 'a while ago, before my 2 surgeries', 'unanchored'],
+    ['Q07', 'events[a].when', '5 years ago', 'specific'], ['Q08', 'medicines[a].name', 'The blue one I got at CVS', 'descriptive'], ['Q08', 'medicines[a].name', 'lisinopril from Walgreens', 'specific'],
   ])('%s %s "%s" is %s', (topicId, path, value, level) => {
     expect(assessSpecificity(at(topicId, path), value, lookupReference).level).toBe(level);
   });
@@ -113,12 +132,22 @@ describe('specificity assessment', () => {
     expect(assessSpecificity(at('Q06', 'reportedConditions.term'), 'fibromyalga', lookupReference)).toMatchObject({ level: 'specific', spelling: { display: 'fibromyalgia' } });
     // Plain "diabetes" has no type; it is never coded as one.
     expect(assessSpecificity(at('Q06', 'reportedConditions.term'), 'diabetes', lookupReference).match).toBeUndefined();
+    // Condition terms never infer a more specific diagnosis than the patient named.
+    expect(assessSpecificity(at('Q06', 'reportedConditions.term'), 'skin cancer', lookupReference).match).toMatchObject({ code: 'C44.90' });
+    expect(assessSpecificity(at('Q06', 'reportedConditions.term'), 'arrhythmia', lookupReference).match).toMatchObject({ code: 'I49.9' });
+    expect(assessSpecificity(at('Q06', 'reportedConditions.term'), 'colitis', lookupReference).match).toBeUndefined();
   });
   it('the message scan finds known names and skips everyday words', () => {
     expect(scanReference('I take metformin and Ozempic for my type 2 diabetes, plus water and some air.').map(item => item.mention)).toEqual(['metformin', 'ozempic', 'type 2 diabetes']);
   });
   it('every authored template quotes only the patient and never names a drug or diagnosis itself', () => {
-    for (const contract of specificityContracts) expect(specificityQuestion(contract, 'XYZ')).toMatch(/“XYZ”|^What|^Did you mean/);
+    for (const contract of specificityContracts) {
+      for (const text of [specificityQuestion(contract, 'XYZ'), specificityQuestion(contract, 'XYZ', 'XYZ')]) {
+        expect(text).toMatch(/“XYZ”|^What|^Did you mean/);
+        // No medicine or condition name of its own: the only name in a follow-up is the patient's (or their spelling).
+        expect(scanReference(text), text).toEqual([]);
+      }
+    }
     expect(register.promptsById).toBeDefined();
   });
 });

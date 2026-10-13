@@ -251,6 +251,23 @@ describe('useSpeechCapture in upload mode', () => {
     expect(onText).toHaveBeenLastCalledWith('Before typed after retried words', true, undefined);
   });
 
+  it('a retry never replaces or duplicates words typed while the recording was kept (app-like text updates)', async () => {
+    responders = [failServer, failServer];
+    const shown: string[] = [];
+    const typing = vi.fn((value: string) => { text = value; shown.push(value); });
+    text = 'Before';
+    const view = await recording({ onText: typing });
+    await speak(1000);
+    view.value.stop();
+    await drain();
+    text = 'Before and I typed this while it was kept';
+    responders = [ok('retried words')];
+    view.value.retry();
+    await drain();
+    expect(text).toBe('Before and I typed this while it was kept retried words');
+    expect(shown.filter(value => !value.includes('I typed this while it was kept'))).toEqual([]);
+  });
+
   it('discard throws the audio away without transcribing it', async () => {
     const view = await recording();
     await speak(1000);

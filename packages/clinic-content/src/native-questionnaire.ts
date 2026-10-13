@@ -31,7 +31,7 @@ import type {
 
 export const NATIVE_QUESTIONNAIRE_CANONICAL =
   "https://corvo.example/Questionnaire/clinic";
-export const NATIVE_QUESTIONNAIRE_VERSION = "CC-0.2.phq4.native-4";
+export const NATIVE_QUESTIONNAIRE_VERSION = "CC-0.2.phq4.native-5";
 
 /** Extraction-only interpretation hints are server policy, not questionnaire structure. */
 const definitionSlot = ({ extractionNegativeScope: _hint, ...slot }: SlotDefinition): SlotDefinition =>

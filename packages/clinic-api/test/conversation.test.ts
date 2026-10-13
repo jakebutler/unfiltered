@@ -46,6 +46,13 @@ describe('guided patient evidence and immutable confirmation', () => {
         changed.turns.find(t => t.role === 'patient')!.text = 'Different source after preview';
         await expect(c.finalize(changed, confirmedAt)).rejects.toThrow('confirmation-digest-mismatch');
     });
+    it('an otherwise complete intake with one vague required answer stays partial in the view and the submission', async () => { let d = fresh(), count = 0, vague = 0; while (c.view(d).currentPrompt) {
+        const p = c.view(d).currentPrompt!;
+        expect(++count).toBeLessThan(150);
+        const text = p.choices ? p.choices.find(x => x.value === '__negative')?.value ?? p.choices.find(x => x.value === '__done')?.value ?? p.choices.find(x => x.value === '__topic-not-applicable')?.value ?? p.choices[0].value
+            : p.id === 'Q04:height.value' ? '170' : p.id === 'Q04:lastMeasuredWeight.value' ? '82' : p.id === 'Q04:lastMeasuredWeight.measuredWhen' ? (vague++, 'a while back') : `Synthetic detail for ${p.purpose}: typical pattern recalled for this example.`;
+        d = answer(d, text);
+    } expect(vague).toBe(1); expect(c.view(d).completeness).toBe('partial'); expect((await c.preview(d)).confirmation.submission.completeness).toBe('partial'); }, 20000);
     it('finishes a granular first intake with real measurement targets and explicit PHQ responses', async () => { let d = fresh(), count = 0; while (c.view(d).currentPrompt) {
         const p = c.view(d).currentPrompt!;
         expect(++count).toBeLessThan(150);
@@ -57,6 +64,8 @@ describe('guided patient evidence and immutable confirmation', () => {
             text = '170';
         else if (p.id === 'Q04:lastMeasuredWeight.value')
             text = '82';
+        else if (p.id === 'Q04:lastMeasuredWeight.measuredWhen')
+            text = 'In March 2026.';
         else
             text = `Synthetic detail for ${p.purpose}: typical pattern recalled for this example.`;
         d = answer(d, text);

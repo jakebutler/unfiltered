@@ -13,7 +13,10 @@ Both. Typing always works. Voice is push-to-talk:
 
 Voice notes:
 - Recordings stop automatically just before one minute. Transcription uses Deepgram (medical model); the raw recording is not stored.
-- Your words are never lost by accident. If you press Stop, switch tabs, lose the microphone or the question changes, what you said so far is transcribed into the box (unsent). If transcription fails it retries once, then keeps the recording with **Try transcribing again** and **Discard recording**.
+- Your words are never lost by accident. If you press Stop, switch tabs, lose the microphone or the question changes, what you said so far is transcribed into the box (unsent).
+- If transcription fails because of a network or server error, it retries once automatically. If it still fails, the recording is kept with **Try transcribing again** and **Discard recording**.
+  - While a recording is kept, **Send answer** stays off, so it can't be dropped by accident.
+  - Anything you type meanwhile stays; the retried words are added after it.
 - Correcting yourself mid-sentence works: "metformin 500 mg, no wait, 850 mg" is saved as 850 mg, with the 500 mg kept on record as corrected.
 - PHQ-4 mood items and other fixed-choice questions stay **buttons only**. That is intentional.
 - Use Chrome, Edge or Safari, and allow the microphone when asked.
@@ -85,6 +88,8 @@ Naming follow-ups ("which medicine?") come when the conversation reaches that to
   - **Or reply** "I'll bring the bottle to my visit." Expect no repeat of that question. The review shows "Name of the medicine (patient will bring or check it)".
   - **Or reply** "I don't know." The description is kept, not overwritten, and nothing is flagged as conflicting.
 - **Say:** "I take metfromin." **Expect:** "Did you mean “metformin”? …" asked once. "Yes" attaches the code. Your spelling stays as you typed it.
+  - A qualified reply such as "Yes, but I'm not sure that's it" does not confirm anything.
+  - If you later change the name, the earlier code is dropped.
 - **Say**, on family history: "Heart stuff runs on my dad's side." **Expect:** a family-history item, not your own heart condition, and then "You mentioned “heart stuff”. Do you know what condition it was …"
 - **Say:** "I take arthritis meds." **Expect:** a medicine, never a recorded arthritis diagnosis.
 - **Limits:** at most two follow-ups per answer and four per topic. You'll never get a suggested drug or diagnosis, only a spelling check of your own word.
@@ -122,7 +127,7 @@ Try these:
   - **Expect:** the intake pauses with emergency guidance instead of showing the next question.
 - **Say:** "Honestly I've been feeling hopeless most days lately."
   - **Expect:** no interruption. At review, a **Clinician safety review** item appears, and the handoff includes the medical team. Signed in as Dr. Morgan Lee, open **Safety review** to see it at "moderate" and record an action.
-- **Say:** "My father had a stroke when I was a kid." or "This diet is killing me."
+- **Say:** "My father had a stroke when I was a kid.", "This diet is killing me." or "That's odd, my scale said something different."
   - **Expect:** nothing happens; no safety item.
 
 ### Off-topic or rambling answer

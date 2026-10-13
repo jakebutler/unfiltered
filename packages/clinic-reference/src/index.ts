@@ -18,18 +18,25 @@ const everyday = new Set('air align amber bran dragon halls julie kirsty nikita 
 /** Lay names for common products that RxNorm lists under another name. */
 const medicationSynonyms: Record<string, string> = { b12: 'vitamin b12', 'vit d': 'vitamin d', 'vitamin d3': 'cholecalciferol', d3: 'cholecalciferol', 'baby aspirin': 'aspirin', paracetamol: 'acetaminophen', 'fish oil': 'omega-3 fatty acids', 'omega 3': 'omega-3 fatty acids', 'omega 3s': 'omega-3 fatty acids', 'apple cider vinegar': 'apple cider vinegar' };
 
-interface Entry { concept: ReferenceConcept; kind: 'exact' | 'synonym'; }
-interface Index { names: Map<string, Entry>; tokens: Map<string, Set<string>>; maxWords: number; }
+interface Entry { concept: ReferenceConcept; kind: 'exact' | 'synonym'; plain?: boolean; }
+interface Index { names: Map<string, Entry>; tokens: Map<string, Set<string>>; maxWords: number; ambiguous: Set<string>; }
 let indexes: Record<ReferenceDomain, Index> | undefined;
 
 function add(index: Index, name: string, entry: Entry) {
-  const key = normalizeReference(name); if (!key || index.names.has(key) && index.names.get(key)!.kind === 'exact') return;
+  const key = normalizeReference(name); if (!key || index.ambiguous.has(key)) return;
+  entry = { ...entry, plain: name.toLowerCase() === key };
+  const existing = index.names.get(key);
+  // Names that normalize alike ("limonene, (-)-", "limonene, (+)-") keep the plain-name row; with none, the name is ambiguous and never coded.
+  if (existing?.kind === 'exact') {
+    if (existing.plain || entry.kind !== 'exact' || existing.concept.code === entry.concept.code) return;
+    if (!entry.plain) { index.names.delete(key); index.ambiguous.add(key); return; }
+  }
   index.names.set(key, entry);
   index.maxWords = Math.max(index.maxWords, key.split(' ').length);
   for (const token of key.split(' ')) if (token.length >= 5) (index.tokens.get(token) ?? index.tokens.set(token, new Set()).get(token)!).add(key);
 }
 function build(): Record<ReferenceDomain, Index> {
-  const medication: Index = { names: new Map(), tokens: new Map(), maxWords: 1 }, condition: Index = { names: new Map(), tokens: new Map(), maxWords: 1 };
+  const medication: Index = { names: new Map(), tokens: new Map(), maxWords: 1, ambiguous: new Set() }, condition: Index = { names: new Map(), tokens: new Map(), maxWords: 1, ambiguous: new Set() };
   const byName = new Map<string, ReferenceConcept>();
   for (const row of medicationRows.split('\n')) {
     const [name, rxcui, tty] = row.split('\t');
@@ -112,13 +119,14 @@ export function lookupReference(domain: string, text: string, identity: readonly
 
 /** Known medicine and condition names mentioned anywhere in a message, for the interpreter's REFERENCE block. */
 export function scanReference(text: string, limit = 8): { domain: ReferenceDomain; mention: string; display: string }[] {
-  const tokens = normalizeReference(text).split(' ').filter(Boolean), found: { domain: ReferenceDomain; mention: string; display: string }[] = [], seen = new Set<string>();
+  const tokens = normalizeReference(text).split(' ').filter(Boolean), whole = tokens.join(' '), found: { domain: ReferenceDomain; mention: string; display: string }[] = [], seen = new Set<string>();
   for (const domain of ['medication', 'condition'] as const) {
     const { names, maxWords } = index(domain);
     for (let start = 0; start < tokens.length; start++) {
       for (let size = Math.min(maxWords, tokens.length - start); size >= 1; size--) {
         const key = tokens.slice(start, start + size).join(' '), entry = names.get(key);
-        if (!entry || size === 1 && (everyday.has(key) || key.length <= 3) || seen.has(key)) continue;
+        // Short names ("MS", "IBS") count only as the whole message, as in exact().
+        if (!entry || size === 1 && (everyday.has(key) || key.length <= 3 && key !== whole) || seen.has(key)) continue;
         seen.add(key); found.push({ domain, mention: key, display: entry.concept.display }); start += size - 1; break;
       }
     }

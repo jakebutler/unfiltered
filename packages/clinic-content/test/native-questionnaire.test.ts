@@ -27,9 +27,9 @@ describe("fixed authored native Questionnaire", () => {
     expect(d.binding.digest).toMatch(/^[a-f0-9]{64}$/);
     // Pinned; extraction-only slot hints must not change it. E-0.2 safety and SP-0.1 specificity with its reference
     // releases (D1 re-qualification, published with stage8).
-    expect(d.binding.digest).toBe("442fa9ed9da87ec6895720a7d086e2cc41b036a6a9c074df1111cd46088bd1a6");
+    expect(d.binding.digest).toBe("7c16c2a276dcae4482219d112731753a3a6fd2db0eaa965e0b5a3fd37fa74fe2");
     const specificity = JSON.parse(d.questionnaire.extension!.find((e) => e.url.endsWith("specificity-contract"))!.valueString!);
-    expect(specificity).toMatchObject({ version: "SP-0.1", budget: { perField: 2, perTopic: 4, perTurn: 1 }, reference: { medications: "rxnorm-prescribe-2026-10-05", conditions: "CT-0.1+icd10cm-FY2027" } });
+    expect(specificity).toMatchObject({ version: "SP-0.1", budget: { perField: 2, perTopic: 4, perTurn: 1 }, reference: { medications: "rxnorm-prescribe-2026-10-05", conditions: "CT-0.3+icd10cm-FY2027" } });
     expect(d.questionnaire.url).toBe(d.binding.canonical);
     validateNativeDefinitionStructure(d.questionnaire.item);
     expect(d.promptTargets["MH.unscored"]).toBeUndefined();
@@ -557,6 +557,17 @@ describe("E-0.2 safety floor", () => {
       "I binge on chips at night": undefined,
       "I hurt myself running last month": undefined,
       "I am snoring": undefined,
+      // Independent review (codex, 2026-10-12): an unrelated cue elsewhere must not scope the emergency itself.
+      "I can't breathe right now, please show me what to do.": "E01",
+      "I can't sleep and want to kill myself tonight.": "E04",
+      "In the movie the character wanted to kill himself.": undefined,
+      "No chest pain and no trouble breathing.": undefined,
+      // Independent review (cubic, 2026-10-13).
+      "That's odd, my scale said something different.": undefined,
+      "I OD'd on my pills an hour ago.": "E03",
+      "My chest pain was severe.": undefined,
+      "I told my husband about my suicidal thoughts.": "E04",
+      "I was suicidal years ago\nI want to kill myself": "E04",
     };
     for (const [text, rule] of Object.entries(expected)) expect(current.escalation(text), text).toBe(rule);
     // A scoped hit is never silently dropped: it is reported for the model gate.

@@ -62,7 +62,7 @@ describe('answer specificity in natural conversation', () => {
     expect(key).toMatch(/^Q08:medicines\[[^\]]+\]\.name$/);
     expect(state).toMatchObject({ asked: 1, terminal: 'will-provide' });
     // The description stays the patient's answer; the missing name is a visible gap, never complete.
-    expect(nameDetail(settled)).toMatchObject({ text: 'pills for my heart', specificity: { needsDetail: 'Name of the medicine (patient will bring or check it)' } });
+    expect(nameDetail(settled)).toMatchObject({ text: 'pills for my heart', specificity: { needsDetail: 'Name of the medicine', settled: 'will-provide' } });
     expect(medicines(settled).missingDetails).toContain('Name of the medicine: “pills for my heart”');
     expect(medicines(settled).answer?.text).toContain('[needs detail: Name of the medicine (patient will bring or check it)]');
     expect(settled.completeness).toBe('partial');
@@ -73,6 +73,8 @@ describe('answer specificity in natural conversation', () => {
     const named = await f.say("It's metformin.");
     expect(nameDetail(named)).toMatchObject({ text: 'pills for my heart; metformin', specificity: { code: { system: 'http://www.nlm.nih.gov/research/umls/rxnorm', code: '6809', display: 'metformin', basis: 'exact' } } });
     expect(nameDetail(named).specificity?.needsDetail).toBeUndefined();
+    // Later questions use the name, never the joined description.
+    expect(named.currentPrompt?.text).toContain('your metformin label');
   });
   it('"I don\'t know" to the follow-up never overwrites the description or creates a conflict', async () => {
     const unknown: IntakeInterpreter = { interpret: vi.fn(async (context: AdaptiveContext) => {
@@ -85,7 +87,7 @@ describe('answer specificity in natural conversation', () => {
     const f = await fixture(unknown);
     await f.say('I take some pills for my heart every morning.');
     const view = await f.say("I don't know what it's called.");
-    expect(nameDetail(view)).toMatchObject({ state: 'answered', text: 'pills for my heart', specificity: { needsDetail: "Name of the medicine (patient doesn't know)" } });
+    expect(nameDetail(view)).toMatchObject({ state: 'answered', text: 'pills for my heart', specificity: { needsDetail: 'Name of the medicine', settled: 'unknown' } });
     expect(Object.values((await f.draft()).specificity!)[0]).toMatchObject({ terminal: 'unknown' });
   });
   it('offers a close spelling once as a question; "yes" confirms it without replacing the patient\'s words', async () => {
@@ -96,6 +98,19 @@ describe('answer specificity in natural conversation', () => {
     expect(nameDetail(confirmed)).toMatchObject({ text: 'metfromin', specificity: { code: { code: '6809', display: 'metformin', basis: 'patient-confirmed' } } });
     expect(nameDetail(confirmed).specificity?.needsDetail).toBeUndefined();
     expect(confirmed.currentPrompt?.text ?? '').not.toContain('Did you mean');
+  });
+  it('a follow-up does not count against the topic\'s repeat guard: the medicine questions continue after it', async () => {
+    const steps: Record<string, { field: string; value: string }> = { 'I take some pills for my heart every morning.': { field: 'name', value: 'pills for my heart' }, "It's metformin.": { field: 'name', value: 'metformin' }, '500 mg.': { field: 'strength', value: '500 mg' } };
+    const f = await fixture({ interpret: vi.fn(async (context: AdaptiveContext) => {
+      const step = steps[context.source.text];
+      const proposal = step ? { ...empty, items: [{ topic: 'Q08', list: 'medicines', existing: firstMedicine(context), fields: [{ ...step, state: 'known', quote: step.value }] }] } : empty;
+      return { outcome: interpretIntakeResponse(proposal, context) };
+    }) });
+    await f.say('I take some pills for my heart every morning.');
+    await f.say("It's metformin.");
+    const next = await f.say('500 mg.');
+    expect(next.currentPrompt?.topicId).toBe('Q08');
+    expect(medicines(next).missingDetails?.length).toBeGreaterThan(0);
   });
   it('stops asking after the per-field budget even when the answer stays vague', async () => {
     const f = await fixture(scripted({ 'I take some pills for my heart every morning.': 'pills for my heart', 'Just my heart pills.': 'heart pills', 'The small white pills.': 'small white pills' }));

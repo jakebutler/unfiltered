@@ -105,6 +105,10 @@ export function SourceInspector({ title, ids, sources, provenance, onClose, audi
   </section>;
 }
 
+/** Offline reference codes (SP-0.1): shown to staff only, never in place of the patient's words. */
+const referenceSystems: Record<string, string> = { 'http://www.nlm.nih.gov/research/umls/rxnorm': 'RxNorm', 'http://hl7.org/fhir/sid/icd-10-cm': 'ICD-10-CM' };
+const settledText = { 'will-provide': { patient: 'you’ll bring or check it', staff: 'patient will bring or check it' }, unknown: { patient: 'you weren’t sure', staff: 'patient doesn’t know' }, declined: { patient: 'you preferred not to say', staff: 'patient preferred not to say' } } as const;
+const codeBasis = { exact: 'exact name match', synonym: 'listed synonym', 'patient-confirmed': 'spelling confirmed by patient' } as const;
 /** Explicit, source-backed stop reasons. Avoidance is clinically meaningful, so staff see it plainly. */
 const stopNotes: Partial<Record<NonNullable<TopicView['stopReason']>, { patient: string; staff: string }>> = {
   'patient-declines': { patient: 'You chose not to talk about this. Your care team will see that, and that’s okay.', staff: 'Patient preferred not to discuss this topic. Consider a gentle follow-up.' },
@@ -126,7 +130,10 @@ export function TopicContent({ topic, onChange, onSource, disabled = false, audi
   const unasked = topic.details?.filter(detail => detail.state === 'not-asked' && !detail.text && !detail.sourceIds.length) ?? [];
   const untouchedMeasurements = topic.id === 'Q04' && recorded.length === 0 && unasked.length > 0;
   const renderDetail = (detail: NonNullable<TopicView['details']>[number]) => <div className="answer-detail" key={detail.id}>
-    <dt>{detail.label}</dt><dd><p className="answer-label">{detailStateLabel(detail)}</p><p className="answer-text">{detailDisplayText(detail) || (patient ? 'Nothing recorded yet.' : 'No value recorded.')}</p><div className="detail-actions">
+    <dt>{detail.label}</dt><dd><p className="answer-label">{detailStateLabel(detail)}</p><p className="answer-text">{detailDisplayText(detail) || (patient ? 'Nothing recorded yet.' : 'No value recorded.')}</p>
+    {detail.specificity?.needsDetail && <p className="detail-needs">{patient ? 'Still needed: ' : 'Needs detail: '}{detail.specificity.needsDetail}{detail.specificity.settled && ` (${settledText[detail.specificity.settled][patient ? 'patient' : 'staff']})`}</p>}
+    {!patient && detail.specificity?.code && <p className="detail-code">{referenceSystems[detail.specificity.code.system] ?? detail.specificity.code.system} {detail.specificity.code.code} · {detail.specificity.code.display} · {codeBasis[detail.specificity.code.basis]}</p>}
+    <div className="detail-actions">
       {onChange && detail.editable !== false && <Button variant="text" disabled={disabled} onClick={() => onChange(detail.id)}><Pencil size={14} aria-hidden="true" />Change<span className="sr-only"> {detail.label}</span></Button>}
       {detail.sourceIds.length > 0 && <Button variant="text" onClick={event => onSource({ topicId: topic.id, title: `${topic.title} · ${detail.label}`, ids: detail.sourceIds, provenance: detail.provenance }, event.currentTarget)}><FileText size={14} aria-hidden="true" />{patient ? 'Your words' : 'Source'}<span className="sr-only"> for {detail.label}</span></Button>}
       {detail.state === 'answered' && !detail.sourceIds.length && <span className="source-gap">{patient ? 'Your original words aren’t available' : 'Original answer unavailable'}</span>}

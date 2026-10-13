@@ -41,7 +41,7 @@ export interface TopicView {
   interpretationGaps?: { id: string; reason: 'ambiguous' | 'unsupported-target' | 'capacity' | 'conflict' | 'ownership' | 'invalid-type' | 'unsupported-state' | 'unsupported-unknown' | 'value-not-in-source' | 'temporal-crop' | 'recognition-unreviewed' | 'unaddressed-source'; evidence: Omit<SourceSpan, 'transform'>[] }[];
   details?: { id: string; label: string; state: AnswerState; text?: string; sourceIds: string[]; editable?: boolean; provenance?: SourceSpan[]; interpretation?: { qualified: boolean; status: 'proposed' | 'conflicting' };
     /** Answer specificity (SP-0.1): detail still missing, and a reference code attached only to an exact or patient-confirmed name. */
-    specificity?: { needsDetail?: string; code?: { system: string; code: string; display: string; basis: 'exact' | 'synonym' | 'patient-confirmed' } } }[];
+    specificity?: { needsDetail?: string; settled?: 'will-provide' | 'unknown' | 'declined'; code?: { system: string; code: string; display: string; basis: 'exact' | 'synonym' | 'patient-confirmed' } } }[];
   screening?: {
     title: string; text: string; status: 'complete' | 'incomplete';
     scores: null | { gad2: number; phq2: number; phq4: number };

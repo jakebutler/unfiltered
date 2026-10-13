@@ -12,6 +12,10 @@ const results = corpus.items.map(item => ({ item, gap: assessSpecificity(specifi
 describe('specificity corpus gate', () => {
   it('covers every contract with both specific and vague answers', () => {
     expect(new Set(corpus.items.map(item => item.id)).size).toBe(corpus.items.length);
+    // Every row is scored: a mistyped label or path would otherwise drop out of both rates.
+    expect(corpus.items.filter(item => !['gap', 'specific'].includes(item.expect) || !specificityContract(item.topicId, item.path)).map(item => item.id)).toEqual([]);
+    // The rates mean something only over the full corpus; it may grow, never shrink.
+    expect(corpus.items.length).toBeGreaterThanOrEqual(360);
     for (const contract of specificityContracts) {
       const rows = corpus.items.filter(item => item.topicId === contract.topicId && item.path === contract.path);
       expect(rows.some(row => row.expect === 'gap') && rows.some(row => row.expect === 'specific'), `${contract.topicId}:${contract.path}`).toBe(true);

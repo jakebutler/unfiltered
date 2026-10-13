@@ -172,6 +172,19 @@ describe('UploadSpeechSocket', () => {
     expect(socket.readyState).toBe(3);
   });
 
+  it('a discard while a failed response body is still being read never starts the automatic retry', async () => {
+    const slowError = () => new Response(new ReadableStream({ start(controller) { setTimeout(() => { controller.enqueue(new TextEncoder().encode('{"error":{"code":"speech-unavailable"}}')); controller.close(); }, 10); } }), { status: 503 });
+    const fetcher = vi.fn<Fetch>(async () => slowError());
+    const { socket, flush, messages, until } = harness(fetcher);
+    flush(); socket.send(JSON.stringify(scope)); socket.send(bytes(1, 2));
+    socket.send(JSON.stringify({ type: 'finish' }));
+    await until(() => fetcher.mock.calls.length === 1);
+    socket.close(1000, 'capture-ended');
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(messages().slice(1)).toEqual([]);
+  });
+
   it('aborts an in-flight upload on close and suppresses every later event', async () => {
     let signal: AbortSignal | undefined;
     const { socket, log, flush, messages } = harness((_, init) => {

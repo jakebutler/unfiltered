@@ -32,14 +32,16 @@ export function scopedQuestion(topic: TopicDefinition, response: TopicResponse, 
   const ids = paths.map(child);
   const date = response.answers['lastMeasuredWeight.measuredWhen'];
   const measuredDate = date?.state === 'known' && typeof date.value === 'string' ? date.value : undefined;
-  // A description ("pills for my heart") is not a name to put in a question.
-  const med = name && assessSpecificity(specificityContracts.find(contract => contract.path === 'medicines.name')!, name).level === 'specific' ? name : 'this medicine or product';
+  // A description ("pills for my heart") is not a name to put in a question; after a follow-up ("pills for my heart; metoprolol") the name is the part that names it.
+  const nameContract = specificityContracts.find(contract => contract.path === 'medicines.name')!;
+  const named = name?.split(/;\s*/).reverse().find(part => assessSpecificity(nameContract, part).level === 'specific');
+  const med = named ?? 'this medicine or product', label = named ? `your ${named} label` : 'the label';
   const conditions: Record<string, string> = { diabetes: 'diabetes', prediabetes: 'prediabetes', bloodPressure: 'high blood pressure', cholesterol: 'high cholesterol', heartDisease: 'heart disease', stroke: 'a stroke', sleepApnea: 'sleep apnea', liver: 'a fatty liver or another liver condition', kidney: 'kidney disease', joint: 'arthritis or another joint condition', thyroidHormone: 'a thyroid or other hormone condition', digestive: 'a digestive condition' };
   if (topic.id === 'Q06' && ids.every(id => id.startsWith('conditions.'))) {
     const names = ids.map(id => conditions[id.slice('conditions.'.length)]);
     if (names.every(Boolean)) return `Have you ever been told you have ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} or ${names.at(-1)}`}?`;
   }
-  if (topic.id === 'Q08' && ids.length === 2 && ids.includes('strength') && ids.includes('labelDirections')) return `What strength and directions are written on your ${med} label? Please don't guess if you aren't sure.`;
+  if (topic.id === 'Q08' && ids.length === 2 && ids.includes('strength') && ids.includes('labelDirections')) return `What strength and directions are written on ${label}? Please don't guess if you aren't sure.`;
   const scoped: Record<string, Record<string, string>> = {
     Q03: { change: 'What was the change in your weight?', timing: 'About when did that change happen?', context: 'What was happening in your life around that change, if anything?' },
     Q04: {
@@ -54,7 +56,7 @@ export function scopedQuestion(topic: TopicDefinition, response: TopicResponse, 
     Q05: { approach: 'What approach did you try?', experience: 'What helped with that approach, and what was difficult?', currentStatus: 'Are you still using that approach? If not, what led you to stop or change it?' },
     Q06: { term: 'What have you been told about this condition?', care: 'What treatment or follow-up do you currently have for this condition, if any?', concern: 'Is this condition causing any difficulties now?', owner: 'Who helps you manage this condition, if anyone?' },
     Q07: { event: 'What procedure did you have, or what was the hospital stay for?', when: 'About when did that happen?' },
-    Q08: { name: 'What name is on the medicine or product label?', strength: `What strength is on your ${med} label, including the units? Please don't guess if you aren't sure.`, labelDirections: `What directions are written on your ${med} label? Please don't guess if you aren't sure.`, actualUse: `How do you actually take or use ${med}?`, reason: `What do you take ${med} for, if you know?`, concerns: `Is there anything you are unsure about or finding difficult with ${med}?` },
+    Q08: { name: 'What name is on the medicine or product label?', strength: `What strength is on ${label}, including the units? Please don't guess if you aren't sure.`, labelDirections: `What directions are written on ${label}? Please don't guess if you aren't sure.`, actualUse: `How do you actually take or use ${med}?`, reason: `What do you take ${med} for, if you know?`, concerns: `Is there anything you are unsure about or finding difficult with ${med}?` },
     Q09: { substance: 'What medicine, food or other substance caused the reaction?' },
     Q10: { condition: value('relationship') ? `What condition does your ${value('relationship')} have?` : 'What condition do you know of in your family?', relationship: value('condition') ? `Which relative has ${value('condition')}?` : 'Which relative are you thinking of?' },
     Q11: { day: 'Which day are you describing?', occasions: 'What else did you eat or drink that day, and about what time?', time: 'About what time did you have that?', foods: 'What did you eat then, if anything?', drinks: 'What did you drink with that, if anything?', drinkAdditions: drink ? `Did you add anything to the ${drink}?` : 'Did you add anything to that drink?', foodAmounts: food ? `About how much ${food} did you have? An everyday description is fine.` : 'About how much food did you have? An everyday description is fine.', drinkAmounts: drink ? `About how much ${drink} did you have? A cup or glass is fine.` : 'About how much did you drink? A cup or glass is fine.' },

@@ -7,7 +7,7 @@ import { AdaptiveProposalFailure, type AdaptiveProposalReceipt } from './adaptiv
 import { activateAdaptiveBranch, AdaptiveError, adaptiveSlot, conditionalReady, parseExplicitHeight, type AdaptiveClarification, type AdaptiveContext, type AdaptiveOutcome, type AdaptiveRejectedCandidate, type EvidenceSpan, type ValidatedAct } from './adaptive-validation.js';
 import { escalation } from './safety.js';
 import { scanReference } from '../../clinic-reference/src/index.js';
-import { specificityTerminal } from '../../clinic-content/src/specificity.js';
+import { specificityReplySettles } from '../../clinic-content/src/specificity.js';
 
 /**
  * Simple single-call intake interpreter (protocol intake-interpreter-v1).
@@ -308,8 +308,12 @@ const relativeWords = /\b(?:mother|mom|mum|father|dad|parents?|sister|brother|si
 const thirdPerson = /\b(?:she|he|they)\b/i;
 const firstPerson = /\b(?:i|i'm|i've|i'd|i was|me)\b/i;
 const correctionCue = /\b(?:actually|correction|correct that|i meant|i mean|sorry|wrong|mistake|changed|now it's|now it is|update|not\b[^.!?;]{0,40}\bbut)\b/i;
-/** A correction inside one message ("500 mg, no wait, 850 mg"). Bare "actually" counts only directly before the new value and not after "and/also". */
-const inMessageCorrection = /\b(?:no,? wait|wait,? no|wait|i mean|i meant|sorry|correction|or rather|make (?:that|it)|scratch that|let me correct|no,? it'?s|not\b[^,.;]{1,30},? (?:but|it'?s))\b|\bno\s*,/i;
+/** A correction inside one message ("500 mg, no wait, 850 mg"): the cue must come directly before the new value,
+ * so ordinary "then wait until bedtime" or an apology elsewhere never supersedes anything. Bare "actually" counts only
+ * directly before the new value and not after "and/also". */
+const inMessageCorrection = /(?:^|[\s,;:.!?-])(?:no,? wait|wait,? no|wait|i mean|i meant|sorry|correction|or rather|make (?:that|it)|scratch that|let me correct|no,? it'?s|no\s*,)[\s,:;.!-]*(?:(?:it'?s|it is|that'?s|more like)[\s,]*)?$/i;
+const correctionHead = /^\s*(?:no,? wait|wait,? no|i mean|i meant|sorry|correction|or rather|make (?:that|it)|scratch that|no,? it'?s|no\s*,)/i;
+const notButCorrection = /\bnot\b[^,.;!?]{1,30},? (?:but|it'?s)[\s,]*$/i;
 const correctingActually = /(?:^|[^\p{L}])actually[\s,]*$/iu, actuallyJoined = /\b(?:and|also|plus)\b[^,.;]*\bactually[\s,]*$/i;
 const completionWords = /\b(?:that's all|that is all|that's it|that is it|that's everything|nothing else|no others?|only (?:those|these|that|this|one|two|three)|just (?:those|these|that|this|the one)|none other|all of them|no more|that's the lot)\b/i;
 /** An acknowledgement may only restate the patient's own words: every number and substantive word must appear in the message. */
@@ -337,7 +341,7 @@ const conditionNames: Record<string, RegExp> = {
   thyroidHormone: /\b(?:thyroid|hormone)\b/i, digestive: /\b(?:digestive|crohn'?s|colitis|ibs|reflux|celiac|coeliac|gerd)\b/i,
 };
 /** A medicine described by its purpose: "pills for my heart", "something for my blood pressure", "arthritis meds". */
-const medicinePurpose = /\b(?:pills?|meds?|medicines?|medications?|tablets?|capsules?|drugs?|shots?|injections?|prescriptions?|inhalers?|something|stuff)\b[^.;,]{0,12}?\b(?:for|to help(?: with)?|to treat|to control|to lower)\b[^.;,]*|\b[\w']+(?: [\w']+)? (?:pills?|meds?|medicines?|medications?|tablets?|drugs?|shots?)\b/gi;
+const medicinePurpose = /\b(?:pills?|meds?|medicines?|medications?|tablets?|capsules?|drugs?|shots?|injections?|prescriptions?|inhalers?|something|stuff)\b[^.;,]{0,12}?\b(?:for|to help(?: with)?|to treat|to control|to lower)\b(?:(?!\b(?:because|so|but|and|since|after|when|as)\b)[^.;,])*|\b[\w']+(?: [\w']+)? (?:pills?|meds?|medicines?|medications?|tablets?|drugs?|shots?)\b/gi;
 const smallNumbers: Record<string, number> = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11 };
 const unitAliases: Record<string, string> = { pound: 'lb', pounds: 'lb', lb: 'lb', lbs: 'lb', kilogram: 'kg', kilograms: 'kg', kilo: 'kg', kilos: 'kg', kg: 'kg', kgs: 'kg', stone: 'st', stones: 'st', st: 'st', centimetre: 'cm', centimetres: 'cm', centimeter: 'cm', centimeters: 'cm', cm: 'cm', metre: 'm', metres: 'm', meter: 'm', meters: 'm', m: 'm', inch: 'in', inches: 'in', in: 'in', foot: 'ft', feet: 'ft', ft: 'ft', 'ft-in': 'ft-in' };
 const stopWords = new Set(['the', 'and', 'with', 'that', 'this', 'have', 'from', 'about', 'they', 'them', 'their', 'would', 'like', 'into', 'your', 'what', 'when', 'will', 'been', 'were', 'some', 'more', 'very', 'just', 'also', 'then', 'than', 'because', 'for', 'but', 'not', 'was', 'are', 'has', 'had', 'its', "it's", "i'm", 'patient', 'reports', 'reported', 'states', 'said', 'says', 'wants', 'want', 'currently', 'takes', 'take']);
@@ -426,7 +430,8 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     const a = bounds(earlierSpans), b = bounds(laterSpans);
     const cued = (from: number, to: number, quote: string) => {
       const gap = sourceText.slice(from, to);
-      return inMessageCorrection.test(gap) || inMessageCorrection.test(quote.slice(0, 16)) || correctingActually.test(gap) && !actuallyJoined.test(gap) || /^\s*actually\b/i.test(quote);
+      if (gap.length > 80) return false;
+      return inMessageCorrection.test(gap) || correctionHead.test(quote) || notButCorrection.test(sourceText.slice(Math.max(0, from - 40), to)) && !/[.!?]/.test(gap) || correctingActually.test(gap) && !actuallyJoined.test(gap) || /^\s*actually\b/i.test(quote);
     };
     if (b.start >= a.end && cued(a.end, b.start, sourceText.slice(b.start, b.end))) return 'later';
     if (a.start >= b.end && cued(b.end, a.start, sourceText.slice(a.start, a.end))) return 'earlier';
@@ -488,6 +493,9 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     const uncertainty = (value: string) => uncertainWords.test(value) || unknownWords.test(value);
     // "Prediabetes" inside the quoted words cannot support a diabetes negative ("no diabetes, just prediabetes" is cited separately).
     const quoteUncertain = uncertainty(quote) || (candidate.path === 'conditions.diabetes' && candidate.state !== 'negative' && conditionNames.prediabetes.test(quote) && !conditionNames.diabetes.test(quote.replace(/\bpre[- ]?diabet(?:es|ic)\b/gi, '')));
+    // A short "I don't know" to a specificity follow-up answers that follow-up; filed under any other field it is misplaced.
+    const followUp = context.displayed?.specificity && !(context.displayed.topicId === candidate.topicId && context.displayed.targetPaths.includes(candidate.path));
+    if (followUp && (candidate.state === 'unknown' || candidate.state === 'declined') && specificityReplySettles(false, sourceText)) return 'follow-up-reply-elsewhere';
     if (candidate.state === 'unknown' && !unknownWords.test(quote)) return 'unknown-without-wording';
     if (candidate.state === 'declined' && !declinedWords.test(quote)) return 'declined-without-wording';
     if (candidate.state === 'negative') {
@@ -613,8 +621,9 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     else if (prior && sameAnswer(prior, answer)) answer = { ...answer, sourceIds: [...new Set([...(prior.sourceIds ?? []), ...(answer.sourceIds ?? [])])] } as SlotAnswer;
     // Several parts of one message for the same text field ("more energy, and to stop eating at night") are one answer, not a conflict.
     // A follow-up that asks for more about an answered text field gets an elaboration, not a contradiction.
-    // A reply to a specificity follow-up adds the detail it asked for, even when the model labels it a correction.
-    else if (prior?.state === 'known' && answer.state === 'known' && definition.kind === 'text' && (prior.sourceIds.includes(sourceId) || asked && (!candidate.corrects || !!context.displayed?.specificity)) && typeof prior.value === 'string' && typeof answer.value === 'string')
+    // A reply to a specificity follow-up adds the detail it asked for, even when the model labels it a correction,
+    // unless the patient explicitly corrects themselves ("actually daily, I was wrong").
+    else if (prior?.state === 'known' && answer.state === 'known' && definition.kind === 'text' && (prior.sourceIds.includes(sourceId) || asked && (!candidate.corrects || !!context.displayed?.specificity && !correctionCue.test(norm(sourceText)))) && typeof prior.value === 'string' && typeof answer.value === 'string')
       answer = { ...answer, value: norm(prior.value).includes(norm(answer.value)) ? prior.value : `${prior.value}; ${answer.value}` } as SlotAnswer;
     // Answering a field already marked conflicting is the patient's clarification: it resolves the conflict, keeping both earlier sources on record.
     else if (prior?.state === 'conflicting') correctsSourceIds = [...(prior.sourceIds ?? [])];
@@ -638,6 +647,8 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     outcome.provenance.push({ topicId: t.id, path: candidate.path, evidence: spans, transform: order === 'later' ? `${intakeInterpreterTransform}-in-message-correction` : derived.transform, sourceText: quote, ...(correctsSourceIds?.length ? { correctsSourceIds } : {}) });
     // Unit implied by the value itself ("5 ft 8 in", "173 cm", "207 lb"); applied after explicit unit facts.
     const unitPath = candidate.path.replace(/\.value$/, '.unit');
+    // A corrected value's unit replaces the unit implied by the value it superseded ("200 lb, no wait, 90 kg").
+    if (order === 'later' && derived.impliedUnit) for (let i = implied.length - 1; i >= 0; i--) if (implied[i]!.topicId === t.id && implied[i]!.unitPath === unitPath) implied.splice(i, 1);
     if (derived.impliedUnit && unitPath !== candidate.path) implied.push({ topicId: t.id, unitPath, unit: derived.impliedUnit, spans, quote, corrected: !!correctsSourceIds, height: candidate.path === 'height.value' });
     if (candidate.path === 'currentWeightEstimate.value' && answer.state === 'known') {
       const timestamp: SlotAnswer = { state: 'known', value: context.source.at, sourceIds: [sourceId] };
@@ -823,13 +834,17 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
 
   // --- optional neutral acknowledgement (never advice; the next question stays authored) ---
   const ack = typeof wire.ack === 'string' ? wire.ack.trim().replace(/\s+/g, ' ') : '';
+  // "I'll bring the bottle" or "yes" to a specificity follow-up settles it in the session; it is not an unplaced answer,
+  // and a rejected restatement of that same field (the model writing the confirmed name) is not unplaced either.
+  const followUp = context.displayed?.specificity, settlesFollowUp = !!followUp && specificityReplySettles(!!followUp.spelling, sourceText);
+  const followUpPaths = settlesFollowUp ? context.displayed!.targetPaths : [];
   // Patient words the server could not place (not model padding) keep the source visible for review.
-  const unplaced = rejected.some(entry => entry.evidence && (entry.state === 'known' && !['relative-subject', 'question-not-answer', 'label-vs-actual'].includes(entry.reason) || ['unknown-field', 'unknown-topic'].includes(entry.reason)));
+  // Words that only settle the follow-up ("Yes", "I'll bring the bottle") are accounted for wherever the model filed them.
+  const settlingOnly = (entry: AdaptiveRejectedCandidate) => settlesFollowUp && !!entry.evidence?.length && entry.evidence.every(span => specificityReplySettles(!!followUp!.spelling, sourceText.slice(span.start, span.end)));
+  const unplaced = rejected.some(entry => !(entry.topicId === context.displayed?.topicId && entry.path && followUpPaths.includes(entry.path)) && !settlingOnly(entry) && entry.evidence && (entry.state === 'known' && !['relative-subject', 'question-not-answer', 'label-vs-actual'].includes(entry.reason) || ['unknown-field', 'unknown-topic'].includes(entry.reason)));
   if (ack && ack.length <= 160 && !ackForbidden.test(ack) && ackGrounded(ack, sourceText) && outcome.updates.length && !outcome.clarifications.length && !unplaced) outcome.acknowledgement = ack;
 
   if (rejected.length) outcome.rejectedCandidates = rejected.slice(0, 64);
-  // "I'll bring the bottle" or "yes" to a specificity follow-up settles it in the session; it is not an unplaced answer.
-  const followUp = context.displayed?.specificity, settlesFollowUp = !!followUp && (!!followUp.spelling || Object.values(specificityTerminal).some(pattern => pattern.test(sourceText)));
   outcome.hasUnresolvedInterpretation = !!outcome.unresolvedQuestions?.length || outcome.clarifications.length > 0 || unplaced
     || outcome.updates.length === 0 && !settlesFollowUp && !outcome.acts.some(act => ['question', 'move-on', 'topic-switch'].includes(act.kind));
   return outcome;

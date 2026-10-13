@@ -81,7 +81,7 @@ describe("typed native capture and response", () => {
       }),
     });
     expect(response.status).toBe("stopped");
-    expect(response.questionnaire).toContain("|CC-0.2.phq4.native-4");
+    expect(response.questionnaire).toContain("|CC-0.2.phq4.native-5");
     expect(
       await fromNativeQuestionnaireResponse(response, validSourceIds),
     ).toEqual(capture);

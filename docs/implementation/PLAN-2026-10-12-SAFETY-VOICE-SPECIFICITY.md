@@ -14,6 +14,31 @@ Progress (2026-10-12):
     - 344-answer deterministic corpus. Vague recall must be at least 95%, and needless follow-ups at most 5%.
     - Two holdouts were labelled before running. The first scored 31/40 and drove general lexicon rules. The second scored 45/47 (95.7%) on first run.
     - 6 bounded live interpreter calls (qwen3.8-max). They found and fixed two real defects: a named reply raised a conflict, and "I'll bring the bottle" was marked unresolved.
+- **Independent review of P1–P3 (2026-10-13):** Codex (gpt-6.1-sol, xhigh) on each commit, and cubic on PR #8. Every valid finding is fixed with a regression test that fails on the old code. Main fixes:
+  - **Safety gate:**
+    - A reviewer failure on an unflagged turn now goes to clinician review.
+    - Gate verdicts apply after a cancelled interpretation, after a resumed eating-concern notice, to spoken replies on fixed-choice items, and on the grouped and stream paths.
+    - Floor: "odd" no longer matches "OD'd". "Pain was severe" is past and goes to the model. "I told my husband about my suicidal thoughts" now pauses. Line breaks end a clause.
+  - **Specificity:**
+    - A qualified "yes" never confirms.
+    - Codes and settled notes are bound to the exact answer.
+    - Vague answers stay partial on the native final-review path too.
+    - Spelling checks count toward the topic budget.
+    - Numbers count only with their unit of time.
+    - A time answer must mention a time.
+    - Condition terms CT-0.3 code nothing more specific than the patient's words.
+    - Native definition bumped to `CC-0.2.phq4.native-5`.
+  - **Voice:**
+    - Retrying never overwrites typed words.
+    - No upload starts after a discard.
+    - Send stays off while a recording is kept.
+    - A corrected unit replaces the superseded one.
+    - Ordinary "wait" or "sorry" is not a correction.
+  - **Deferred, with reasons:**
+    - Binding safety-corpus recordings to full-message hashes is gate hygiene for the next safety change.
+    - The fail-closed banner staying visible is accurate (the message was flagged).
+    - A queue-test timer is a test-only flake risk.
+    - With no reviewer configured at all, the floor and screen are the documented fallback.
 - **P4 and P5: next.** Voice article review triage: `VOICE-ARTICLE-REVIEW-2026-10-12.md`.
 Constraints carried forward:
 - Reasoning runs on DigitalOcean inference only.
@@ -197,6 +222,8 @@ The model may *propose* a specificity, but the server validates it: the model ca
 **Nothing the patient said is discarded.** "pills for my heart" is kept verbatim as the item's description, not as its name. And "heart" in a medication context no longer marks heart disease; the condition guard requires condition wording.
 
 ### 3.3 Reference resolvers ("tools")
+> **Superseded in part (see Progress above and `packages/clinic-reference/SOURCES.md`):** RxClass classes, the lay-class map and the Clinical Tables conditions list were not used. Conditions are authored terms validated against CMS ICD-10-CM. The table below is the original proposal.
+
 These are local, offline, deterministic indexes, built from free sources by a build script and bundled with the server. **No runtime calls to outside services.** That keeps latency at 0 and sends no patient text off-platform; NLM's Clinical Tables terms forbid PHI in requests anyway.
 
 | Domain | Source (free) | What we use |
@@ -261,7 +288,7 @@ A **specificity corpus**: about 150 synthetic answers across every topic in the 
 | **P0** | Decisions D1–D6; verify source licences and releases; author both corpora (safety, specificity) | S | none |
 | **P1** | Safety gate: floor + negation scope + synchronous classifier + fail-safe banner + corpus gates; E-0.2 definition | M | D1 |
 | **P2** | Voice V1 robustness, including in-message self-correction | S–M | none |
-| **P3a** | Specificity engine core: contracts, assessment, probe engine, budget, readiness, staff view. First with **medications + conditions**, plus resolver build scripts (RxNorm, RxClass classes, Clinical Tables conditions, CMS ICD-10-CM) | L | D1, D5, D6 |
+| **P3a** | Specificity engine core: contracts, assessment, probe engine, budget, readiness, staff view. First with **medications + conditions**, plus resolver build scripts (RxNorm and CMS ICD-10-CM with authored condition terms; RxClass and Clinical Tables were dropped, see §3.3) | L | D1, D5, D6 |
 | **P3b** | Extend contracts and probes to every other topic in §3 (allergies, procedures, family history, symptoms, prior approaches, food, activity, substances, sleep, care team, time/quantity) | M | P3a |
 | **P4** | Voice V2 hands-free: browser → Deepgram live with server-minted short-lived tokens; optional ElevenLabs read-aloud of authored prompts (D3) | M | P2 |
 | **P5** | Re-qualify, deploy stage8, live corpus runs, hosted journeys, docs | S | all |

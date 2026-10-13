@@ -107,7 +107,8 @@ export class UploadSpeechSocket {
   private async transcribe(scope: UploadScope, body: Uint8Array<ArrayBuffer>) {
     this.busy = true;
     let attempt = await this.request(scope, body);
-    if (attempt.status === 'failed' && attempt.transient) attempt = await this.request(scope, body);
+    // Never retry after a discard or pause, including one that landed while the error body was being read.
+    if (attempt.status === 'failed' && attempt.transient && this.readyState !== 3 && !this.controller?.signal.aborted) attempt = await this.request(scope, body);
     if (attempt.status === 'aborted' || this.readyState === 3) return;
     if (attempt.status === 'failed') return this.keep(attempt.code);
     this.busy = false;
@@ -128,7 +129,7 @@ export class UploadSpeechSocket {
     try {
       const response = await this.fetcher(`${transcriptionPath}?${query}`, { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: controller.signal, headers: { 'Content-Type': 'application/octet-stream' }, body });
       if (controller.signal.aborted) return { status: 'aborted' };
-      if (!response.ok) return { status: 'failed', code: await errorCode(response), transient: response.status >= 500 || response.status === 429 };
+      if (!response.ok) { const code = await errorCode(response); return controller.signal.aborted ? { status: 'aborted' } : { status: 'failed', code, transient: response.status >= 500 || response.status === 429 }; }
       const text = ((await response.json()) as { text?: unknown }).text;
       return typeof text === 'string' ? { status: 'done', text } : { status: 'failed', code: 'invalid-transcription', transient: false };
     } catch {

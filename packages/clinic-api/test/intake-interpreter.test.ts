@@ -436,6 +436,26 @@ describe('intake-interpreter-v1 conflicts', () => {
     expect(strength.map(entry => [entry.sourceText.join(' '), entry.transform])).toEqual([['500 mg', 'interpreted-v1-superseded-in-message'], ['850 mg', 'interpreted-v1-in-message-correction']]);
     expect(outcome.provenance.filter(entry => entry.path === 'lastMeasuredWeight.value').map(entry => entry.transform)).toEqual(['interpreted-v1', 'interpreted-v1-superseded-in-message']);
   });
+  it('a corrected measurement takes the unit of the corrected value, not the superseded one', () => {
+    const outcome = interpretIntakeResponse({ ...empty, facts: [
+      { topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: '200 lb', quote: '200 lb' },
+      { topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: '90 kg', quote: '90 kg' },
+    ] }, context('I weigh 200 lb, no wait, 90 kg.', ['Q04']));
+    expect(answers(outcome, 'Q04')).toMatchObject({ 'lastMeasuredWeight.value': { state: 'known', value: 90 }, 'lastMeasuredWeight.unit': { state: 'known', value: 'kg' } });
+    expect(outcome.clarifications).toEqual([]);
+  });
+  it.each([
+    ['I take one tablet in the morning, then wait until bedtime. At night I take two tablets.', 'one tablet in the morning', 'two tablets'],
+    ['One in the morning. Sorry, I am a bit nervous about all this. Two at night as well.', 'One in the morning', 'Two at night'],
+  ])('ordinary "wait" or "sorry" between two facts is not a correction: %s', (text, first, second) => {
+    const outcome = interpretIntakeResponse({ ...empty, items: [{ topic: 'Q08', list: 'medicines', existing: null, fields: [
+      { field: 'name', state: 'known', value: 'metformin', quote: null },
+      { field: 'actualUse', state: 'known', value: first, quote: first },
+      { field: 'actualUse', state: 'known', value: second, quote: second },
+    ] }] }, context(`Metformin. ${text}`, ['Q08']));
+    expect(outcome.provenance.some(entry => entry.transform.endsWith('superseded-in-message'))).toBe(false);
+    expect(itemsOf(outcome, 'Q08', 'medicines')[0]?.answers.actualUse).toMatchObject({ state: 'known', value: `${first}; ${second}` });
+  });
   it('"and ... actually" adds to a text answer rather than correcting it', () => {
     const ctx = context('More energy, and actually to sleep better too.', ['Q01']);
     const outcome = interpretIntakeResponse({ ...empty, facts: [
@@ -551,6 +571,11 @@ describe('intake-interpreter-v1 answer specificity', () => {
     expect(outcome.rejectedCandidates?.map(candidate => candidate.reason)).toEqual(['condition-from-medicine-purpose', 'condition-from-medicine-purpose']);
     expect(itemsOf(outcome, 'Q08', 'medicines').map(item => item.answers.name)).toMatchObject([{ value: 'pills for my heart' }, { value: 'arthritis meds' }]);
   });
+  it('a purpose clause ends at "because": the condition reported after it is still recorded', () => {
+    const ctx = context('I take pills for my heart because I had a heart attack.', ['Q06']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q06', field: 'conditions.heartDisease', state: 'known', value: true, quote: 'pills for my heart because I had a heart attack' }] }, ctx);
+    expect(answers(outcome, 'Q06')['conditions.heartDisease']).toMatchObject({ state: 'known' });
+  });
   it('a condition named outright next to a medicine purpose is still recorded', () => {
     const ctx = context('I have heart disease, so I take pills for my heart.', ['Q06']);
     const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q06', field: 'conditions.heartDisease', state: 'known', value: true, quote: 'I have heart disease' }] }, ctx);
@@ -582,5 +607,40 @@ describe('intake-interpreter-v1 answer specificity', () => {
     expect(outcome.updates).toEqual([]);
     expect(outcome.clarifications).toEqual([]);
     expect(outcome.hasUnresolvedInterpretation).toBe(false);
+  });
+  it('"Yes" to a spelling question is settled even when the model restates the name with a quote it cannot support', () => {
+    const ctx = followUp('Yes');
+    ctx.displayed = { ...ctx.displayed!, specificity: { key: 'Q08:medicines[m1].name', spelling: { system: 'rxnorm', code: '6809', display: 'metformin' } } };
+    const outcome = interpretIntakeResponse({ ...empty, items: [{ topic: 'Q08', list: 'medicines', existing: 'm1', fields: [{ field: 'name', state: 'known', value: 'metformin', quote: 'metformin' }] }] }, ctx);
+    expect(itemsOf(outcome, 'Q08', 'medicines')[0]!.answers.name).toMatchObject({ value: 'pills for my heart' });
+    expect(outcome.hasUnresolvedInterpretation).toBe(false);
+  });
+  it('"Yes" to a spelling question is settled even when the model files it under another question (recorded live output)', () => {
+    const ctx = followUp('Yes');
+    ctx.displayed = { ...ctx.displayed!, specificity: { key: 'Q08:medicines[m1].name', spelling: { system: 'rxnorm', code: '6809', display: 'metformin' } } };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q02', field: 'concern', state: 'known', value: 'yes', quote: 'Yes' }] }, { ...ctx, topics: [...ctx.topics, ...context('x', ['Q02']).topics] });
+    expect(outcome.updates).toEqual([]);
+    expect(outcome.hasUnresolvedInterpretation).toBe(false);
+  });
+  it('"I don\'t know" to a follow-up is never filed as an answer to a different question', () => {
+    const ctx = followUp("I don't know what it was exactly.");
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q02', field: 'concern', state: 'unknown', value: null, quote: "I don't know what it was exactly" }] }, { ...ctx, topics: [...ctx.topics, ...context('x', ['Q02']).topics] });
+    expect(outcome.updates).toEqual([]);
+    expect(outcome.rejectedCandidates?.map(entry => entry.reason)).toEqual(['follow-up-reply-elsewhere']);
+    expect(outcome.hasUnresolvedInterpretation).toBe(false);
+  });
+  it('an unrelated reply to a spelling question is not settled by the question alone', () => {
+    const ctx = followUp('No, and I get a rash from antibiotics.');
+    ctx.displayed = { ...ctx.displayed!, specificity: { key: 'Q08:medicines[m1].name', spelling: { system: 'rxnorm', code: '6809', display: 'metformin' } } };
+    expect(interpretIntakeResponse(empty, ctx).hasUnresolvedInterpretation).toBe(true);
+  });
+  it('an explicit correction in reply to a follow-up replaces the earlier words, with lineage', () => {
+    const ctx = context('No, actually daily now, I was wrong about occasionally.', ['Q14']);
+    ctx.sources = [{ id: 'prior', role: 'patient', text: 'I walk occasionally.', at: '2026-10-09T11:00:00.000Z' }, ...ctx.sources];
+    ctx.responses = { Q14: { presented: true, answers: { frequency: { state: 'known', value: 'occasionally', sourceIds: ['prior'] } } } };
+    ctx.displayed = { topicId: 'Q14', promptId: 'B02', targetPaths: ['frequency'], specificity: { key: 'Q14:frequency' } };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q14', field: 'frequency', state: 'known', value: 'daily', quote: 'actually daily now', corrects: 1 }] }, ctx);
+    expect(answers(outcome, 'Q14').frequency).toMatchObject({ state: 'known', value: 'daily' });
+    expect(outcome.provenance.find(entry => entry.path === 'frequency')?.correctsSourceIds).toEqual(['prior']);
   });
 });

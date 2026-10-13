@@ -226,8 +226,9 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 next.requests[input.requestId] = { fingerprint, revision: d.revision + 1 };
                 // Guided free text gets the same synchronous safety gate before the next question is shown.
                 const source = next.turns.find(turn => turn.role === 'patient' && !d.turns.some(prior => prior.id === turn.id));
-                const freeText = input.action === 'answer' && !!input.text?.trim() && !input.text.startsWith('__') && !input.choiceTranscriptOnly && !content.view(guidedDraft).currentPrompt?.choices?.some(choice => choice.value === input.text);
-                const gated = source && freeText && !next.safety ? await safety.gate(p.r.client, next, source.id).catch(() => undefined) : undefined;
+                // A spoken reply that could not fill a choice is still the patient's own words, so it is reviewed too.
+                const freeText = input.action === 'answer' && !!input.text?.trim() && !input.text.startsWith('__') && !content.view(guidedDraft).currentPrompt?.choices?.some(choice => choice.value === input.text);
+                const gated = source && freeText && !next.safety?.paused ? await safety.gate(p.r.client, next, source.id).catch(() => undefined) : undefined;
                 if (gated) applyGateOutcome(next, gated.entry, gated.signal);
                 return reply(view(await persist(p.r, p.stored, next)));
             }
@@ -247,7 +248,7 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 limit(`safety:${p.claims.sessionId}`, 60);
                 const result = await safety.review(p.r.client, p.stored.draft, input.signalId);
                 // Only an escalation touches the draft, so background reviews never make the patient's next turn stale.
-                const escalated = !!result.entry?.escalated && !p.stored.draft.safety && !p.stored.draft.confirmed;
+                const escalated = !!result.entry?.escalated && !p.stored.draft.safety?.paused && !p.stored.draft.confirmed;
                 // The escalated (paused) view is returned directly: a session GET would drop identity confirmation.
                 const paused = escalated ? await safety.settleDraft(p.r.client, p.claims.sessionId, p.claims.patient, result.entry!) : undefined;
                 return reply({ signalId: input.signalId, state: result.pending ? 'pending' : 'reviewed', escalated, ...(paused ? { session: view(paused) } : {}) });

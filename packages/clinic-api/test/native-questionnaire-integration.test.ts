@@ -203,7 +203,7 @@ describe('native questionnaire integration and recovery boundaries', () => {
     const c = conversation(configuration()); let draft = draftFor('first-intake'), count = 0;
     while (c.view(draft).currentPrompt) {
       const prompt = c.view(draft).currentPrompt!; expect(++count).toBeLessThan(150);
-      const text = prompt.choices ? prompt.choices.find(choice => choice.value === '__negative')?.value ?? prompt.choices.find(choice => choice.value === '__done')?.value ?? prompt.choices.find(choice => choice.value === '__topic-not-applicable')?.value ?? prompt.choices[0].value : prompt.id === 'Q04:height.value' ? '170' : prompt.id === 'Q04:lastMeasuredWeight.value' ? '82' : 'Synthetic typical detail recalled for this fixture.';
+      const text = prompt.choices ? prompt.choices.find(choice => choice.value === '__negative')?.value ?? prompt.choices.find(choice => choice.value === '__done')?.value ?? prompt.choices.find(choice => choice.value === '__topic-not-applicable')?.value ?? prompt.choices[0].value : prompt.id === 'Q04:height.value' ? '170' : prompt.id === 'Q04:lastMeasuredWeight.value' ? '82' : prompt.id === 'Q04:lastMeasuredWeight.measuredWhen' ? 'In March 2026.' : 'Synthetic typical detail recalled for this fixture.';
       draft = c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: prompt.id, action: 'answer', text });
     }
     expect(c.view(draft).completeness).toBe('complete');

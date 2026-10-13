@@ -1,6 +1,6 @@
 {
- "version": "SPC-0.2",
- "note": "Synthetic patient answers, one per row, labelled by whether the answer alone is specific enough for the field (gap = needs a follow-up). Authored for the SP-0.1 gate; not patient data. Rows H-* and H2-* were holdouts labelled before first run: H-* scored 31/40 before the lexicon fixes it prompted; H2-* scored 45/47 on first run (2026-10-12).",
+ "version": "SPC-0.3",
+ "note": "Synthetic patient answers, one per row, labelled by whether the answer alone is specific enough for the field (gap = needs a follow-up). Authored for the SP-0.1 gate; not patient data. Rows H-* and H2-* were holdouts labelled before first run: H-* scored 31/40 before the lexicon fixes it prompted; H2-* scored 45/47 on first run (2026-10-12). Rows R-* are independent-review reports (codex and cubic, 2026-10-13), added with the fixes they prompted; all scored as labelled after those fixes.",
  "items": [
   {
    "id": "Q08-medicines.name-0",
@@ -2409,6 +2409,118 @@
    "path": "quality",
    "value": "pretty bad lately",
    "expect": "gap"
+  },
+  {
+   "id": "R-Q11-occasions.foodAmounts-0",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "a small amount",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q11-occasions.foodAmounts-1",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "not a whole lot",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q11-occasions.foodAmounts-2",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "a small bowl",
+   "expect": "specific"
+  },
+  {
+   "id": "R-Q08-medicines.actualUse-0",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "whenever",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q08-medicines.actualUse-1",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "whenever I need it for pain",
+   "expect": "specific"
+  },
+  {
+   "id": "R-Q17-substances.frequencyAmount-0",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "2 drinks socially",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q14-frequency-0",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "2 pills sometimes",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q07-events.when-0",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "lately",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q07-events.when-1",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "a while ago, before my 2 surgeries",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q04-lastMeasuredWeight.measuredWhen-0",
+   "topicId": "Q04",
+   "path": "lastMeasuredWeight.measuredWhen",
+   "value": "lost 20 pounds",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q07-events.when-2",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "after my son was born",
+   "expect": "specific"
+  },
+  {
+   "id": "R-Q19-clinicians.owner-0",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "my doctor is great",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q06-reportedConditions.term-0",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "my heart is bad",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q06-reportedConditions.term-1",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "My doctors said it was something with my heart",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q08-medicines.name-0",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "The blue one I got at CVS",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q08-medicines.name-1",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "lisinopril from Walgreens",
+   "expect": "specific"
   }
  ]
 }

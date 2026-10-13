@@ -4,7 +4,7 @@ import { canonicalJson, digest } from '../../clinical-core/src/domain.js';
 import { AdaptiveError, applyValidatedTurn, validateAdaptiveProposal, type AdaptiveContext, type AdaptiveOutcome } from './adaptive-validation.js';
 import { AdaptiveProposalFailure, buildAdaptiveMessages, type AdaptiveProposer, type AdaptiveProposalReceipt } from './adaptive.js';
 import { eligibleAdaptiveProbes, selectAdaptiveDialogue } from './dialogue.js';
-import { countSpecificityAsk, settleSpecificityReply } from './specificity.js';
+import { countSpecificityAsk, settleSpecificityReply, specificityFindings } from './specificity.js';
 import type { conversation } from './conversation.js';
 import { escalation, escalationCopy, safetyVersion } from './safety.js';
 import { safetySignalSeed } from './safety-screen.js';
@@ -191,7 +191,7 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         const shown = next.adaptive!.exchange?.prompt?.specificity?.key;
         next.adaptive!.exchange = selectAdaptiveDialogue(context, outcome);
         const asked = next.adaptive!.exchange.prompt?.specificity;
-        if (asked && asked.key !== shown) next.specificity = countSpecificityAsk(next.specificity ?? {}, asked);
+        if (asked && asked.key !== shown) next.specificity = countSpecificityAsk(next.specificity ?? {}, asked, specificityFindings(next.topics).find(finding => finding.key === asked.key)?.value);
         return next;
     }
     function initialize(d: Draft) {
@@ -257,6 +257,16 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         const saved = await commit(store, stored, n);
         return { draft: saved.draft, operation: operation(saved.draft, id) };
     }
+    /** Applies a safety-gate verdict on its own save (bounded stale-session retry), outside any interpretation result. */
+    async function settleGate(store: AdaptiveDraftStore, gated: { signal?: NonNullable<Draft['safetySignals']>[number]; entry: SafetyReviewEntry }) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+            const stored = await store.read(), n = structuredClone(stored.draft);
+            applyGateOutcome(n, gated.entry, gated.signal);
+            if (canonicalJson(n) === canonicalJson(stored.draft)) return;
+            try { await commit(store, stored, n); return; }
+            catch (error) { if (!(error instanceof ApiFailure) || error.code !== 'stale-session') throw error; }
+        }
+    }
     async function reconcile(store: AdaptiveDraftStore, id: string) {
         const stored = await store.read(), op = operation(stored.draft, id);
         if (op.status !== 'processing' || !op.deadlineAt || Date.parse(op.deadlineAt) > now()) return { draft: stored.draft, operation: op };
@@ -319,14 +329,19 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         op = operation(stored.draft, id);
         if (op.status !== 'processing' || op.attemptId !== attemptId || op.processingRevision !== stored.draft.revision)
             throw new ApiFailure('processing-claim-unverified', 503);
-        if (options.groupedExtractor) {
-            const saved = await runGroupedExtractionOperation(store, stored, context, options.groupedExtractor, { now, timeoutMs, onReplySaved: options.onReplySaved, recognitionContinuation: true,
-                navigationContext: draft => ({ responses: content.effective(draft, true).responses, nativeRouting: content.nativeNavigation(draft), qualification: content.navigationQualification }) });
-            return { draft: saved.stored.draft, operation: operation(saved.stored.draft, id) };
-        }
-        if (options.streamProposer) {
-            const saved = await runAdaptiveStreamOperation(store, stored, context, options.streamProposer, { now, timeoutMs, onReplySaved: options.onReplySaved, fullCapture: options.fullCapture });
-            return { draft: saved.draft, operation: operation(saved.draft, id) };
+        // The safety gate runs beside interpretation on every turn, so risk is decided before the next question is shown.
+        const gate = store.safetyGate ? store.safetyGate(stored.draft, op.sourceId).catch(() => undefined) : undefined;
+        if (options.groupedExtractor || options.streamProposer) {
+            // These paths save their own result; the gate verdict follows on its own save.
+            const saved = options.groupedExtractor
+                ? (await runGroupedExtractionOperation(store, stored, context, options.groupedExtractor, { now, timeoutMs, onReplySaved: options.onReplySaved, recognitionContinuation: true,
+                    navigationContext: draft => ({ responses: content.effective(draft, true).responses, nativeRouting: content.nativeNavigation(draft), qualification: content.navigationQualification }) })).stored
+                : await runAdaptiveStreamOperation(store, stored, context, options.streamProposer!, { now, timeoutMs, onReplySaved: options.onReplySaved, fullCapture: options.fullCapture });
+            const gated = gate ? await gate : undefined;
+            if (!gated) return { draft: saved.draft, operation: operation(saved.draft, id) };
+            await settleGate(store, gated);
+            const fresh = await store.read();
+            return { draft: fresh.draft, operation: operation(fresh.draft, id) };
         }
         let receipt: AdaptiveProposalReceipt | undefined, outcome: AdaptiveOutcome | undefined, rawProposalAudit: AdaptiveRawProposalAudit | undefined;
         let status: AdaptiveOperation['status'] = 'applied', errorCode: string | undefined;
@@ -334,8 +349,6 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         // The interpreter validates per fact and returns an outcome; the legacy proposer is validated here, unchanged.
         type Candidate = { receipt?: AdaptiveProposalReceipt; rawProposal?: unknown; proposal?: unknown; outcome?: AdaptiveOutcome };
         const proposal = Promise.resolve().then((): Promise<Candidate> => interpreter ? interpreter.interpret(context) : proposer!.propose(context));
-        // The safety gate runs beside interpretation on every turn, so risk is decided before the next question is shown.
-        const gate = store.safetyGate ? store.safetyGate(stored.draft, op.sourceId).catch(() => undefined) : undefined;
         try {
             const candidate = await Promise.race([proposal, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('adaptive-deadline')), timeoutMs); })]);
             receipt = candidate.receipt;
@@ -362,6 +375,8 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         const current = operation(fresh.draft, id);
         if (current.status !== 'processing' || current.attemptId !== attemptId || current.sourceId !== op.sourceId || current.fingerprint !== op.fingerprint || canonicalJson(current.binding) !== canonicalJson(op.binding) || fresh.draft.revision !== op.processingRevision) {
             await lateReceipt(store, id, attemptId, op, receipt, rawProposalAudit);
+            // A stopped or superseded interpretation never drops the safety verdict for the patient's words.
+            if (gated) await settleGate(store, gated);
             return reconcile(store, id);
         }
         try { await trustedContext(fresh.draft, current); }
@@ -376,7 +391,7 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             outcome = { ...outcome, responses: n.topics };
             // A reply to a specificity follow-up that added no new detail may still settle it ("I'll bring the bottle", "yes").
             const mark = op.displayed?.specificity;
-            if (interpreter && mark) n.specificity = settleSpecificityReply(n.specificity ?? {}, mark, { sourceId: op.sourceId, text: context.source.text, updatedPath: outcome.updates.some(update => update.topicId === op.displayed!.topicId && op.displayed!.targetPaths.includes(update.path)) });
+            if (interpreter && mark) n.specificity = settleSpecificityReply(n.specificity ?? {}, mark, { sourceId: op.sourceId, text: context.source.text, updatedPath: outcome.updates.some(update => update.topicId === op.displayed!.topicId && op.displayed!.targetPaths.includes(update.path)), value: specificityFindings(n.topics).find(finding => finding.key === mark.key)?.value });
             const dialogueContext = { ...context, nativeRouting: content.nativeNavigation(n), ...(interpreter ? { specificity: n.specificity ?? {} } : {}) };
             n.adaptive!.exchange = selectAdaptiveDialogue(dialogueContext, outcome);
             // Interpreter path: never show the same question a third time, in a short window (A/B cycles) or for the same topic all session.
@@ -385,8 +400,9 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             const parked = new Set<string>();
             for (let guard = 0; interpreter && guard <= dialogueContext.topics.length; guard++) { // one topic parked per pass
                 const cycling = n.adaptive!.exchange.prompt;
-                const shownForTopic = Object.values(n.adaptive!.operations ?? {}).filter(op => op.displayed?.topicId === cycling?.topicId && op.displayed?.promptId === cycling?.promptId).length;
-                if (!cycling || cycling.kind === 'instrument' || recentPrompts.filter(text => text === cycling.text).length < 2 && shownForTopic < 2) break;
+                // Specificity follow-ups reuse their field's prompt id but have their own budget; they are not repeats.
+                const shownForTopic = Object.values(n.adaptive!.operations ?? {}).filter(op => !op.displayed?.specificity && op.displayed?.topicId === cycling?.topicId && op.displayed?.promptId === cycling?.promptId).length;
+                if (!cycling || cycling.kind === 'instrument' || cycling.specificity || recentPrompts.filter(text => text === cycling.text).length < 2 && shownForTopic < 2) break;
                 parked.add(cycling.topicId);
                 const remaining = outcome.clarifications.filter(item => !parked.has(item.topicId));
                 n.adaptive!.exchange = selectAdaptiveDialogue({ ...dialogueContext, topics: dialogueContext.topics.filter(topic => !parked.has(topic.id)), dialogue: { ...dialogueContext.dialogue, activeTopicId: undefined, suspended: undefined, lastUnsuccessful: undefined } },
@@ -399,7 +415,7 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
                 n.adaptive!.parkedTopicIds = [...new Set([...(n.adaptive!.parkedTopicIds ?? []), next.topic.id])];
             }
             const asked = n.adaptive!.exchange.prompt?.specificity;
-            if (asked) n.specificity = countSpecificityAsk(n.specificity ?? {}, asked);
+            if (asked) n.specificity = countSpecificityAsk(n.specificity ?? {}, asked, specificityFindings(n.topics).find(finding => finding.key === asked.key)?.value);
             // A guarded acknowledgement precedes the next AUTHORED question; approved replies always win.
             if (outcome.acknowledgement && !n.adaptive!.exchange.reply && n.adaptive!.exchange.prompt && n.adaptive!.exchange.status === 'question')
                 n.adaptive!.exchange.reply = { id: `ack-${outcome.sourceId}`, text: outcome.acknowledgement };

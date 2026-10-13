@@ -24,5 +24,6 @@ Built by `scripts/reference/build-reference.mjs`, which writes `src/*.generated.
 
 - A code is attached only to an exact name or authored-synonym match of the patient's own words, or to a spelling the patient confirmed.
 - A close spelling is only offered to the patient as a question.
-- The patient's words are always kept verbatim. Lookups never change whether an answer counts as specific; the deterministic rules in `packages/clinic-content/src/specificity.ts` decide that.
+- The patient's words are always kept verbatim. The deterministic rules in `packages/clinic-content/src/specificity.ts` decide whether an answer counts as specific. A lookup affects that in one way only: an exact name or authored synonym in the patient's own words makes a name answer specific ("asthma problems" names asthma). A close spelling never does.
+- Names that normalize to the same text but carry different codes (stereoisomers such as "limonene, (-)-" and "limonene, (+)-") keep the plain-name row; with no plain-name row, the name is ambiguous and is never coded.
 - This is a synthetic demo, not a medical device, and it makes no clinical decision support claims.

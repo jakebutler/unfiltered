@@ -7,11 +7,13 @@
  * without printing it. One call per case per model, no retries.
  */
 import { readFileSync } from 'node:fs';
-import { createClinicContent, type TopicResponse } from '../../packages/clinic-content/src/index.ts';
+import { createClinicContent } from '../../packages/clinic-content/src/register.ts';
+import type { TopicResponse } from '../../packages/clinic-content/src/types.ts';
 import { DO_ENDPOINT, DO_MODELS, digitalOcean } from '../../packages/clinical-core/src/digitalocean.ts';
 import { buildIntakeInterpreterMessages, interpretIntakeResponse, intakeRequestBytes, parseIntakeInterpreterText } from '../../packages/clinic-api/src/intake-interpreter.ts';
 import type { AdaptiveContext, AdaptiveOutcome } from '../../packages/clinic-api/src/adaptive-validation.ts';
 import { selectAdaptiveDialogue } from '../../packages/clinic-api/src/dialogue.ts';
+import { settleSpecificityReply, specificityFindings } from '../../packages/clinic-api/src/specificity.ts';
 
 const envFile = process.env.INTAKE_EVAL_ENV_FILE ?? '/Volumes/rexy/GitHub/unfiltered/.env.local';
 const apiKey = readFileSync(envFile, 'utf8').split('\n').map(line => /^\s*DIGITALOCEAN_MODEL_ACCESS_KEY\s*=\s*"?([^"\s]+)"?/.exec(line)?.[1]).find(Boolean);
@@ -21,7 +23,7 @@ const register = createClinicContent({ mentalHealth: 'phq4' });
 // Same topic set the server offers in first-intake adaptive mode: register topics (minus Q18) plus condition branches (COND excluded for PHQ-4).
 const topics = [...register.topics.filter(topic => topic.id !== 'Q18'), ...Object.values(register.branches).map(branch => branch.topic).filter(topic => topic.id !== 'COND')];
 
-interface Case { id: string; displayed: { topicId: string; promptId: string; targetPaths: string[]; specificity?: { key: string } }; question: string; text: string; prior?: Record<string, TopicResponse>; check(outcome: AdaptiveOutcome): string[]; }
+interface Case { id: string; displayed: { topicId: string; promptId: string; targetPaths: string[]; specificity?: { key: string; spelling?: { system: string; code: string; display: string } } }; question: string; text: string; prior?: Record<string, TopicResponse>; check(outcome: AdaptiveOutcome): string[]; }
 const value = (outcome: AdaptiveOutcome, topicId: string, path: string) => { const answer = outcome.responses[topicId]?.answers[path]; return answer?.state === 'known' ? answer.value : answer?.state; };
 const items = (outcome: AdaptiveOutcome, topicId: string, path: string) => { const answer = outcome.responses[topicId]?.answers[path]; return answer?.state === 'known' ? answer.items ?? [] : []; };
 const changedTopics = (outcome: AdaptiveOutcome) => [...new Set(outcome.updates.map(update => update.topicId))];
@@ -89,6 +91,7 @@ const cases: Case[] = [
       return [...(/sandwich|salad|chips|pizza|cereal|eggs/i.test(foods) ? [`invented foods ${foods}`] : []), ...o.updates.filter(u => u.topicId !== 'Q11').map(u => `unexpected ${u.topicId}.${u.path}`),
         ...(o.updates.some(u => u.answer.state === 'negative') ? ['resistance recorded as negative'] : [])]; } },
   // Answer specificity (SP-0.1): descriptions stay verbatim as names, purposes never become conditions, follow-up replies attach to the same item.
+  // SPECIFICITY (P3, 2026-10-12): opt-in like the holdouts. Run with: -- qwen3.8-max spec-heart-pills,spec-name-reply,spec-bring-reply,spec-spelling-yes,spec-family-unknown,spec-family-vague
   { id: 'spec-heart-pills', displayed: { topicId: 'Q08', promptId: 'Q08', targetPaths: ['medicines'] }, question: 'What medicines, vitamins, supplements, or weight-loss products do you currently use, if any? Share the names and how you take them as best you know.',
     text: 'I take a couple of pills for my heart in the morning, and something for my sugar at night.',
     check: o => { const names = items(o, 'Q08', 'medicines').map(i => String((i.answers.name as { value?: unknown })?.value ?? ''));
@@ -104,6 +107,16 @@ const cases: Case[] = [
     text: "I'm not sure, I'll bring the bottle next time.",
     check: o => { const meds = items(o, 'Q08', 'medicines'); const name = meds.find(i => i.id === 'm1')?.answers.name;
       return [...(meds.length === 1 ? [] : [`${meds.length} medicines`]), ...(name?.state === 'known' && /heart/.test(String(name.value)) ? [] : [`name became ${JSON.stringify(name)}`]), ...o.clarifications.map(c => `clarification ${c.path}:${c.reason}`), ...(o.hasUnresolvedInterpretation ? ['marked unresolved'] : [])]; } },
+  { id: 'spec-spelling-yes', displayed: { topicId: 'Q08', promptId: 'B02', targetPaths: ['medicines[m1].name'], specificity: { key: 'Q08:medicines[m1].name', spelling: { system: 'http://www.nlm.nih.gov/research/umls/rxnorm', code: '6809', display: 'metformin' } } }, question: 'Did you mean “metformin”? If not, please spell the name as it appears on the label.',
+    prior: { Q08: { presented: true, answers: { medicines: { state: 'known', complete: false, sourceIds: ['prior'], items: [{ id: 'm1', answers: { name: { state: 'known', value: 'metfromin', sourceIds: ['prior'] }, actualUse: { state: 'known', value: 'twice a day', sourceIds: ['prior'] } } }] } } } },
+    text: 'Yes',
+    check: o => { const name = items(o, 'Q08', 'medicines').find(i => i.id === 'm1')?.answers.name;
+      return [...(name?.state === 'known' && name.value === 'metfromin' ? [] : [`name became ${JSON.stringify(name)}`]), ...o.clarifications.map(c => `clarification ${c.path}:${c.reason}`), ...(o.hasUnresolvedInterpretation ? ['marked unresolved'] : [])]; } },
+  { id: 'spec-family-unknown', displayed: { topicId: 'Q10', promptId: 'B02', targetPaths: ['familyHistory[f1].condition'], specificity: { key: 'Q10:familyHistory[f1].condition' } }, question: "You mentioned “heart stuff”. Do you know what condition it was, as best you know? It's fine to say you don't know.",
+    prior: { Q10: { presented: true, answers: { familyHistory: { state: 'known', complete: false, sourceIds: ['prior'], items: [{ id: 'f1', answers: { condition: { state: 'known', value: 'heart stuff', sourceIds: ['prior'] }, relationship: { state: 'known', value: "dad's side", sourceIds: ['prior'] } } }] } } } },
+    text: "I don't know what it was exactly.",
+    check: o => { const fam = items(o, 'Q10', 'familyHistory').find(i => i.id === 'f1')?.answers.condition;
+      return [...(fam?.state === 'known' && /heart/.test(String(fam.value)) ? [] : [`condition became ${JSON.stringify(fam)}`]), ...o.updates.filter(u => u.topicId !== 'Q10').map(u => `placed in ${u.topicId}.${u.path}`), ...o.clarifications.map(c => `clarification ${c.path}:${c.reason}`), ...(o.hasUnresolvedInterpretation ? ['marked unresolved'] : [])]; } },
   { id: 'spec-family-vague', displayed: { topicId: 'Q10', promptId: 'Q10', targetPaths: ['familyHistory'] }, question: 'Has anyone in your close family had health conditions you know about?',
     text: "Heart stuff runs on my dad's side.",
     check: o => { const fam = items(o, 'Q10', 'familyHistory');
@@ -122,7 +135,7 @@ for (const model of models) {
     const at = '2026-10-10T12:00:00.000Z';
     const current = { id: 'eval-turn', role: 'patient' as const, text: testCase.text, at };
     const sources = [...(testCase.prior ? [{ id: 'prior', role: 'patient' as const, text: 'Earlier answer.', at: '2026-10-10T11:50:00.000Z' }] : []), current];
-    const context: AdaptiveContext = { binding: { operationId: 'eval', sessionId: 'eval', patient: 'eval', scenario: 'first-intake', revision: 1, contentVersion: 'eval', snapshotDigest: 'eval' }, source: current, sources, topics, responses: testCase.prior ?? {}, displayed: testCase.displayed, displayedText: testCase.question, ...(testCase.id.startsWith('spec-') ? { specificity: {} } : {}) };
+    const context: AdaptiveContext = { binding: { operationId: 'eval', sessionId: 'eval', patient: 'eval', scenario: 'first-intake', revision: 1, contentVersion: 'eval', snapshotDigest: 'eval' }, source: current, sources, topics, responses: testCase.prior ?? {}, displayed: testCase.displayed, displayedText: testCase.question, ...(testCase.id.startsWith('spec-') ? { specificity: testCase.displayed.specificity ? { [testCase.displayed.specificity.key]: { asked: 1 } } : {} } : {}) };
     const messages = buildIntakeInterpreterMessages(context);
     const started = Date.now();
     let line: string;
@@ -134,7 +147,9 @@ for (const model of models) {
       const outcome = interpretIntakeResponse(raw, context);
       const failures = testCase.check(outcome);
       if (!failures.length) passed++;
-      const next = selectAdaptiveDialogue(context, outcome);
+      // As the session does: the follow-up was counted when shown, and a reply that added nothing may settle it.
+      const mark = testCase.displayed.specificity, specificity = mark ? settleSpecificityReply(context.specificity ?? {}, mark, { sourceId: current.id, text: testCase.text, updatedPath: outcome.updates.some(update => update.topicId === testCase.displayed.topicId && testCase.displayed.targetPaths.includes(update.path)), value: specificityFindings(outcome.responses).find(finding => finding.key === mark.key)?.value }) : context.specificity;
+      const next = selectAdaptiveDialogue({ ...context, ...(specificity ? { specificity } : {}) }, outcome);
       line = [`[${model}] ${testCase.id}: ${failures.length ? 'FAIL ' + failures.join('; ') : 'PASS'}  (${ms} ms, ${intakeRequestBytes(messages)} B in, ${result.usage?.completion_tokens ?? '?'} tok out)`,
         `  raw: ${JSON.stringify(raw).slice(0, 900)}`,
         `  accepted: ${outcome.updates.map(u => `${u.topicId}.${u.path}=${u.answer.state === 'known' ? JSON.stringify(u.answer.items ? `${u.answer.items.length} items` : u.answer.value) : u.answer.state}`).join(' | ') || '-'}`,
