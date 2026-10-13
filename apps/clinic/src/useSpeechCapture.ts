@@ -3,6 +3,7 @@ import { createVoiceDraft, reduceVoiceDraft, type VoiceDraft, type RecognitionSe
 import type { CaptureEvent } from './voice-conversation';
 import { appendTranscript, CaptureEpoch, CaptureResources, captureWorkletUrl, LocalVoiceActivity, PcmTransport, voiceCaptureLimits, type CaptureScope } from './voice-capture';
 import { UploadSpeechSocket } from './upload-socket';
+import { DirectSpeechSocket } from './direct-socket';
 
 /** Upload transcription starts only after Finish, so it gets the provider timeout plus margin. */
 const uploadDrainMs = 35_000;
@@ -24,11 +25,12 @@ function recognition(value: unknown): RecognitionSegment {
   return { text: v.text, start: v.start, duration: v.duration, isFinal: v.isFinal, speechFinal: v.speechFinal };
 }
 
-/** `upload` posts one recording on finish for hosted deployments without WebSocket support. Upload keeps captured audio when capture ends for any reason other than an explicit discard. */
-export function useSpeechCapture({ getScope, getText, onText, onInterruptPlayback, onEvent, scopeKey, mediaSource, input }: {
-  getScope: () => CaptureScope | undefined; getText: () => string; onText: (text: string, hasTranscript: boolean, conversation?: boolean) => void; onInterruptPlayback: () => void; onEvent?: (event: CaptureEvent) => void; scopeKey: string; mediaSource?: CaptureMediaSource; input?: 'stream' | 'upload';
+/** `upload` posts one recording on finish for hosted deployments without WebSocket support. Upload keeps captured audio when capture ends for any reason other than an explicit discard.
+ * `direct` streams like `stream`, but to Deepgram with a server-minted token; `onFallback` reports that it could not connect. */
+export function useSpeechCapture({ getScope, getText, onText, onInterruptPlayback, onEvent, onFallback, scopeKey, mediaSource, input }: {
+  getScope: () => CaptureScope | undefined; getText: () => string; onText: (text: string, hasTranscript: boolean, conversation?: boolean) => void; onInterruptPlayback: () => void; onEvent?: (event: CaptureEvent) => void; onFallback?: () => void; scopeKey: string; mediaSource?: CaptureMediaSource; input?: 'stream' | 'upload' | 'direct';
 }) {
-  const callbacks = useRef({ getScope, getText, onText, onInterruptPlayback, onEvent, mediaSource, input }); callbacks.current = { getScope, getText, onText, onInterruptPlayback, onEvent, mediaSource, input };
+  const callbacks = useRef({ getScope, getText, onText, onInterruptPlayback, onEvent, onFallback, mediaSource, input }); callbacks.current = { getScope, getText, onText, onInterruptPlayback, onEvent, onFallback, mediaSource, input };
   const epoch = useRef(new CaptureEpoch()), run = useRef<CaptureRun | undefined>(undefined), kept = useRef<CaptureRun | undefined>(undefined);
   const [status, setStatus] = useState<CaptureStatus>('idle');
   const [interim, setInterim] = useState('');
@@ -159,7 +161,7 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
       const upload = callbacks.current.input === 'upload';
       const uploadSocket = upload ? new UploadSpeechSocket(socketUrl) : undefined;
       capture.upload = uploadSocket;
-      const socket = (uploadSocket ?? new WebSocket(socketUrl)) as unknown as WebSocket; socket.binaryType = 'arraybuffer';
+      const socket = (uploadSocket ?? (callbacks.current.input === 'direct' ? new DirectSpeechSocket(socketUrl) : new WebSocket(socketUrl))) as unknown as WebSocket; socket.binaryType = 'arraybuffer';
       capture.resources.own(() => { if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close(1000, 'capture-ended'); });
       capture.transport = new PcmTransport(socket, context.sampleRate);
       capture.flush = () => processor.port.postMessage('finish');
@@ -217,6 +219,7 @@ export function useSpeechCapture({ getScope, getText, onText, onInterruptPlaybac
             if (capture.conversation) callbacks.current.onEvent?.({ type: 'completed', scope, text, clean });
           } else if (value.type === 'error') {
             if ('retained' in value && value.retained === true) keep(capture);
+            else if ('fallback' in value && value.fallback === true) { callbacks.current.onFallback?.(); end('Hands-free voice could not connect. Nothing was lost: dictate one answer instead, or keep typing.'); }
             else end('Voice is unavailable for this question. Your draft is still here, and you can continue typing.');
           }
           else throw new Error('invalid-voice-event');

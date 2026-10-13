@@ -57,6 +57,10 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
   const naturalAnswer = session?.adaptive?.mode === 'adaptive' && activePrompt?.mode !== 'guided';
   const exactChoicePrompt = activePrompt?.choices?.length && !activePrompt.fields?.length && !promptAllowsFreeText(activePrompt, false) ? activePrompt : undefined;
   const canCaptureAnswer = Boolean(exactChoicePrompt) || Boolean(activePrompt && promptAllowsFreeText(activePrompt, naturalAnswer) && !activePrompt.choices?.some(choice => choice.value === text) && !/^Q16:MH0[1-4](?:$|:)/.test(activePrompt.id));
+  // Hands-free falls back to push-to-talk for the rest of the visit if its token or socket fails.
+  const [directFallback, setDirectFallback] = useState(false);
+  const voiceInput = config?.voice.input === 'direct' && directFallback ? 'upload' : config?.voice.input;
+  const directVoice = voiceInput === 'direct';
   const voiceScopeKey = `${verified}:${session?.id}:${session?.revision}:${activePrompt?.id}:${Boolean(preview)}:${Boolean(leftAt)}:${confirmationUnknown}`;
   const playback = useSpeechPlayback(`${voiceScopeKey}:${session?.adaptive?.reply?.id}`);
   const currentCaptureScope = (): CaptureScope | undefined => {
@@ -66,11 +70,12 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
   };
   const voice = useVoiceConversation({
     context: () => ({
-      scope: currentCaptureScope(), eligible: Boolean(verified && (exactChoicePrompt || naturalAnswer && session?.adaptive?.available) && canCaptureAnswer && !preview && !leftAt && !confirmationUnknown && session?.phase === 'conversation'),
+      scope: currentCaptureScope(), eligible: Boolean(verified && (exactChoicePrompt && !directVoice || naturalAnswer && session?.adaptive?.available) && canCaptureAnswer && !preview && !leftAt && !confirmationUnknown && session?.phase === 'conversation'),
       blocked: Boolean(busy || stale || heldPrompt || pendingTurn || pendingAdaptive || adaptive.answerBlocked),
-      choicePrompt: exactChoicePrompt,
+      // Hands-free hosted voice keeps exact choices as buttons (D4).
+      choicePrompt: directVoice ? undefined : exactChoicePrompt,
       speech: conversationSpeech({ currentPrompt: activePrompt, adaptive: session?.adaptive }),
-      pauseReason: activePrompt?.mode === 'guided' ? 'Voice is paused. Use the exact answer choices or fields below, then resume when the guided questions are complete.' : 'Voice is paused. Review your answers or check the current conversation before resuming.',
+      pauseReason: directVoice && exactChoicePrompt ? 'Voice is paused. Choose an answer with the buttons below, then resume voice.' : activePrompt?.mode === 'guided' ? 'Voice is paused. Use the exact answer choices or fields below, then resume when the guided questions are complete.' : 'Voice is paused. Review your answers or check the current conversation before resuming.',
     }),
     startCapture: () => { void capture.start({ conversation: true }); }, finishCapture: () => capture.finish(),
     stopCapture: (reason, preserve) => capture.stop(reason, true, preserve), stopPlayback: playback.stop, speak: sourceId => listen(sourceId),
@@ -84,12 +89,12 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
   });
   const capture = useSpeechCapture({
     mediaSource: captureMediaSource,
-    scopeKey: voiceScopeKey, getScope: currentCaptureScope, getText: () => textRef.current, input: config?.voice.input,
+    scopeKey: voiceScopeKey, getScope: currentCaptureScope, getText: () => textRef.current, input: voiceInput, onFallback: () => setDirectFallback(true),
     onText: (value, hasTranscript, conversationCapture) => { textRef.current = value; setText(value); if (hasTranscript) setAnswerChannel(conversationCapture ? 'unreviewed-transcript' : 'confirmed-transcript'); },
     onInterruptPlayback: playback.stop, onEvent: event => voice.controller.event(event),
   });
   // Hosted upload voice is dictation only: no continuous conversation, and exact choices stay buttons.
-  const uploadVoice = config?.voice.input === 'upload';
+  const uploadVoice = voiceInput === 'upload';
   const hasComposerDraft = Boolean(text.trim() || Object.values(fields).some(value => value.trim()) || pendingTurn || pendingAdaptive || capture.active || capture.retained);
   const hasDraft = hasComposerDraft || voice.active;
   const draftRef = useRef(hasComposerDraft);
@@ -423,7 +428,7 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
           {heldPrompt && <Notice tone="attention">The saved conversation has moved on. Your unsent answer for the earlier question is still shown below. Copy any text you need, then clear it to continue.</Notice>}
           {activePrompt ? <form className="answer-form" onSubmit={event => { event.preventDefault(); void (naturalAnswer ? updateAdaptive() : updateTurn('answer')); }}>
             <div className="question-block"><h2 ref={questionRef} tabIndex={-1}>{activePrompt.text}</h2><p className="current-topic">{session.topics.find(topic => topic.id === activePrompt.topicId)?.title}</p>{activePrompt.purpose && <details className="question-purpose"><summary><CircleHelp size={15} aria-hidden="true" />Why we’re asking</summary><p>{activePrompt.purpose}</p></details>}</div>
-            <VoiceControls available={config.voice.available} explanation={config.voice.explanation} conversation={voice} conversationAllowed={!uploadVoice && Boolean(exactChoicePrompt || naturalAnswer && session.adaptive?.available)} exactChoices={Boolean(exactChoicePrompt)} upload={uploadVoice} captureAllowed={uploadVoice ? canCaptureAnswer && !exactChoicePrompt : canCaptureAnswer} disabled={Boolean(busy || pendingTurn || pendingAdaptive || heldPrompt) || stale || adaptive.answerBlocked || (naturalAnswer && !session.adaptive?.available)} capture={capture} playback={playback} onListen={() => listen(activePrompt.id)} onListenReply={session.adaptive?.reply ? () => listen(session.adaptive!.reply!.id) : undefined} questionTooLong={(conversationSpeech({ currentPrompt: activePrompt })?.text.length ?? 0) > 1200} replyTooLong={(session.adaptive?.reply?.text.length ?? 0) > 1200} />
+            <VoiceControls available={config.voice.available} explanation={config.voice.explanation} conversation={voice} conversationAllowed={!uploadVoice && Boolean(exactChoicePrompt && !directVoice || naturalAnswer && session.adaptive?.available)} exactChoices={Boolean(exactChoicePrompt) && !directVoice} upload={uploadVoice} captureAllowed={uploadVoice || directVoice ? canCaptureAnswer && !exactChoicePrompt : canCaptureAnswer} disabled={Boolean(busy || pendingTurn || pendingAdaptive || heldPrompt) || stale || adaptive.answerBlocked || (naturalAnswer && !session.adaptive?.available)} capture={capture} playback={playback} onListen={() => listen(activePrompt.id)} onListenReply={session.adaptive?.reply ? () => listen(session.adaptive!.reply!.id) : undefined} questionTooLong={(conversationSpeech({ currentPrompt: activePrompt })?.text.length ?? 0) > 1200} replyTooLong={(session.adaptive?.reply?.text.length ?? 0) > 1200} />
             {config.voice.available && config.voice.output === 'browser' && <label className="voice-consent"><input type="checkbox" checked={readAloud} onChange={event => { setReadAloud(event.target.checked); if (!event.target.checked) playback.stop(); }} /><span>Read new questions aloud</span></label>}
             {exactChoicePrompt && voice.choice && <section className="voice-choice-confirmation" aria-label="Confirm recognized choice"><p>{choiceConfirmationSpeech(exactChoicePrompt, voice.choice.value)}</p><p className="metadata">Recognized answer: {voice.choice.optionTranscript}</p><Button disabled={Boolean(busy) || stale || voice.status === 'saving'} onClick={() => void voice.controller.confirmChoice('control')}>Confirm choice</Button><Button disabled={Boolean(busy) || voice.status === 'saving'} onClick={() => voice.controller.retryChoice()}>Choose again</Button></section>}
             {exactChoicePrompt && text && !voice.choice && <Notice tone="attention">Recognized words: {text}. No choice has been recorded. Clear these words to try again, or choose an exact answer below.</Notice>}

@@ -54,7 +54,16 @@ Progress (2026-10-12):
   - "2x" needs an interval; "after" alone isn't a time; a vague answer keeps the native response `stopped`.
   - A medicine's purpose ("heart meds", "arthritis meds") is never read as a reported condition.
   - Optional detail probes can't be nominated ahead of a required question.
-- **P4 and P5: next.** Voice article review triage: `VOICE-ARTICLE-REVIEW-2026-10-12.md`.
+- **P4 (voice V2 hands-free): code complete (2026-10-13).**
+  - The browser streams mic audio straight to Deepgram live (`nova-3-medical`). It uses a 30 s token minted per utterance at `POST /api/clinic/speech/tokens`. The server never relays audio.
+  - Each mint reserves against the Deepgram budget ledger (59 s stream bound). Refused when paused, confirmed, stale, buttons-only (PHQ-4 and exact-choice items), or over budget (429).
+  - Fallback to push-to-talk on a server, network or socket failure. A refusal is not a fallback.
+  - Read-aloud: browser voice by default. Optional ElevenLabs Flash via `POST /api/clinic/speech/output`, authored prompts only, same ledger.
+  - Verified: suites green (foundation 1849, clinic 230, hosting 28). Live, the exact streaming URL transcribed a self-correction clip as one utterance. A live browser token refusal fell back to push-to-talk, and dictation filled the box.
+  - **Blocker:** the Deepgram token grant needs a Member-role key. The current key returns 403, so hosted hands-free falls back today. Owner to create a Member-role key for `DEEPGRAM_API_KEY`.
+  - **Known limit:** a token is checked only when the socket opens, so the server cannot cut a stream mid-utterance. The browser enforces the 59 s cap. The server bounds exposure by bounding the number of tokens.
+  - Not yet verified: a full browser hands-free intake against Deepgram (blocked on the key), and the hosted deploy (P5).
+- **P5: next.** Voice article review triage: `VOICE-ARTICLE-REVIEW-2026-10-12.md`.
 Constraints carried forward:
 - Reasoning runs on DigitalOcean inference only.
 - Authored questions only; the agent never writes clinical wording.

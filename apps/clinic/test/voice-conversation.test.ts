@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { AdaptiveTurnResult, PromptView, SourceTurn } from '../../../packages/clinic-contract/src/index';
 import { conversationSpeech } from '../../../packages/clinic-contract/src/index';
-import { VoiceConversation, type ConversationVoiceContext } from '../src/voice-conversation';
+import { VoiceConversation, endpointGraceMs, type ConversationVoiceContext } from '../src/voice-conversation';
 import { promptAllowsFreeText } from '../src/prompt-input';
 import { SourceInspector } from '../src/components';
 
@@ -103,6 +103,26 @@ describe('natural voice endpoint and lifecycle', () => {
   it.each(['PHQ choices', 'review', 'identity loss'])('%s stops automatic capture and requires explicit resumption', name => {
     const h = harness(); h.controller.start(); h.ready(); h.setContext({ eligible: false, blocked: false, pauseReason: name }); h.controller.reconcile();
     expect(h.controller.state.status).toBe('paused'); expect(h.ports.stopCapture).toHaveBeenCalled(); h.controller.reconcile(); expect(h.ports.startCapture).toHaveBeenCalledOnce();
+  });
+});
+
+describe('endpoint cues and spoken pause commands', () => {
+  it.each([
+    ['I take metformin', 600], ['I take um', 1800], ['metformin 500 no wait', 1800], ['I mean', 1800], ['summer', 600],
+    ['sorry about that, it\'s 5 mg', 600], ['and,', 1800], ['the dose is…', 1800], ['let me think.', 1800], ['so the dose', 600],
+  ])('endpointGraceMs(%j) is %i', (text, ms) => { expect(endpointGraceMs(text)).toBe(ms); });
+  it('a final ending in a filler keeps the endpoint open for 1800ms, not 600ms', () => {
+    const h = harness(false); h.controller.start(); h.ready(); h.final('I take um'); h.timer.advance(600); expect(h.ports.finishCapture).not.toHaveBeenCalled();
+    h.timer.advance(1199); expect(h.ports.finishCapture).not.toHaveBeenCalled(); h.timer.advance(1); expect(h.ports.finishCapture).toHaveBeenCalledOnce();
+  });
+  it.each(['Stop.', 'wait please', 'Hold on, please.', 'pause', 'Wait a second'])('spoken pause command %j pauses without saving', async text => {
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(600); h.completed(true, text); await tick();
+    expect(h.controller.state.status).toBe('paused'); expect(h.controller.state.message).toBe("Voice paused. Resume when you’re ready, or keep typing.");
+    expect(h.ports.stopCapture).toHaveBeenLastCalledWith("Voice paused. Resume when you’re ready, or keep typing.", false); expect(h.ports.save).not.toHaveBeenCalled();
+  });
+  it('a sentence that merely starts with stop is saved normally', async () => {
+    const h = harness(false); h.controller.start(); h.ready(); h.final(); h.timer.advance(600); h.completed(true, 'stop taking aspirin last week'); await tick();
+    expect(h.ports.save).toHaveBeenCalledWith('stop taking aspirin last week', initial); expect(h.controller.state.status).toBe('thinking');
   });
 });
 

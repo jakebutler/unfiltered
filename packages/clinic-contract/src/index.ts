@@ -9,7 +9,7 @@ export interface ClinicConfig {
   syntheticOnly: true;
   scenarios: { id: ScenarioId; title: string; description: string }[];
   conversation: { mode: 'guided' | 'adaptive'; explanation?: string };
-  voice: { available: boolean; explanation?: string; input?: 'stream' | 'upload'; output?: 'provider' | 'browser' };
+  voice: { available: boolean; explanation?: string; input?: 'stream' | 'upload' | 'direct'; output?: 'provider' | 'browser' };
 }
 /** Channel records how these original words entered the draft; summary confirmation never relabels it. */
 export interface SourceTurn { id: string; role: 'patient' | 'assistant'; text: string; at: string; corrects?: string; channel?: SourceChannel; displayedPromptId?: string; }

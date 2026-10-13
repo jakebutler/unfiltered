@@ -18,12 +18,21 @@
 >   - The browser records one clip and `POST /api/clinic/speech/transcriptions` calls Deepgram `nova-3-medical` REST once (about 0.8 s on hosted). The words land in the answer box for review.
 >   - The browser `speechSynthesis` reads questions aloud.
 >   - PHQ and other exact-choice prompts stay button-only.
->   - Enabled by `CLINIC_SPEECH_INPUT=deepgram-rest` + `DEEPGRAM_API_KEY` (sensitive) + provider policy `clinic-demo-intake-v1-20261011c`. That policy adds a Deepgram budget of 300 requests / 3600 s per account and 80 requests / 1200 s per session.
+>   - Push-to-talk is enabled by `CLINIC_SPEECH_INPUT=deepgram-rest` + `DEEPGRAM_API_KEY` (sensitive) + provider policy `clinic-demo-intake-v1-20261011c`. That policy adds a Deepgram budget of 300 requests / 3600 s per account and 80 requests / 1200 s per session.
 >   - The UI has been checked on hosted. A real microphone was not exercised in automation.
+> - **Voice V2, hands-free (2026-10-13, P4, code complete):**
+>   - `CLINIC_SPEECH_INPUT=deepgram-direct` makes the browser stream microphone audio straight to Deepgram live (`nova-3-medical`). Each utterance uses a 30 s token minted at `POST /api/clinic/speech/tokens`. The server never relays audio. Each mint is an admission reservation under the Deepgram ledger, and it charges the 59 s stream bound. Requires the interpreter and provider policy as before.
+>   - Push-to-talk upload stays wired as the fallback. `deepgram-rest` remains push-to-talk only.
+>   - Optional read-aloud: `CLINIC_SPEECH_OUTPUT=elevenlabs` + `ELEVENLABS_API_KEY`, served by `POST /api/clinic/speech/output`. It only voices authored prompts or the current assistant reply, and it uses the same ledger. The default is browser voice.
+>   - **Setup blocker:** Deepgram's token grant (`/v1/auth/grant`) needs an API key with at least the **Member** role. The current key returns `403 FORBIDDEN: Insufficient permissions`, so hosted hands-free falls back to push-to-talk today. Owner action: create a Member-role key and set it as `DEEPGRAM_API_KEY` (hosted and in the local env file).
+>   - The page's Content-Security-Policy adds `wss://api.deepgram.com` to connect-src only in direct mode.
+>   - Local testing: `LOCAL_SPEECH=direct` on `scripts/dev/local-mock-clinic.mts` runs direct voice and upload against real Deepgram. Calls are capped by `LOCAL_DEEPGRAM_CAP` (default 30). `DEEPGRAM_API_KEY` is read from `LOCAL_ENV_FILE`.
+>   - Verified 2026-10-13: suites green (foundation 1849, clinic 230, hosting 28). Live, the exact streaming URL transcribed a self-correction clip as one utterance with a clean close. A live browser token refusal fell back to push-to-talk, and real dictation filled the answer box.
 > - **Still open:**
 >   - Tier 0 still pauses on "I have never had suicidal thoughts" (false positive). Fixing it changes the qualified digest.
 >   - The staff safety screen was verified through its API, not visually.
 >   - In the live run, one adaptive turn ("feeling hopeless…") repeated the previous question and filed the words under Q16 "current stress".
+>   - Hands-free is not yet verified in a full browser intake against Deepgram. It is blocked on the Member-role key. The P4 changes are not yet on hosted (that is P5).
 
 
 > **Later the same day:**

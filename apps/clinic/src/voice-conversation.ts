@@ -31,6 +31,16 @@ export interface ConversationVoicePorts {
 interface Clock { after(ms: number, fn: () => void): unknown; clear(timer: unknown): void; }
 const browserClock: Clock = { after: (ms, fn) => setTimeout(fn, ms), clear: timer => clearTimeout(timer as ReturnType<typeof setTimeout>) };
 const sameScope = (a?: CaptureScope, b?: CaptureScope) => Boolean(a && b && a.sessionId === b.sessionId && a.promptId === b.promptId && a.expectedRevision === b.expectedRevision && a.requestId === b.requestId);
+const endpointCues = new Set(['um', 'uh', 'er', 'erm', 'hmm', 'wait', 'no wait', 'hold on', 'i mean', 'actually', 'sorry', 'let me think', 'and', 'or', 'but', 'so', 'like']);
+const pauseCommands = new Set(['stop', 'stop listening', 'pause', 'wait', 'hold on', 'wait a moment', 'wait a second']);
+const spokenCommand = (text: string) => text.trim().toLowerCase().replace(/[\p{P}\s]+$/u, '').replace(/(^|\s)please$/, '').replace(/[\p{P}\s]+$/u, '');
+/** A filler or continuation cue at the end of the latest final segment means the speaker is likely still talking. */
+export function endpointGraceMs(text: string): number {
+  const raw = text.trim();
+  if (/[,…]$|\.\.\.$/.test(raw)) return 1800;
+  const words = raw.toLowerCase().replace(/[\p{P}\s]+$/u, '').split(/\s+/);
+  return [1, 2, 3].some(n => endpointCues.has(words.slice(-n).join(' '))) ? 1800 : 600;
+}
 
 /** Explicit opt-in coordinator. Speech final events alone never submit in dictation mode. */
 export class VoiceConversation {
@@ -42,6 +52,7 @@ export class VoiceConversation {
   private submitted = new Set<string>();
   private finals = new Map<string, string>();
   private latestFinalEnd = -1;
+  private latestFinalText = '';
   private endpointEnd?: number;
   private heardVoice = false;
   private awaiting?: { sessionId: string; revision: number; promptId?: string };
@@ -60,7 +71,7 @@ export class VoiceConversation {
     this.generation++; this.awaiting = undefined; this.interpretation = undefined; this.begin(context);
   }
   private begin(context: ConversationVoiceContext) {
-    this.clearTimers(); this.scope = context.scope; this.finals.clear(); this.latestFinalEnd = -1; this.endpointEnd = undefined; this.heardVoice = false; this.startingSpeech = false;
+    this.clearTimers(); this.scope = context.scope; this.finals.clear(); this.latestFinalEnd = -1; this.latestFinalText = ''; this.endpointEnd = undefined; this.heardVoice = false; this.startingSpeech = false;
     this.set('connecting', 'Connecting the microphone…'); this.ports.startCapture();
   }
   stop(reason = 'Voice conversation paused. Your available words remain in the draft.', preservePlayback = false) {
@@ -127,13 +138,13 @@ export class VoiceConversation {
       // Network delivery order is not audio order. Only a new latest final or
       // unresolved words in the production reducer invalidate an existing endpoint.
       if (changedFinal && segment.start + segment.duration >= this.latestFinalEnd) {
-        this.latestFinalEnd = segment.start + segment.duration;
+        this.latestFinalEnd = segment.start + segment.duration; this.latestFinalText = segment.text;
         this.endpointEnd = segment.speechFinal && segment.text.trim() ? this.latestFinalEnd : undefined;
         this.clock.clear(this.grace); this.grace = undefined;
       }
       if (event.interim) { this.clock.clear(this.grace); this.grace = undefined; }
       if (this.endpointEnd !== undefined && !event.interim && this.grace === undefined) {
-        this.grace = this.clock.after(600, () => {
+        this.grace = this.clock.after(endpointGraceMs(this.latestFinalText), () => {
           this.grace = undefined;
           if (!this.valid(event.scope) || !['listening', 'speaking'].includes(this.state.status)) return;
           this.clearTimers(); this.set('finishing', 'Finishing your words · microphone off'); this.ports.stopPlayback(); this.ports.finishCapture();
@@ -162,6 +173,7 @@ export class VoiceConversation {
         this.heardVoice = false;
         this.choiceCapturePending = true; this.set('thinking', 'Your choice is not saved yet. Confirm it by voice or with the controls below.'); this.ports.prepareChoiceCapture?.(); return;
       }
+      if (pauseCommands.has(spokenCommand(event.text))) { this.stop("Voice paused. Resume when you’re ready, or keep typing."); return; }
       this.submitted.add(event.scope.requestId); void this.submit(event.text, event.scope);
     }
   }
