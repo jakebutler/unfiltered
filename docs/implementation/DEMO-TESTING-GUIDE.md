@@ -34,7 +34,7 @@ Hands-free listens for your answers without the Dictate and Finish buttons. Push
 7. If hands-free can't connect, you'll see: "Hands-free voice could not connect. Nothing was lost: dictate one answer instead, or keep typing." Voice then switches to push-to-talk for the rest of the visit.
    - If the connection drops mid-answer, the words heard so far stay in the answer box. The last words may be missing, so check them.
 
-Hands-free needs a Deepgram key with the Member role (installed locally 2026-10-13). With a lower-role key it falls back to push-to-talk straight away.
+Hands-free is live on the hosted demo (stage8, 2026-10-14). It needs a Deepgram key with the Member role; with a lower-role key it falls back to push-to-talk straight away.
 
 ## Run through it (about 10 minutes)
 

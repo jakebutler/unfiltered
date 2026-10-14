@@ -1,5 +1,14 @@
 # Clinic adaptive intake — handoff (2026-10-11)
 
+> **2026-10-14 (stage8, P5): hosted runs native-5 with hands-free voice.**
+> - Medplum: questionnaire `CC-0.2.phq4.native-5` published (`Questionnaire/9004366b-…`), the three named AccessPolicies updated in place, staff memberships unchanged. One temporary admin elevation (owner-approved, granted three times in the console because of two retries); every seed run ended `demotion-verified`.
+> - Qualification: `qualify-clinic-deployment.ts`, 39 checks including the native questionnaire round-trip, expires **2026-10-21 01:48 UTC** (re-qualify before then).
+> - Vercel env: policy `clinic-demo-intake-v1-20261013a` (Deepgram 3000 s/session, 36000 s/account, concurrency 4; DigitalOcean 150 requests/session, account cap unchanged), `CLINIC_SPEECH_INPUT=deepgram-direct`, Member-role `DEEPGRAM_API_KEY`, new `CLINIC_CONFIG_JSON`. Browser read-aloud.
+> - Verified on hosted: config advertises direct voice; CSP allows only `wss://api.deepgram.com` beyond self; a fake-microphone hands-free run minted 9 tokens, saved 8 answers and advanced 5 questions in 75 s; physician, RD and admin log in and their queues load.
+> - Found and fixed on the way: old handoffs (all 18 were native-4) failed the whole staff queue — now counted and noted; the qualifier never passed the questionnaire binding, tripped the login rate limit and hard-coded the mapping check to fail — all fixed (`--rehearsal` added); the seed couldn't upgrade policies in place or find existing staff by email (staff references carried from the previous journal).
+> - Rollback: stage7 can't be restored, because its sealed identity no longer matches the updated policies.
+> - Still to do: rotate the Medplum client secret (it appeared in a screenshot); a real-microphone, human-voice test.
+
 > **Late on 2026-10-11 (stage7, `dpl_6b2TqHBsfQXC375jGsuxQtgqUkKw`):**
 > - **All open issues closed:**
 >   - Test suites: foundation 1664, hosting 25 and clinic app 148, all passing (`tsc` clean).

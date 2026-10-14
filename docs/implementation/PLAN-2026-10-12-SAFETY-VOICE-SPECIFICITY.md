@@ -69,7 +69,8 @@ Progress (2026-10-12):
     - "Stop." paused voice, saved nothing and left the answer box empty.
     - The first run cut "ten milligrams, uh, [1.2 s] no wait, twenty milligrams" into two turns. Fixes, per the voice article review: Deepgram endpointing 800 ms with filler words kept; grace 1.0 s, or 2.5 s after a filler, correction cue or amount; a **Done speaking** button. Rerun: one turn, 3 of 3.
   - Not yet verified: the hosted deploy (P5).
-- **P5: next.** Voice article review triage: `VOICE-ARTICLE-REVIEW-2026-10-12.md`.
+- **P5: deployed 2026-10-14 (stage8).** native-5 published and qualified (39 checks, expires 2026-10-21); hosted hands-free verified. Details in `OPUS-HANDOFF.md`.
+- **Earlier P5 note:** Voice article review triage: `VOICE-ARTICLE-REVIEW-2026-10-12.md`.
 Constraints carried forward:
 - Reasoning runs on DigitalOcean inference only.
 - Authored questions only; the agent never writes clinical wording.
