@@ -3,7 +3,8 @@ import { eligibleAdaptiveProbes, selectAdaptiveDialogue } from '../src/dialogue.
 import { describe, expect, it } from 'vitest';
 import { conversation } from '../src/conversation.js';
 import { handoffs } from '../src/handoffs.js';
-import { createDraft, document, DRAFT_SYSTEM, readDraft } from '../src/store.js';
+import { createDraft, decodeDocument, document, DRAFT_SYSTEM, readDraft, SNAPSHOT_SYSTEM } from '../src/store.js';
+import type { Snapshot } from '../src/handoffs.js';
 import type { ClinicApiConfig, Draft, StaffAssignment } from '../src/types.js';
 import { digest, validateSubmissionIntegrity, unresolvedRecognitionSourceIds } from '../../clinical-core/src/domain.js';
 import { planHandoff } from '../../clinical-core/src/fhir.js';
@@ -26,6 +27,20 @@ async function setup(scenario: Draft['scenario'] = 'billing') {
   if (scenario === 'billing') { draft = c.select(draft, 'W05', 'issueType'); draft = c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: c.view(draft).currentPrompt!.id, action: 'answer', text: 'bill-question' }); }
   draft.preview = await c.preview(draft); draft.phase = 'review'; draft.confirmed = await c.finalize(draft); draft.preview = undefined; draft.phase = 'confirmed';
   return { native, config, client, c, h, q, draft, id: `${draft.id}.v1` };
+}
+type Fixture = Awaited<ReturnType<typeof setup>>;
+/** Persists a confirmed draft as its handoff snapshot and delivers it, returning the snapshot id. */
+async function receive(f: Fixture, draft: Draft) {
+  await createDraft(f.client, draft); await f.h.snapshot(f.client, draft); await f.client.deliver(draft.confirmed!.confirmation, f.q);
+  return `${draft.id}.v1`;
+}
+/** Rewrites the stored snapshot document in place, keeping its identifier, subject and receipt metadata. */
+function rewriteStoredSnapshot(f: Fixture, id: string, mutate: (snapshot: Snapshot) => void) {
+  const resource = [...f.native.resources.values()].find(row => row.resourceType === 'DocumentReference' && (row.identifier as Array<{ system: string; value: string }>).some(i => i.system === SNAPSHOT_SYSTEM && i.value === id))!;
+  const data = decodeDocument<Snapshot>(resource); mutate(data);
+  const { content } = document(SNAPSHOT_SYSTEM, id, data.patient, data) as { content: unknown };
+  resource.content = content as typeof resource.content;
+  f.native.histories.get(`DocumentReference/${resource.id}`)![0].content = resource.content;
 }
 describe('native questionnaire integration and recovery boundaries', () => {
   it('binds every scenario capture before confirmation and serializes honest nested partial responses', async () => {
@@ -249,4 +264,28 @@ describe('native questionnaire integration and recovery boundaries', () => {
     expect((await f.h.resume(f.client, f.client, staff[0], f.id, f.q)).deliveryState).toBe('received');
     await expect(readDraft(f.client, f.draft.id, f.draft.patient)).rejects.toThrow('session-expired');
   });
+  it('counts a handoff captured under an earlier questionnaire version without failing or returning it in the staff queue', async () => {
+    const f = await setup(); await receive(f, f.draft);
+    rewriteStoredSnapshot(f, f.id, snapshot => { snapshot.confirmation.submission.questionnaireCapture!.definition.version = 'CC-0.2.phq4.native-4'; });
+    const current = await receive(f, await billingDraft(f));
+    const queue = await f.h.queue(f.client, f.client, staff[2]);
+    expect(queue.items.map(item => item.id)).toEqual([current]); expect(queue.recovery).toEqual([]); expect(queue.earlierVersion).toBe(1);
+  });
+  it('still fails the whole staff queue when a current-version snapshot is corrupted in another field', async () => {
+    const f = await setup(); await receive(f, f.draft);
+    rewriteStoredSnapshot(f, f.id, snapshot => { delete (snapshot.confirmation.submission as { sources?: unknown }).sources; });
+    await expect(f.h.queue(f.client, f.client, staff[2])).rejects.toMatchObject({ code: 'invalid-submission' });
+  });
+  it('omits earlierVersion from the staff queue response when no handoff is under an earlier version', async () => {
+    const f = await setup(); const current = await receive(f, f.draft);
+    const queue = await f.h.queue(f.client, f.client, staff[2]);
+    expect(queue.items.map(item => item.id)).toEqual([current]); expect(queue).not.toHaveProperty('earlierVersion');
+  });
 });
+/** A second confirmed billing intake with the same captured answer, so the scope holds two handoffs. */
+async function billingDraft(f: Fixture): Promise<Draft> {
+  let draft = draftFor('billing');
+  draft = f.c.select(draft, 'W05', 'issueType'); draft = f.c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: f.c.view(draft).currentPrompt!.id, action: 'answer', text: 'bill-question' });
+  draft.preview = await f.c.preview(draft); draft.phase = 'review'; draft.confirmed = await f.c.finalize(draft); draft.preview = undefined; draft.phase = 'confirmed';
+  return draft;
+}

@@ -8,6 +8,7 @@ import type { StaffHandoffView, StaffQueueItem, StaffRecoveryItem, DeliveryView,
 import { decodeDocument, document, findDocument, object, SNAPSHOT_SYSTEM, DRAFT_SYSTEM, readDraft, scanDocuments, queueOffset } from './store.js';
 import { ApiFailure, type Draft, type ClinicApiConfig, type StaffAssignment } from './types.js';
 import { scenarioTitles } from './conversation.js';
+import { NATIVE_QUESTIONNAIRE_VERSION } from '../../clinic-content/src/native-questionnaire.js';
 import { appendAction, signAction, verifiedTaskHistory, type ActionScope } from './task-history.js';
 
 export interface Snapshot { schema: 2; deliveryContract: typeof DELIVERY_CONTRACT; id: string; patient: string; patientName: string; scenario: ScenarioId; confirmation: ConfirmedSubmission; topics: TopicView[]; }
@@ -23,6 +24,11 @@ export function administrativeTopics(s: Snapshot): TopicView[] {
   const details = Object.entries(logistics).filter(([field]) => field !== 'kind').map(([field, value]) => ({ id: field, label: definition.slots.find(slot => slot.id === field)?.label ?? field, state: 'answered' as const, text: value, sourceIds: [], editable: false }));
   return [{ id, title: 'Structured logistics request', status: 'more-detail-needed', required: true, missingDetails: [], details }];
 }
+/** A handoff captured under an earlier native questionnaire version: it stays in the record but can't be read by this release. */
+const earlierQuestionnaire = (submission: unknown) => {
+  const version = object(object(object(submission).questionnaireCapture).definition).version;
+  return typeof version === 'string' && version !== NATIVE_QUESTIONNAIRE_VERSION;
+};
 export function handoffs(config: ClinicApiConfig, options: { provisionalQualification?: ProvisionalQualification; finalRepresentationQualification?: FinalRepresentationQualification } = {}) {
   const frozen = (draft: Draft): Snapshot => {
     if (!draft.confirmed) throw new ApiFailure('confirmation-required');
@@ -131,10 +137,13 @@ export function handoffs(config: ClinicApiConfig, options: { provisionalQualific
     if (!assignment.patients.length || !assignment.careTeams.length) return { items: [], recovery: [] };
     const snapshots = await scanDocuments(client, SNAPSHOT_SYSTEM, assignment.patients, cursor), drafts = await scanDocuments(client, DRAFT_SYSTEM, assignment.patients, recoveryCursor);
     const ids = new Set<string>(), items: StaffQueueItem[] = [], recovery: StaffRecoveryItem[] = [];
+    // Counted, not hidden silently and never allowed to fail the whole queue; any other invalid record still fails loudly.
+    let earlierVersion = 0;
     for (const row of snapshots.resources) {
       if (!assignment.patients.includes(String(object(row.subject).reference))) continue;
       const id = (row.identifier as Array<{ system: string; value: string }> | undefined)?.find(identifier => identifier.system === SNAPSHOT_SYSTEM)?.value;
       if (!id) throw new ApiFailure('invalid-queue-record', 503);
+      if (earlierQuestionnaire(decodeDocument<{ confirmation?: { submission?: unknown } }>(row).confirmation?.submission)) { earlierVersion++; continue; }
       ids.add(id);
     }
     for (const row of drafts.resources) {
@@ -144,7 +153,9 @@ export function handoffs(config: ClinicApiConfig, options: { provisionalQualific
       let draft: Draft;
       try { draft = (await readDraft(client, id, patient, { confirmedRecovery: true })).draft; }
       catch (error) { if (error instanceof ApiFailure && error.code === 'session-expired') continue; throw error; }
-      if (draft.confirmed && !(await findDocument(client, SNAPSHOT_SYSTEM, `${id}.v${draft.version}`))) ids.add(`${id}.v${draft.version}`);
+      if (draft.confirmed && !(await findDocument(client, SNAPSHOT_SYSTEM, `${id}.v${draft.version}`))) {
+        if (earlierQuestionnaire(draft.confirmed.confirmation.submission)) earlierVersion++; else ids.add(`${id}.v${draft.version}`);
+      }
     }
     for (const id of ids) {
       try {
@@ -154,7 +165,7 @@ export function handoffs(config: ClinicApiConfig, options: { provisionalQualific
       } catch (error) { if (!(error instanceof ApiFailure) || error.code !== 'handoff-not-found') throw error; }
     }
     items.sort((a, b) => Date.parse(b.receivedAt ?? '1970-01-01') - Date.parse(a.receivedAt ?? '1970-01-01') || a.id.localeCompare(b.id));
-    return { items, recovery, ...(snapshots.nextCursor ? { nextCursor: snapshots.nextCursor } : {}), ...(drafts.nextCursor ? { recoveryCursor: drafts.nextCursor } : {}) };
+    return { items, recovery, ...(earlierVersion ? { earlierVersion } : {}), ...(snapshots.nextCursor ? { nextCursor: snapshots.nextCursor } : {}), ...(drafts.nextCursor ? { recoveryCursor: drafts.nextCursor } : {}) };
   }
   async function resume(client: MedplumClient, named: MedplumClient, assignment: StaffAssignment, id: string, qualification: DeliveryQualification) {
     const verified = await authorized(client, named, assignment, id);

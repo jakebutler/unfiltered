@@ -24,7 +24,10 @@ async function main() {
   const observation = privateJson(`${directory}/project-feature-observation.json`) as ProjectFeatureObservation;
   const users = privateJson(`${directory}/clinic-users.json`) as { role: string; name: string; email: string; password: string }[];
   assertDeploymentStaffRoster(config, users);
-  if (observation?.projectId !== config.projectId || !observation.projectVersion || !Array.isArray(observation.features) || !Number.isFinite(Date.parse(observation.observedAt)) || Math.abs(Date.now() - Date.parse(observation.observedAt)) > 900000) throw new Error('fresh-project-feature-observation-required');
+  // --rehearsal runs every live check against synthetic fixtures but never writes a sealed configuration,
+  // so it may use an older project observation. Only a real run needs one from the last 15 minutes.
+  const rehearsal = process.argv.includes('--rehearsal');
+  if (observation?.projectId !== config.projectId || !observation.projectVersion || !Array.isArray(observation.features) || !Number.isFinite(Date.parse(observation.observedAt)) || !rehearsal && Math.abs(Date.now() - Date.parse(observation.observedAt)) > 900000) throw new Error('fresh-project-feature-observation-required');
   const evidence: Record<string, unknown> = { state: 'intent', at: new Date().toISOString(), projectId: config.projectId, mode: local ? 'local' : 'live', calls: [] as unknown[], checks: [] as unknown[], fixtures: [] as FixtureIntent[], providerCalls: 0 };
   writeFileSync(`${output}.evidence.json`, `${JSON.stringify(evidence, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
   const save = () => writeFileSync(`${output}.evidence.json`, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
@@ -43,7 +46,8 @@ async function main() {
     if (!response.ok) throw new Error(`deployment-auth-http-${response.status}`);
     const accessToken = (await response.json()).access_token;
     if (typeof accessToken !== 'string') throw new Error('deployment-token-missing');
-    const medplum = { baseUrl: new URL('fhir/R4/', config.medplumBaseUrl).href, accessToken, mode: local ? 'local' as const : 'live' as const, timeoutMs: 10000 };
+    // Same binding the runtime passes (runtime.ts): native questionnaire delivery is checked against it.
+    const medplum = { ...(config.nativeQuestionnaire ? { nativeQuestionnaire: config.nativeQuestionnaire } : {}), baseUrl: new URL('fhir/R4/', config.medplumBaseUrl).href, accessToken, mode: local ? 'local' as const : 'live' as const, timeoutMs: 10000 };
     const identity = await observeRuntimeIdentity(config, medplum, fetcher);
     if (!local && identity.membershipId !== '6e565de2-837d-4618-9578-f6428fbb0be1') throw new Error('qualification-membership-not-authorized');
     const patient = config.patients['first-intake'];
@@ -68,9 +72,20 @@ async function main() {
     const binary = await fixtures.binary(binaryKey, reference('DocumentReference'), binaryText);
     const denied = async (named: MedplumClient, path: string) => { try { await named.request(path); return false; } catch (error) { return error instanceof TransportError && [401, 403, 404].includes(error.status ?? 0); } };
     phase = 'role-authorization';
+    // Medplum rate-limits password logins: space them 15 s apart and retry a 429 once after 30 s.
+    let lastLogin = 0;
+    const pacedLogin = async (auth: ReturnType<typeof staffAuthentication>, email: string, password: string) => {
+      for (let attempt = 0; ; attempt++) {
+        const wait = lastLogin + (attempt ? 30_000 : 15_000) - Date.now();
+        if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
+        lastLogin = Date.now();
+        try { return await auth.login(email, password); }
+        catch (error) { if (attempt || !(error instanceof Error && error.message === 'try-again-later')) throw error; }
+      }
+    };
     for (const user of users) {
       const auth = () => staffAuthentication(config, fetcher, cookies(config.cookieSecret, !local));
-      const login = await auth().login(user.email, user.password);
+      const login = await pacedLogin(auth(), user.email, user.password);
       const request = new Request(new URL('api/staff/me', config.origin), { headers: { cookie: login.cookie.split(';')[0] } });
       const actor = await auth().read(request);
       check(`${user.name}:cross-instance-identity`, actor.assignment.name === user.name);
@@ -95,7 +110,7 @@ async function main() {
     }
     phase = 'application-contract';
     const actors: QualifiedActor[] = [], sessions: Request[] = [];
-    for (const user of users) { const auth = staffAuthentication(config, fetcher, cookies(config.cookieSecret, !local)); const login = await auth.login(user.email, user.password); const request = new Request(new URL('api/staff/me', config.origin), { headers: { cookie: login.cookie.split(';')[0] } }); sessions.push(request); actors.push(await auth.read(request)); }
+    for (const user of users) { const auth = staffAuthentication(config, fetcher, cookies(config.cookieSecret, !local)); const login = await pacedLogin(auth, user.email, user.password); const request = new Request(new URL('api/staff/me', config.origin), { headers: { cookie: login.cookie.split(';')[0] } }); sessions.push(request); actors.push(await auth.read(request)); }
     let application;
     try { application = await qualifyConditionalClinic(config, client, report.qualification, actors, fetcher, value => { if (!Array.isArray(evidence.applicationFixtures)) evidence.applicationFixtures = []; (evidence.applicationFixtures as unknown[]).push(value); save(); }); } finally { for (const request of sessions) await staffAuthentication(config, fetcher, cookies(config.cookieSecret, !local)).logout(request); }
     const attestation = await sealDeploymentQualification(config, medplum, report, observation, fetcher, application);
@@ -108,9 +123,10 @@ async function main() {
     const runtime = runtimeProvider(qualifiedConfig, refreshFetcher);
     await runtime(); await runtime(); await runtimeProvider(qualifiedConfig, fetcher)();
     check('refresh-and-restart-have-zero-fhir-writes', !calls.some(call => call.phase === phase && call.path.startsWith('/fhir/') && call.method !== 'GET'));
+    if (rehearsal) { evidence.state = 'rehearsal-passed'; save(); console.log(JSON.stringify({ status: 'rehearsal-passed', checks: checks.length, sealedConfiguration: false })); return; }
     writeFileSync(output, `${JSON.stringify(qualifiedConfig, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
     evidence.state = 'passed'; evidence.attestationIdentity = attestation.payload.identity; evidence.expiresAt = attestation.payload.expiresAt; save();
     console.log(JSON.stringify({ status: 'deployment-qualified', projectId: config.projectId, checks: checks.length, configuration: output, expiresAt: attestation.payload.expiresAt, providerCalls: 0 }));
-  } catch (error) { evidence.state = 'failed-retain-native-fixtures'; evidence.error = error instanceof Error ? error.message : 'qualification-failed'; save(); throw error; }
+  } catch (error) { evidence.state = 'failed-retain-native-fixtures'; evidence.error = error instanceof Error ? error.message : 'qualification-failed'; evidence.phase = phase; evidence.stack = error instanceof Error ? error.stack?.split('\n').slice(0, 12).map(line => line.trim()) : undefined; save(); throw error; }
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; });

@@ -138,7 +138,7 @@ export interface ClinicApiContract {
   'POST /api/staff/login': { body: { email: string; password: string }; response: StaffIdentity };
   'GET /api/staff/me': { response: StaffIdentity };
   'POST /api/staff/logout': { body: Record<string, never>; response: { loggedOut: true } };
-  'GET /api/staff/queue': { response: { items: StaffQueueItem[]; recovery: StaffRecoveryItem[]; nextCursor?: string; recoveryCursor?: string } };
+  'GET /api/staff/queue': { response: { items: StaffQueueItem[]; recovery: StaffRecoveryItem[]; /** Handoffs captured under an earlier questionnaire version, kept in the record but not readable by this release. */ earlierVersion?: number; nextCursor?: string; recoveryCursor?: string } };
   'GET /api/staff/handoffs/:id': { response: StaffHandoffView };
   'POST /api/staff/handoffs/:id/resume': { body: Record<string, never>; response: StaffHandoffView };
   'POST /api/staff/handoffs/:id/actions': { body: { actionId: string; workId: string; expectedVersion: number; expectedWorkVersion: string; outcome: 'reviewed' | 'needs-information' | 'declined' | 'resolved'; note: string }; response: StaffHandoffView };

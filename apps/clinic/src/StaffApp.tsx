@@ -6,7 +6,7 @@ import { freezeStaffAction, handoffRevision, reconcileStaffAction, StaffResponse
 import { Button, EmptyQueue, Header, Loading, Notice, SourceInspector, WorkHistory, TopicContent, answerLabels, topicLabels, deliveryLabels, workDeliveryLabels, dateTime, outcomeLabels, responsibilityLabels, roleLabels, time, type SourceSelection } from './components';
 
 type Outcome = 'reviewed' | 'needs-information' | 'declined' | 'resolved';
-type QueuePage = { items: StaffQueueItem[]; recovery: StaffRecoveryItem[]; nextCursor?: string; recoveryCursor?: string };
+type QueuePage = { items: StaffQueueItem[]; recovery: StaffRecoveryItem[]; earlierVersion?: number; nextCursor?: string; recoveryCursor?: string };
 const canInspect = (handoff: StaffHandoffView) => handoff.anchorsVerified === true;
 type StaffSafetyPage = { items: StaffSafetyItem[]; nextCursor?: string };
 type SafetyOutcome = StaffSafetyAction['outcome'];
@@ -71,6 +71,7 @@ export function StaffApp() {
     if (e instanceof RequestError && e.status === 409) setStale('refresh');
     setError(messageOf(e));
   };
+  const [earlierVersion, setEarlierVersion] = useState(0);
   const loadQueue = async (kind: 'both' | 'snapshots' | 'drafts' = 'both', cursor?: string) => {
     const generation = scope.current.capture();
     if (kind !== 'drafts') setQueueLoading(true);
@@ -82,6 +83,7 @@ export function StaffApp() {
       if (kind !== 'drafts') {
         setQueue(previous => cursor === undefined ? value.items : [...new Map([...previous, ...value.items].map(item => [`${item.id}:${item.responsibility}`, item])).values()]);
         setNextCursor(value.nextCursor); setQueueLoaded(true); setQueueError(false);
+        setEarlierVersion(previous => (cursor === undefined ? 0 : previous) + (value.earlierVersion ?? 0));
       }
       // Snapshot pages contain both received assignments and pending deliveries.
       // Draft pages add no-snapshot confirmations; they must not rewind the snapshot cursor.
@@ -226,7 +228,7 @@ export function StaffApp() {
   if (!identity) return <StaffLogin error={error} onSignIn={value => { clearScope(); setIdentity(value); setError(''); setQueueLoaded(false); setQueueError(false); setUpdatedAt(''); }} />;
   return <><Header staff><div className="staff-identity"><strong>{identity.name}</strong><span>{roleLabels[identity.role]}</span></div><Button variant="text" onClick={() => navigate(() => { void logout(); })} disabled={Boolean(busy)}><LogOut size={16} aria-hidden="true" />Sign out</Button></Header>
     <main id="main" tabIndex={-1} className="staff-shell">
-      <aside className={`queue-panel ${handoff ? 'has-selection' : ''}`} aria-label="Assigned work queue"><div className="queue-heading"><h1>Work queue</h1><Button variant="text" onClick={refresh} disabled={Boolean(busy)} aria-label="Refresh work queue"><RefreshCw size={18} aria-hidden="true" /></Button></div><p className="queue-context">{queueError ? queueLoaded && queue.length > 0 ? 'Previously loaded work · may be out of date' : 'Current assignments are unavailable' : queueLoading ? busy === 'more' ? 'Loading more assigned work…' : queueLoaded ? 'Refreshing assigned work…' : 'Loading assigned work…' : queueLoaded ? `Assigned to you · ${queue.length} loaded${nextCursor === undefined ? '' : ' · more available'}` : 'Queue not yet loaded'}</p><p className="queue-context mobile-staff-name">{identity.name} · {roleLabels[identity.role]}</p><p className="metadata queue-updated">{updatedAt ? `${queueError ? 'Last successful load' : queueLoading ? 'Previous load' : 'Updated'} at ${time(updatedAt)}` : queueLoading ? 'Loading assigned work…' : 'No successful queue load yet'}</p><div className="queue-list">
+      <aside className={`queue-panel ${handoff ? 'has-selection' : ''}`} aria-label="Assigned work queue"><div className="queue-heading"><h1>Work queue</h1><Button variant="text" onClick={refresh} disabled={Boolean(busy)} aria-label="Refresh work queue"><RefreshCw size={18} aria-hidden="true" /></Button></div><p className="queue-context">{queueError ? queueLoaded && queue.length > 0 ? 'Previously loaded work · may be out of date' : 'Current assignments are unavailable' : queueLoading ? busy === 'more' ? 'Loading more assigned work…' : queueLoaded ? 'Refreshing assigned work…' : 'Loading assigned work…' : queueLoaded ? `Assigned to you · ${queue.length} loaded${nextCursor === undefined ? '' : ' · more available'}` : 'Queue not yet loaded'}</p>{earlierVersion > 0 && <p className="queue-context">{earlierVersion === 1 ? '1 earlier handoff was' : `${earlierVersion} earlier handoffs were`} recorded under a previous questionnaire version. It stays in the record but can’t be shown here.</p>}<p className="queue-context mobile-staff-name">{identity.name} · {roleLabels[identity.role]}</p><p className="metadata queue-updated">{updatedAt ? `${queueError ? 'Last successful load' : queueLoading ? 'Previous load' : 'Updated'} at ${time(updatedAt)}` : queueLoading ? 'Loading assigned work…' : 'No successful queue load yet'}</p><div className="queue-list">
         {queueError && <div className="queue-empty queue-unavailable" role="status"><h2>{queueLoaded ? 'Could not refresh the queue' : 'Queue unavailable'}</h2><p>{queueLoaded && queue.length > 0 ? 'Showing previously loaded work. Current assignments may have changed.' : 'Current assignments could not be checked. This does not mean there is no assigned work.'}</p><Button onClick={refresh} disabled={Boolean(busy)}><RefreshCw size={16} aria-hidden="true" />Try loading the queue again</Button></div>}
         {queue.map((item, index) => <button key={`${item.id}:${item.responsibility}:${index}`} className={`queue-item ${handoff?.id === item.id ? 'is-selected' : ''}`} aria-pressed={handoff?.id === item.id} onClick={() => { if (handoff?.id !== item.id) navigate(() => { void openHandoff(item.id); }); }} disabled={Boolean(busy) || Boolean(pendingAction)}><span className="queue-patient">{item.patientName}<ChevronRight size={17} aria-hidden="true" /></span><span className="queue-purpose">{item.scenarioTitle}</span><span className="queue-detail">{responsibilityLabels[item.responsibility]}{item.receivedAt ? ` · Complete delivery ${dateTime(item.receivedAt)}` : ' · Work received; open for complete-delivery status'}</span><span className="queue-status">{outcomeLabels[item.status]}{identity.role !== 'administrative' && item.completeness === 'partial' && ' · Partial'}</span></button>)}
         {queueLoaded && !queueError && !queueLoading && !queue.length && nextCursor === undefined && <EmptyQueue />}
