@@ -1,5 +1,5 @@
 /** Bounded synthetic application qualification. Invoked only by explicit deployment scripts. */
-import { canonicalJson, digest } from '../../packages/clinical-core/src/domain.js';
+import { canonicalJson, digest, type ConfirmedSubmission } from '../../packages/clinical-core/src/domain.js';
 import { ACTION_HISTORY_EXTENSION, resourceVersion } from '../../packages/clinical-core/src/fhir.js';
 import { MedplumClient, fhirResource, type DeliveryQualification } from '../../packages/clinical-core/src/medplum.js';
 import { TransportError, type Fetch } from '../../packages/clinical-core/src/transport.js';
@@ -10,6 +10,9 @@ import { createDraft, readDraft, saveDraft, object } from '../../packages/clinic
 import { cookies } from '../../packages/clinic-api/src/cookies.js';
 import { type ApplicationQualificationChecks, type ApplicationQualification, applicationChecks } from '../../packages/clinic-api/src/deployment-qualification.js';
 import type { ClinicApiConfig, Draft, StaffAssignment } from '../../packages/clinic-api/src/types.js';
+import { createRequire } from 'node:module';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 export interface QualifiedActor { assignment: StaffAssignment; client: MedplumClient; }
 export async function qualifyConditionalClinic(config: ClinicApiConfig, client: MedplumClient, qualification: DeliveryQualification, actors: QualifiedActor[], fetcher: Fetch, retain: (value: unknown) => void) {
   const retained: unknown[] = []; const journal = (value: unknown) => { retained.push(value); retain(value); };
@@ -102,10 +105,12 @@ export async function qualifyConditionalClinic(config: ClinicApiConfig, client: 
   const read = await handler(new Request(new URL('/api/clinic/receipt', config.origin), { headers: { cookie } }));
   checks.readOnlyReceipt = read.ok && (await readDraft(client, d.id, d.patient)).versionId === beforeRead;
   let workflows = true, isolation = true;
+  const mappingConfirmations: ConfirmedSubmission[] = [];
   for (const scenario of ['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill'] as const) {
     const draft = scenario === 'first-intake' ? d : await fixture(scenario);
     if (scenario !== 'first-intake') { await h.snapshot(client, draft); await client.deliver(draft.confirmed!.confirmation, qualification); }
     const receipt = await client.check(draft.confirmed!.confirmation);
+    mappingConfirmations.push(draft.confirmed!.confirmation);
     journal({ scenario, submissionId: draft.id, resources: receipt.resources, anchors: receipt.anchors, delivery: receipt.state });
     workflows &&= receipt.state === 'received' && !!receipt.anchors.source && !!receipt.anchors.response && receipt.verifiedWork.length === draft.confirmed!.confirmation.submission.work.length;
     if (draft.confirmed!.confirmation.submission.work.some(work => work.responsibility === 'administrative')) {
@@ -118,8 +123,13 @@ export async function qualifyConditionalClinic(config: ClinicApiConfig, client: 
       }
     }
   }
-  // Required native Questionnaire mapping is deliberately unqualified until the dedicated mapping author integrates it.
-  checks.nativeQuestionnaireMapping = false;
+  // Native mapping: the seven actual workflows and two correction controls round-trip through the delivered
+  // QuestionnaireResponse (clinic-native-mapping-v2), against the compiled .qualification-build of this checkout.
+  const root = process.cwd();
+  if (config.nativeQuestionnaire && !existsSync(resolve(root, 'scripts/qualification/clinic-native-mapping-v2.cjs'))) throw new Error('qualification-must-run-from-repository-root');
+  checks.nativeQuestionnaireMapping = config.nativeQuestionnaire
+    ? await createRequire(resolve(root, 'package.json'))('./scripts/qualification/clinic-native-mapping-v2.cjs').verify(root, config, client, qualification, journal, mappingConfirmations) === true
+    : false;
   checks.sevenWorkflows = workflows; checks.administrativeIsolation = isolation;
   journal({ applicationChecks: checks, nativeActionFaults: ['lost-response', 'direct-status-edit'], injectedReadFaults: ['signed-prefix-truncation'] });
   if (applicationChecks.some(check => checks[check] !== true)) throw new Error(`conditional-application-qualification-failed:${applicationChecks.filter(check => !checks[check]).join(',')}`);
