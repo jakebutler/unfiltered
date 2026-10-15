@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
-import { runtime, acquireActors, ownedActorCleanup, writeBudget, successor, validatePrior, validatePlan } from './continue-clinic-mapping-suffix.mjs';
+import { runtime, acquireActors, ownedActorCleanup, writeBudget, successor, validatePrior, validatePlan, sealingModules } from './continue-clinic-mapping-suffix.mjs';
 const require = createRequire(import.meta.url), mapping = require('./clinic-native-mapping-v2.cjs'), m = mapping.modules(runtime);
 test('actual shared mapper retains typed repeated entries, PHQ and corrected inactive ownership', async () => {
   const { before, after, validSourceIds } = await mapping.controlCaptures(m);
@@ -127,4 +127,12 @@ test('actual a2 frontier retains all seven immutable intents and refuses missing
   assert.equal(Object.keys(validatePrior(evidence)).length, 7);
   const wrong = structuredClone(evidence); wrong.applicationFixtures.pop(); assert.throws(() => validatePrior(wrong));
   const dirty = structuredClone(evidence); dirty.actorCleanupComplete = false; assert.throws(() => validatePrior(dirty));
+});
+
+test('schema-3 continuation needs no admin feature file and pins the current-source sealer', () => {
+  const now = 1_000_000, pin = 'a'.repeat(64);
+  const plan = { schema: 1, allowSyntheticContinuation: true, preparationSha256: pin, createdAt: now - 1000, expiresAt: now + 60_000, loginSpacingMs: 15_000, cleanupRequests: 8, cleanupDeadlineMs: 90_000, maxRequests: 1600, maxFhirWrites: 200, paths: { config: 'c', users: 'u', priorEvidence: 'p' }, pins: { config: pin, users: pin, priorEvidence: 'b'.repeat(64) }, output: 'o' };
+  assert.throws(() => validatePlan(plan, now), /prior-output-scope-invalid/); // reaches the prior pin check without any `features` input
+  assert.throws(() => validatePlan({ ...plan, paths: { config: 'c', users: 'u' } }, now), /private-input-pin-required/);
+  assert.deepEqual([...sealingModules], ['packages/clinic-api/src/deployment-qualification.js', 'packages/clinic-api/src/runtime.js']);
 });

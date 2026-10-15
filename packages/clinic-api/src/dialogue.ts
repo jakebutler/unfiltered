@@ -234,7 +234,8 @@ function selectDialogue(context: AdaptiveContext, outcome?: AdaptiveOutcome, rej
     response.reply = { id: text ? id : 'unsupported', text: text ?? standardReplies.unsupported() };
     if (!explicitTopic && context.displayed && !stopped.has(context.displayed.topicId)) state.suspended = { ...context.displayed };
   }
-  const unsuccessful = outcome && !question && !explicitTopic && !outcome.updates.length && outcome.hasUnresolvedInterpretation && (rejectedTargets === undefined || outcome.clarifications.some(item=>item.reason==='conflict'));
+  // A neutral acknowledgement of an unplaced disclosure, or a spoken-number confirmation, is not a failed attempt at the question.
+  const unsuccessful = outcome && !outcome.acknowledgement && !outcome.clarifications.some(item => item.confirm) && !question && !explicitTopic && !outcome.updates.length && outcome.hasUnresolvedInterpretation && (rejectedTargets === undefined || outcome.clarifications.some(item=>item.reason==='conflict'));
   const failed = unsuccessful ? outcome.clarifications.find(item => !['stopped-topic', 'condition-unresolved'].includes(item.reason)) : undefined;
   const failedTopic = failed?.topicId ?? (unsuccessful ? context.displayed?.topicId : undefined);
   const failedPaths = failed ? [failed.path] : context.displayed?.targetPaths ?? [];
@@ -255,7 +256,13 @@ function selectDialogue(context: AdaptiveContext, outcome?: AdaptiveOutcome, rej
     response.clarification = clarification;
     const definition = context.topics.find(topic => topic.id === clarification.topicId);
     const known = probes.find(probe => probe.topicId === clarification.topicId && probe.targetPaths.includes(clarification.path));
-    if (known) response.prompt = known;
+    if (clarification.confirm && definition) {
+      const field = adaptiveSlot(definition, nextContext.responses[definition.id] ?? empty(), clarification.path).definition;
+      // Proposed (not approved) wording that only reads back the patient's own spoken number; the value is recorded only after a plain yes.
+      response.prompt = { topicId: definition.id, promptId: '__clarify-record', targetPaths: [clarification.path], kind: 'question', text: clarification.confirm.text, labels: [field.label], optional: definition.presentation === 'O',
+        wording: { version: 'spoken-number-confirm.1', status: 'proposed-detail', sourcePromptId: field.promptIds[0] ?? definition.openingPromptId, confirm: structuredClone(clarification.confirm) } };
+    }
+    else if (known) response.prompt = known;
     else if (definition) {
       const field = adaptiveSlot(definition, nextContext.responses[definition.id] ?? empty(), clarification.path).definition;
       // Conflicting alternatives are displayed separately; this is a record-correction control, not new care content.

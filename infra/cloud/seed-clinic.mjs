@@ -107,6 +107,8 @@ export async function seedClinic({ baseUrl = CLOUD_API_BASE, projectId = CLOUD_P
     if (project.id !== projectId || !project.meta?.versionId) throw new Error('native-project-identity-required-before-seeding');
     const projectFeatures = project.features === undefined ? [] : project.features;
     if (!Array.isArray(projectFeatures) || projectFeatures.some(feature => typeof feature !== 'string')) throw new Error('seed-project-features-invalid');
+    // Re-seed record only. Qualification (schema 3) no longer reads this admin file: it seals the runtime
+    // client's own /auth/me Project projection inline. Admin calibration lives in medplum-preflight observe-features --calibrate.
     save(`${directory}/project-feature-observation.json`, { projectId, projectVersion: project.meta.versionId, features: projectFeatures, observedAt: new Date().toISOString() });
     // The fixed authored definition is compiled locally; no model, Bot or server rule engine is involved.
     const { getNativeQuestionnaireDefinition } = await import('../../.qualification-build/packages/clinic-content/src/native-questionnaire.js');

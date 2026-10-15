@@ -14,7 +14,9 @@ export interface AdaptiveBinding {
 export interface DisplayedPrompt {
   topicId: string; promptId: string; targetPaths: readonly string[];
   /** Exact scoped copy has its own proposed wording provenance; clinical requirements are unchanged. */
-  wording?: { version: 'S2.scoped.2'; status: 'proposed-detail'; sourcePromptId: string };
+  wording?: { version: 'S2.scoped.2'; status: 'proposed-detail'; sourcePromptId: string }
+    /** intake-interpreter-v1: "Just to confirm, is that 212 pounds?" for a number heard only as spoken words; nothing is recorded until confirmed. */
+    | { version: 'spoken-number-confirm.1'; status: 'proposed-detail'; sourcePromptId: string; confirm: SpokenNumberConfirm };
   /** An authored specificity follow-up (SP-0.1) about this one recorded answer. */
   specificity?: import('./specificity.js').SpecificityPromptMark;
 }
@@ -101,11 +103,15 @@ export interface AdaptiveProvenance {
   /** An equivalent content target, derived only from already accepted evidence, not a new patient assertion. */
   derivedFrom?: { version: 'evidence-coverage-v1'; kind: 'fact' | 'question'; topicId?: string; path?: string; paths?: string[] };
 }
+/** A number heard only as spoken words ("two twelve"): proposed with its exact source words, never recorded until the patient confirms it. */
+export interface SpokenNumberConfirm { value: number | { feet: number; inches: number }; unit?: string; sourceId: string; evidence: EvidenceSpan[]; text: string; }
 export interface AdaptiveClarification {
   topicId: string; path: string; reason: 'ambiguous-value' | 'unscoped-response' | 'conflict' | 'condition-unresolved' | 'stopped-topic';
   evidence: EvidenceSpan[];
   previous?: SlotAnswer;
   proposed?: SlotAnswer;
+  /** intake-interpreter-v1 only: ask the patient to confirm this spoken number (proposed-detail wording). */
+  confirm?: SpokenNumberConfirm;
 }
 export interface AdaptiveOutcome {
   responses: Record<string, TopicResponse | undefined>;

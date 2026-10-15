@@ -5,6 +5,7 @@ import { scenarios } from './scenarios.js';
 import { coreSlots, mentalHealthSlots } from './slots.js';
 import { ContentConfigurationError, type EvidenceContext, type MentalHealthChoice, type TopicDefinition, type TopicResponse } from './types.js';
 import { evaluateTopic } from './readiness.js';
+import { PHQ4_ITEM_IDS } from './mental-health.js';
 
 export const stopSemantics = {
   reasons: ['target-met','does-not-know','not-applicable','patient-declines','patient-moves-on','resistance-after-purpose','safety-interruption'],
@@ -19,7 +20,7 @@ export const approvedMentalHealthSelection = { mentalHealth:'phq4', selectedBy:'
 
 export const mentalHealthOptions = {
   pending: { status:'unselected', scoring:'disabled', instruction:'Keep explicit depression/anxiety history and stress/support collection. Current-symptom implementation is unresolved; no implicit instrument or unscored alternative.' },
-  phq4: { status:'accepted-targeted-choice', scoring:'explicit-complete-only-helper', stemPromptId:'MH.stem', introPromptId:'COPY-10', itemIds:['MH01','MH02','MH03','MH04'], choices:[{value:0,label:'Not at all'},{value:1,label:'Several days'},{value:2,label:'More than half the days'},{value:3,label:'Nearly every day'}], attribution:'Developed by Drs. Robert L. Spitzer, Janet B. W. Williams, Kurt Kroenke and colleagues with an educational grant from Pfizer Inc.', source:'https://www.phqscreeners.com/images/sites/g/files/g10016261/f/201412/instructions.pdf', instruction:'Exact stem/items/choices only, with explicit confirmed responses. No inference from vague language, diagnoses, past answers or missing items. Clinician review is required; a low score is not clearance.' },
+  phq4: { status:'accepted-targeted-choice', scoring:'explicit-complete-only-helper', stemPromptId:'MH.stem', introPromptId:'COPY-10', itemIds:[...PHQ4_ITEM_IDS], choices:[{value:0,label:'Not at all'},{value:1,label:'Several days'},{value:2,label:'More than half the days'},{value:3,label:'Nearly every day'}], attribution:'Developed by Drs. Robert L. Spitzer, Janet B. W. Williams, Kurt Kroenke and colleagues with an educational grant from Pfizer Inc.', source:'https://www.phqscreeners.com/images/sites/g/files/g10016261/f/201412/instructions.pdf', instruction:'Exact stem/items/choices only, with explicit confirmed responses. No inference from vague language, diagnoses, past answers or missing items. Clinician review is required; a low score is not clearance.' },
   unscored: { status:'proposed-detail', scoring:'disabled', promptId:'MH.unscored', instruction:'Original unvalidated collection wording; never label this PHQ/GAD or calculate an instrument result.' },
 } as const;
 

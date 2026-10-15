@@ -46,6 +46,17 @@ describe('clinic profile identity and native proof gate', () => {
     if (change === 'extra') Object.assign(c, { providerKey: 'must-not-activate' });
     expect(() => load(m, c)).toThrow(/^aws-clinic-configuration-invalid$/);
   });
+  it('keeps accepting the historical schema-2 admin observation until expiry', () => {
+    expect(load(example('clinic-a'), clinicFixture(example('clinic-a'), 2)).config.storageQualification!.payload.schema).toBe(2);
+  });
+  it.each(['projection-split', 'v3-admin-shape', 'v2-auth-me-contract', 'missing-projection'])('rejects schema-3 projection %s', change => {
+    const m = example('clinic-a'), c = clinicFixture(m), p = c.storageQualification.payload;
+    if (change === 'projection-split') p.identity.projectionDigest = '0'.repeat(64);
+    if (change === 'v3-admin-shape') p.projectFeature = { projectId: m.authority.projectId, projectVersion: '1', features: [], observedAt: p.qualifiedAt };
+    if (change === 'v2-auth-me-contract') { const v2 = clinicFixture(m, 2); v2.storageQualification.payload.featureDriftContract = 'runtime-observed-auth-me-projection'; expect(() => load(m, v2)).toThrow(/^aws-clinic-configuration-invalid$/); return; }
+    if (change === 'missing-projection') delete p.identity.projectionDigest;
+    expect(() => load(m, c)).toThrow(/^aws-clinic-configuration-invalid$/);
+  });
   it('does not accept research, local config paths, oversize secrets, or echo malformed secret text', () => {
     expect(() => load(example('research'), clinicFixture())).toThrow(/^aws-clinic-configuration-invalid$/);
     expect(() => awsClinicConfig({ CLINIC_CONFIG_PATH: '/private/credentials' })).toThrow(/^aws-clinic-configuration-invalid$/);

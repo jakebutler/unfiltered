@@ -8,6 +8,11 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const runtime = join(root, '.factory/private/native-questionnaire-integration/runtime-2026-10-10-q4f');
+// The frozen q4f runtime only contains the schema-2 (admin-file) sealer. Schema-3 sealing and its
+// runtime verifier come from the current source build, pinned by the reviewed preparation receipt.
+export const sealingBuild = join(root, '.qualification-build');
+export const sealingModules = Object.freeze(['packages/clinic-api/src/deployment-qualification.js', 'packages/clinic-api/src/runtime.js']);
+async function sealingPins() { const pins = {}; for (const path of sealingModules) pins[path] = sha(await readFile(join(sealingBuild, path))); return pins; }
 export const artifact = join(root, 'infra/cloud/.private/clinic-q4f-mapping-suffix-20261010-a3');
 const manifestPin = 'e0212437c9f6923e7d4cc2fe3b630a63baa26712c728db763181213840db3996';
 const originalQualifierPin = '9f117c7dbec7ff2255cd282d5911b810dbd500b5736df2053e7abc93e1c3648a';
@@ -57,7 +62,7 @@ export async function prepare() {
   await writeFile(join(artifact, 'clinic-native-mapping.cjs'), mappingBytes, { flag: 'wx', mode: 0o600 });
   const bytes = Buffer.from(successor(original.toString(), join(artifact, 'clinic-native-mapping.cjs')));
   await writeFile(join(artifact, 'conditional-clinic.cjs'), bytes, { flag: 'wx', mode: 0o600 });
-  const receipt = { schema: 1, state: 'source-only-successor-awaiting-independent-review', runtimeManifestSha256: manifestPin, originalQualifierSha256: originalQualifierPin, continuationHelperSha256: sha(await readFile(fileURLToPath(import.meta.url))), mappingSha256: sha(mappingBytes), qualifierSuccessorSha256: sha(bytes), priorEvidenceSha256: priorPin, frozenFilesChanged: 0, providerCalls: 0, cloudCalls: 0 };
+  const receipt = { schema: 1, state: 'source-only-successor-awaiting-independent-review', runtimeManifestSha256: manifestPin, originalQualifierSha256: originalQualifierPin, continuationHelperSha256: sha(await readFile(fileURLToPath(import.meta.url))), sealingModuleSha256: await sealingPins(), mappingSha256: sha(mappingBytes), qualifierSuccessorSha256: sha(bytes), priorEvidenceSha256: priorPin, frozenFilesChanged: 0, providerCalls: 0, cloudCalls: 0 };
   await writeFile(join(artifact, 'preparation.json'), JSON.stringify(receipt, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
   return receipt;
 }
@@ -74,7 +79,7 @@ export function validatePrior(prior) {
 }
 export function validatePlan(plan, now = Date.now()) {
   if (plan?.schema !== 1 || plan.allowSyntheticContinuation !== true || !/^[a-f0-9]{64}$/.test(plan.preparationSha256 ?? '') || !Number.isSafeInteger(plan.createdAt) || plan.createdAt > now || !Number.isSafeInteger(plan.expiresAt) || plan.expiresAt <= now || plan.expiresAt - plan.createdAt > 900_000 || plan.loginSpacingMs !== 15_000 || plan.cleanupRequests !== 8 || plan.cleanupDeadlineMs !== 90_000 || !Number.isInteger(plan.maxRequests) || plan.maxRequests < 1600 || plan.maxRequests > 2000 || !Number.isInteger(plan.maxFhirWrites) || plan.maxFhirWrites < writeBudget.total || plan.maxFhirWrites > 300) failure('finite-continuation-plan-invalid');
-  for (const name of ['config', 'users', 'features', 'priorEvidence']) if (typeof plan.paths?.[name] !== 'string' || !/^[a-f0-9]{64}$/.test(plan.pins?.[name] ?? '')) failure('private-input-pin-required');
+  for (const name of ['config', 'users', 'priorEvidence']) if (typeof plan.paths?.[name] !== 'string' || !/^[a-f0-9]{64}$/.test(plan.pins?.[name] ?? '')) failure('private-input-pin-required');
   if (plan.pins.priorEvidence !== priorPin || typeof plan.output !== 'string') failure('prior-output-scope-invalid'); return plan;
 }
 export async function acquireActors(users, authFactory, origin, clock, sleep, save, cleanupOptions = {}) {
@@ -140,15 +145,17 @@ export async function run(planPath) {
   const prep = JSON.parse(prepBytes);
   for (const [file, pin] of [['conditional-clinic.cjs', prep.qualifierSuccessorSha256], ['clinic-native-mapping.cjs', prep.mappingSha256]]) if (sha(await readFile(join(artifact, file))) !== pin) failure('reviewed-successor-diff');
   if (sha(await readFile(fileURLToPath(import.meta.url))) !== prep.continuationHelperSha256) failure('reviewed-continuation-helper-diff');
+  const sealingPinned = await sealingPins(); if (sealingModules.some(path => !/^[a-f0-9]{64}$/.test(prep.sealingModuleSha256?.[path] ?? '') || prep.sealingModuleSha256[path] !== sealingPinned[path])) failure('reviewed-sealing-module-diff');
   const inputs = {};
-  for (const name of ['priorEvidence', 'config', 'users', 'features']) { const bytes = await privateBytes(plan.paths[name]); if (sha(bytes) !== plan.pins[name]) failure('private-input-diff'); inputs[name] = JSON.parse(bytes); }
+  for (const name of ['priorEvidence', 'config', 'users']) { const bytes = await privateBytes(plan.paths[name]); if (sha(bytes) !== plan.pins[name]) failure('private-input-diff'); inputs[name] = JSON.parse(bytes); }
   const retainedDrafts = validatePrior(inputs.priorEvidence);
-  const { config, users, features } = inputs;
-  if (config.medplumBaseUrl !== target.origin + '/' || config.projectId !== target.projectId || config.clientId !== target.clientId || config.storageQualification || !config.nativeQuestionnaire || features.projectId !== target.projectId || !features.projectVersion || !Array.isArray(features.features) || !Number.isFinite(Date.parse(features.observedAt)) || Math.abs(Date.now() - Date.parse(features.observedAt)) > 900_000) failure('exact-fresh-native-config-required');
+  const { config, users } = inputs;
+  if (config.medplumBaseUrl !== target.origin + '/' || config.projectId !== target.projectId || config.clientId !== target.clientId || config.storageQualification || !config.nativeQuestionnaire) failure('exact-native-config-required');
   const emitted = join(runtime, '.qualification-build'), load = path => require(join(emitted, path));
   const { digest } = load('packages/clinical-core/src/domain.js'), { qualifyConditionalMedplum } = load('packages/clinical-core/src/qualification.js'), { MedplumClient } = load('packages/clinical-core/src/medplum.js');
-  const { observeRuntimeIdentity, sealDeploymentQualification } = load('packages/clinic-api/src/deployment-qualification.js');
-  const { staffAuthentication } = load('packages/clinic-api/src/auth.js'), { cookies } = load('packages/clinic-api/src/cookies.js'), { runtimeProvider } = load('packages/clinic-api/src/runtime.js');
+  const sealing = path => require(join(sealingBuild, path));
+  const { observeRuntimeProjection, sealDeploymentQualification } = sealing('packages/clinic-api/src/deployment-qualification.js'), { runtimeProvider } = sealing('packages/clinic-api/src/runtime.js');
+  const { staffAuthentication } = load('packages/clinic-api/src/auth.js'), { cookies } = load('packages/clinic-api/src/cookies.js');
   load('packages/clinic-api/src/deployment-probes.js').assertDeploymentStaffRoster(config, users);
   for (const draft of Object.values(retainedDrafts)) if (await digest(draft.confirmed.confirmation.submission) !== draft.confirmed.confirmation.digest || draft.patient !== config.patients[draft.scenario].reference) failure('retained-confirmation-config-diff');
   const output = resolve(root, plan.output); if (!output.startsWith(artifact + '/') || await realpath(dirname(output)) !== dirname(output)) failure('exclusive-private-output-required');
@@ -186,7 +193,7 @@ export async function run(planPath) {
     const response = await fetcher(new URL('oauth2/token', config.medplumBaseUrl), { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'client_credentials', client_id: config.clientId, client_secret: config.clientSecret, scope: 'openid' }) });
     if (!response.ok) failure('fresh-native-token-unavailable'); const accessToken = (await response.json()).access_token; if (typeof accessToken !== 'string') failure('fresh-native-token-unavailable');
     const medplum = { baseUrl: new URL('fhir/R4/', config.medplumBaseUrl).href, accessToken, mode: 'live', timeoutMs: 10_000, nativeQuestionnaire: config.nativeQuestionnaire };
-    const identity = await observeRuntimeIdentity(config, medplum, fetcher); if (identity.membershipId !== target.membershipId) failure('native-membership-diff'); evidence.identity = identity; await save();
+    const { identity, projectFeature: initialProjection } = await observeRuntimeProjection(config, medplum, fetcher); if (identity.membershipId !== target.membershipId) failure('native-membership-diff'); evidence.identity = identity; evidence.initialProjectFeature = initialProjection; await save();
     const client = new MedplumClient(medplum, fetcher); await client.verifyNativeQuestionnaire();
     const patient = config.patients['first-intake'], now = new Date().toISOString();
     const submission = { submissionId: `qualification-continuation-${crypto.randomUUID()}`, version: 1, patient: patient.reference, scenario: 'first-intake', contentVersion: 'technical-deployment-probe', questionnaire: 'https://corvo.example/Questionnaire/technical-deployment-probe', confirmedAt: now, completeness: 'partial', sources: [{ id: 'probe', patient: patient.reference, kind: 'patient-statement', text: 'Synthetic deployment storage qualification. No clinical assessment.', capturedAt: now }], answers: [{ questionId: 'probe', state: 'answered', text: 'Synthetic deployment storage qualification only.', sourceIds: ['probe'] }], work: [{ id: 'probe', kind: 'clinical', responsibility: 'medical', owner: patient.careTeams.medical }] };
@@ -204,7 +211,9 @@ export async function run(planPath) {
       capture: async (request, actor) => owned.capture(actor, (await portable.read(request)).token), cleanupAll: () => owned.cleanup(),
     });
     const application = await require(join(artifact, 'conditional-clinic.cjs')).qualifyConditionalClinic(config, client, report.qualification, actors.actors, fetcher, value => { evidence.applicationFixtures.push(value); queueSave(); }, retainedDrafts); evidence.application = application; await save();
-    const attestation = await sealDeploymentQualification(config, medplum, report, features, fetcher, application);
+    const attestation = await sealDeploymentQualification(config, medplum, report, fetcher, application);
+    if (attestation.payload.schema !== 3 || attestation.payload.projectFeature.projectionDigest !== initialProjection.projectionDigest) failure('project-projection-changed-during-qualification');
+    evidence.projectFeature = attestation.payload.projectFeature; await save();
     const qualifiedConfig = { ...config, storageQualification: attestation };
     const { TransportError } = load('packages/clinical-core/src/transport.js');
     for (const path of [`ProjectMembership/${attestation.payload.identity.membershipId}`, 'AccessPolicy', 'ClientApplication']) { let denied = false; try { await client.request(path); } catch (e) { denied = e instanceof TransportError && [401, 403, 404].includes(e.status); } if (!denied) failure('runtime-admin-read-not-denied'); }

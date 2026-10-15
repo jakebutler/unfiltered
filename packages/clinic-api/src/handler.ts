@@ -18,6 +18,7 @@ import type { AdaptiveProposer } from './adaptive.js';
 import type { GroupedExtractionProposer } from './adaptive-extraction-grouped-session-v2.js';
 import type { IngressAdmission } from './ingress-admission.js';
 import { applyGateOutcome, safetyActionOutcomes, safetyReviews, staffSafety, type SafetyReviewer } from './safety-review.js';
+import { createRequestTiming, finishRequest, requestIdFrom, routeName, type RequestTiming } from './request-timing.js';
 const revision = z.number().int().nonnegative();
 const schemas = {
     sessions: z.object({ scenario: z.enum(['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill']), syntheticAcknowledged: z.literal(true) }).strict(),
@@ -97,7 +98,7 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
     const adaptive = adaptiveSession(content, options.adaptiveProposer, { now: options.adaptiveNow, timeoutMs: options.adaptiveTimeoutMs, streamProposer: options.adaptiveStreamProposer, groupedExtractor: options.adaptiveGroupedExtractor, fullCapture: options.adaptiveFullCapture, interpreter: options.adaptiveInterpreter });
     const view = (d: Draft, identity = true) => content.view(d, identity, adaptive.available);
     const safety = safetyReviews({ reviewer: options.safetyReviewer }), staffSafetyApi = staffSafety(reference => Object.values(config.patients).find(fixture => fixture.reference === reference)?.displayName);
-    function adaptiveStore(p: { r: Runtime; claims: PatientClaims }): AdaptiveDraftStore { return { read: () => readDraft(p.r.client, p.claims.sessionId, p.claims.patient), save: (previous, next) => saveDraft(p.r.client, previous, next), safetyGate: (draft, sourceId) => safety.gate(p.r.client, draft, sourceId) }; }
+    function adaptiveStore(p: { r: Runtime; claims: PatientClaims }, timing?: RequestTiming): AdaptiveDraftStore { const timed = <T>(name: string, fn: () => Promise<T>) => timing ? timing.phase(name, fn) : fn(); return { read: () => readDraft(p.r.client, p.claims.sessionId, p.claims.patient), save: (previous, next) => timed('store', () => saveDraft(p.r.client, previous, next)), safetyGate: (draft, sourceId) => timed('safety', () => safety.gate(p.r.client, draft, sourceId)) }; }
     const adaptiveReply = (result: Awaited<ReturnType<typeof adaptive.accept>>, status = 200) => reply({ session: view(result.draft), operation: operationView(result.operation) }, status);
     const rate = new Map<string, {
         at: number;
@@ -131,7 +132,8 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
         return (await saveDraft(r.client, previous, next)).draft;
     }
     async function refreshed(r: Runtime, stored: StoredDraft) { const d = stored.draft; if (!d.confirmed && !d.prior) return d; return { ...d, delivery: d.confirmed ? await handoff.delivery(r.client, d) : undefined, previousDelivery: d.prior ? await handoff.previousDelivery(r.client, d) : undefined }; }
-    return async (request: Request): Promise<Response> => {
+    // Every response carries X-Request-Id and Server-Timing, and one structured log line; see request-timing.ts.
+    const dispatch = async (request: Request, timing: RequestTiming): Promise<Response> => {
         try {
             const url = new URL(request.url), path = url.pathname;
             if (url.search && (!['/api/staff/queue', '/api/staff/safety'].includes(path) || request.method !== 'GET' || [...url.searchParams.keys()].some(key => !(path === '/api/staff/queue' ? ['cursor', 'recoveryCursor'] : ['cursor']).includes(key)) || ['cursor', 'recoveryCursor'].some(key => url.searchParams.getAll(key).length > 1)))
@@ -186,8 +188,8 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 return reply({ savedAt: p.stored.draft.savedAt }, 200, await jar.issue('clinic_patient', { ...p.claims, identityConfirmed: false }));
             }
             if (path === '/api/clinic/adaptive-turns' && request.method === 'POST') {
-                const input = await body(request, schemas.adaptiveTurn), p = await patient(request);
-                return adaptiveReply(await adaptive.accept(adaptiveStore(p), input), 202);
+                const input = await body(request, schemas.adaptiveTurn), p = await timing.phase('session', () => patient(request));
+                return adaptiveReply(await timing.phase('accept', () => adaptive.accept(adaptiveStore(p, timing), input)), 202);
             }
             const operationMatch = path.match(/^\/api\/clinic\/adaptive-turns\/([a-f0-9-]{36})(?:\/(interpret|discard))?$/);
             if (operationMatch) {
@@ -197,8 +199,8 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 }
                 if (request.method === 'POST' && operationMatch[2] === 'interpret') {
                     await body(request, schemas.empty);
-                    const p = await patient(request);
-                    return adaptiveReply(await adaptive.interpret(adaptiveStore(p), operationMatch[1]));
+                    const p = await timing.phase('session', () => patient(request));
+                    return adaptiveReply(await timing.phase('interpret', () => adaptive.interpret(adaptiveStore(p, timing), operationMatch[1])));
                 }
                 if (request.method === 'POST' && operationMatch[2] === 'discard') {
                     const input = await body(request, schemas.review), p = await patient(request);
@@ -212,7 +214,7 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 return reply(view(await persist(p.r, p.stored, adaptive.mode(p.stored.draft, input.mode))));
             }
             if (path === '/api/clinic/turns' && request.method === 'POST') {
-                const input = await body(request, schemas.turns), p = await patient(request), d = p.stored.draft;
+                const input = await body(request, schemas.turns), p = await timing.phase('session', () => patient(request)), d = p.stored.draft;
                 const fingerprint = canonicalJson(input), prior = d.requests[input.requestId];
                 if (prior) {
                     if (prior.fingerprint !== fingerprint)
@@ -225,7 +227,7 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 if (Object.keys(d.requests).length >= 550)
                     throw new ApiFailure('session-turn-limit', 413);
                 const guidedDraft = !adaptive.available && d.adaptive ? { ...d, adaptive: { ...d.adaptive, mode: 'guided' as const } } : d;
-                const next = adaptive.dialogue(content.turn(guidedDraft, input as TurnInput));
+                const next = timing.measure('dialogue', () => adaptive.dialogue(content.turn(guidedDraft, input as TurnInput)));
                 next.requests[input.requestId] = { fingerprint, revision: d.revision + 1 };
                 // Guided free text gets the same synchronous safety gate before the next question is shown.
                 const source = next.turns.find(turn => turn.role === 'patient' && !d.turns.some(prior => prior.id === turn.id));
@@ -233,9 +235,9 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 // Structured field answers are the patient's words too; bare numbers need no review.
                 const typed = input.text ?? Object.values(input.fields ?? {}).join(' ');
                 const freeText = input.action === 'answer' && /\p{L}/u.test(typed) && !typed.startsWith('__') && !content.view(guidedDraft).currentPrompt?.choices?.some(choice => choice.value === input.text);
-                const gated = source && freeText && !next.safety?.paused ? await safety.gate(p.r.client, next, source.id).catch(() => undefined) : undefined;
+                const gated = source && freeText && !next.safety?.paused ? await timing.phase('safety', () => safety.gate(p.r.client, next, source.id)).catch(() => undefined) : undefined;
                 if (gated) applyGateOutcome(next, gated.entry, gated.signal, gated.unsaved);
-                return reply(view(await persist(p.r, p.stored, next)));
+                return reply(view(await timing.phase('store', () => persist(p.r, p.stored, next))));
             }
             if (path === '/api/clinic/topics' && request.method === 'POST') {
                 const input = await body(request, schemas.topics), p = await patient(request);
@@ -379,5 +381,17 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
             return reply({ error: { code: failure.code, message: messages[failure.code] ?? 'This action could not be completed. Your saved answers have not been discarded.', retryable: failure.retryable } }, failure.status);
         }
     };
+    return async (request: Request): Promise<Response> => {
+        const timing = createRequestTiming(), requestId = requestIdFrom(request.headers.get('x-request-id'));
+        return finishRequest(await dispatch(request, timing), { requestId, route: requestRoute(request), timing });
+    };
+}
+function requestRoute(request: Request) {
+    let pathname = '/';
+    try {
+        pathname = new URL(request.url).pathname;
+    }
+    catch { /* a malformed URL is logged under the root route */ }
+    return routeName(request.method, pathname);
 }
 const messages: Record<string, string> = { 'interpretation-pending': 'Your words are saved. Wait for interpretation or explicitly stop it before changing topics, using guided questions, or reviewing.', 'adaptive-unavailable': 'Adaptive interpretation is unavailable. Continue using guided questions.', 'choose-guided-mode': 'Switch to guided questions before submitting a guided answer.', 'operation-not-found': 'This saved interpretation is not part of your session.', 'session-required': 'Open a synthetic clinic session to continue.', 'identity-confirmation-required': 'Confirm the displayed synthetic persona before opening saved answers.', 'origin-denied': 'This request did not come from this clinic.', 'stale-session': 'These answers changed in another window. Reload the saved session before continuing.', 'stale-work': 'This work changed since you opened it. Reload before recording an outcome.', 'save-outcome-unknown': 'The save result is not known yet. Check the saved session before retrying.', 'confirmation-digest-mismatch': 'The answers changed since this preview. Review the current version before sending.', 'staff-login-failed': 'The staff sign-in could not be verified. Check the credentials and try again.', 'action-outcome-unknown': 'The staff action result is not known yet. Reload this work to check its actual status.' };

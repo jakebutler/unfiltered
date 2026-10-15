@@ -79,7 +79,7 @@ export function seedPlan() {
       'Finish setup, then demote the reused temporary bootstrap membership to admin:false with the runtime access policy, verify revoked admin access, and revoke the bootstrap OAuth session. Keep the existing client secret private.',
       'Write private clinic configuration from returned IDs; generate a separate cookie secret per deployment.',
       'Run conditional identity/concurrency, version history/CAS, recovery/action history and direct named-role authorization qualification; retain results and synthetic fixture IDs.',
-      'Seal deployment attestation only after every required check and confirmation that temporary setup access is revoked.',
+      'Seal deployment attestation (schema 3) only after every required check and confirmation that temporary setup access is revoked; the Project feature projection is observed by the demoted runtime client via auth/me.',
     ],
     reconcileRule: 'Persist intent before every write, retain returned native ID/version, and read back identity and content. A timeout is an unknown outcome; do not blindly retry or duplicate client/member creation.',
   };

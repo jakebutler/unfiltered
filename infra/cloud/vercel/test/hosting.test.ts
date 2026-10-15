@@ -41,6 +41,11 @@ describe('hosted configuration boundary', () => {
     const raw = change === 'oversize' ? 'x'.repeat(48001) : JSON.stringify(config);
     expect(() => hostedClinicConfig({ CLINIC_CONFIG_JSON: raw })).toThrow('hosted-clinic-configuration-invalid');
   });
+  it('accepts the deployed schema-2 and the auth/me schema-3 attestation shapes, but no other schema', () => {
+    for (const schema of [2, 3]) { const config = fixture(); (config.storageQualification.payload as { schema: number }).schema = schema; expect(hostedClinicConfig({ CLINIC_CONFIG_JSON: JSON.stringify(config) }).origin).toBe(origin); }
+    const config = fixture(); (config.storageQualification.payload as { schema: number }).schema = 4;
+    expect(() => hostedClinicConfig({ CLINIC_CONFIG_JSON: JSON.stringify(config) })).toThrow('hosted-clinic-configuration-invalid');
+  });
   it('does not load a local credential path or expose malformed input in an error', () => {
     expect(() => hostedClinicConfig({ CLINIC_CONFIG_PATH: '/private/env' })).toThrow('hosted-clinic-configuration-invalid');
     expect(() => hostedClinicConfig({ CLINIC_CONFIG_JSON: 'synthetic-secret-not-json' })).toThrow(/^hosted-clinic-configuration-invalid$/);

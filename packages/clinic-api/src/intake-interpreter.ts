@@ -4,10 +4,10 @@ import { canonicalJson } from '../../clinical-core/src/domain.js';
 import { digitalOcean, type DigitalOceanConfig, type InferenceMessage } from '../../clinical-core/src/digitalocean.js';
 import type { Fetch } from '../../clinical-core/src/transport.js';
 import { AdaptiveProposalFailure, type AdaptiveProposalReceipt } from './adaptive.js';
-import { activateAdaptiveBranch, AdaptiveError, adaptiveSlot, conditionalReady, parseExplicitHeight, type AdaptiveClarification, type AdaptiveContext, type AdaptiveOutcome, type AdaptiveRejectedCandidate, type EvidenceSpan, type ValidatedAct } from './adaptive-validation.js';
+import { activateAdaptiveBranch, AdaptiveError, adaptiveSlot, conditionalReady, parseExplicitHeight, type AdaptiveClarification, type AdaptiveContext, type AdaptiveOutcome, type AdaptiveRejectedCandidate, type EvidenceSpan, type SpokenNumberConfirm, type ValidatedAct } from './adaptive-validation.js';
 import { escalation } from './safety.js';
 import { scanReference } from '../../clinic-reference/src/index.js';
-import { specificityReplySettles } from '../../clinic-content/src/specificity.js';
+import { specificityPlainNo, specificityPlainYes, specificityReplySettles } from '../../clinic-content/src/specificity.js';
 
 /**
  * Simple single-call intake interpreter (protocol intake-interpreter-v1).
@@ -348,13 +348,110 @@ const smallNumbers: Record<string, number> = { zero: 0, one: 1, two: 2, three: 3
 const unitAliases: Record<string, string> = { pound: 'lb', pounds: 'lb', lb: 'lb', lbs: 'lb', kilogram: 'kg', kilograms: 'kg', kilo: 'kg', kilos: 'kg', kg: 'kg', kgs: 'kg', stone: 'st', stones: 'st', st: 'st', centimetre: 'cm', centimetres: 'cm', centimeter: 'cm', centimeters: 'cm', cm: 'cm', metre: 'm', metres: 'm', meter: 'm', meters: 'm', m: 'm', inch: 'in', inches: 'in', in: 'in', foot: 'ft', feet: 'ft', ft: 'ft', 'ft-in': 'ft-in' };
 const stopWords = new Set(['the', 'and', 'with', 'that', 'this', 'have', 'from', 'about', 'they', 'them', 'their', 'would', 'like', 'into', 'your', 'what', 'when', 'will', 'been', 'were', 'some', 'more', 'very', 'just', 'also', 'then', 'than', 'because', 'for', 'but', 'not', 'was', 'are', 'has', 'had', 'its', "it's", "i'm", 'patient', 'reports', 'reported', 'states', 'said', 'says', 'wants', 'want', 'currently', 'takes', 'take']);
 
-function numberMentioned(value: number, quote: string): boolean {
+function digitsMentioned(value: number, quote: string): boolean {
   const digits = quote.replace(/(\d),(\d{3})/g, '$1$2');
   if (new RegExp(`(?:^|[^\\d.])${String(value).replace('.', '\\.')}(?![\\d])`).test(digits)) return true;
-  if (Number.isInteger(value) && new RegExp(`(?:^|[^\\d.])${value}\\.0+(?!\\d)`).test(digits)) return true;
+  return Number.isInteger(value) && new RegExp(`(?:^|[^\\d.])${value}\\.0+(?!\\d)`).test(digits);
+}
+function numberMentioned(value: number, quote: string): boolean {
+  if (digitsMentioned(value, quote)) return true;
   const word = Object.entries(smallNumbers).find(([, number]) => number === value)?.[0];
   return !!word && new RegExp(`\\b${word}\\b`, 'i').test(quote);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Emotional disclosures (PHQ-4 constructs) and spoken numbers
+// ---------------------------------------------------------------------------------------------
+
+/** Authored here, not approved clinical copy: a neutral acknowledgement of words kept for review (rule 14: <= 20 words, no interpretation). */
+export const disclosureAcknowledgement = {
+  id: 'ACK-DISCLOSURE', version: 1, wordingStatus: 'proposed-detail',
+  /** The outstanding question is asked again right after this. */
+  text: "Thank you for telling me. I've saved that for your care team to review. Coming back to the question.",
+  /** The same turn also answered something; the next question may be a new one. */
+  answeredText: "Thank you for telling me. I've saved that for your care team to review.",
+} as const;
+/** Authored here, not approved clinical copy: reads back the patient's own spoken number; nothing is recorded until a plain yes. */
+export const spokenNumberConfirmWording = { version: 'spoken-number-confirm.1', wordingStatus: 'proposed-detail', template: 'Just to confirm, is that {value}?' } as const;
+
+/** PHQ-4 constructs in the patient's own words. They never fill a PHQ item; on their own they answer only a question that asked about them. */
+const moodSource = "\\b(?:hopeless(?:ness)?|depressed|(?:feel(?:ing|s)?|felt|been|so|really|pretty|very|quite|kind of|kinda) (?:down|low|blue)|anxious|nervous|on edge|(?:can't|cant|cannot|couldn't) (?:stop|control) (?:my )?worry(?:ing)?|worr(?:y|ied|ying)|(?:little|no|lost|losing) (?:interest|pleasure)(?: in (?:doing )?(?:things|anything))?)\\b";
+const moodWords = new RegExp(moodSource, 'i'), moodWordsAll = new RegExp(moodSource, 'gi');
+const moodFiller = new Set("honestly honest really just been being feeling feel feels felt i i've ive i'm im me most days day lately recently the a an and or lot all time times every everyday often kind sort of pretty very so quite bit little much more than usual always constantly nearly almost past last few couple weeks week months month these this like um uh well yeah guess tbh frankly to be am is was have has had kinda sorta too super extremely somewhat everything things stuff anything about it that you know since now overall generally mostly sometimes".split(' '));
+/** A sentence that only describes a PHQ-4 type feeling, with no stressor, event, condition or other detail. */
+function moodOnly(text: string): boolean {
+  const lowered = norm(text);
+  if (!moodWords.test(lowered)) return false;
+  return (lowered.replace(moodWordsAll, ' ').match(/[a-z']+/g) ?? []).every(word => moodFiller.has(word));
+}
+
+const onesWords: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9 };
+const teenWords: Record<string, number> = { ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
+const tensWords: Record<string, number> = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+interface SpokenNumber { value: number; start: number; end: number; }
+function numberTokens(text: string) {
+  const tokens = [...text.matchAll(/[A-Za-z]+/g)].map(match => ({ word: match[0].toLowerCase(), start: match.index!, end: match.index! + match[0].length }));
+  const adjacent = (i: number) => i + 1 < tokens.length && /^[\s-]+$/.test(text.slice(tokens[i].end, tokens[i + 1].start));
+  return { tokens, adjacent };
+}
+/** Multi-word or colloquial spoken numbers ("two twelve" = 212, "one eighty five" = 185, "two oh five", "two hundred and five", "eighty five").
+ * Single small words ("five") are left to numberMentioned. Interpretation only: callers must ask the patient to confirm. */
+function spokenNumbers(text: string): SpokenNumber[] {
+  const { tokens, adjacent } = numberTokens(text), found: SpokenNumber[] = [];
+  const twoDigit = (i: number): [number, number] | undefined => {
+    const word = tokens[i]?.word;
+    if (word === undefined) return;
+    if (teenWords[word] !== undefined) return [teenWords[word], i + 1];
+    if (tensWords[word] === undefined) return;
+    return adjacent(i) && onesWords[tokens[i + 1].word] ? [tensWords[word] + onesWords[tokens[i + 1].word], i + 2] : [tensWords[word], i + 1];
+  };
+  for (let i = 0; i < tokens.length;) {
+    const word = tokens[i].word, hundreds = word === 'a' ? 1 : onesWords[word];
+    let parsed: [number, number] | undefined;
+    if (hundreds && adjacent(i) && tokens[i + 1].word === 'hundred') {
+      let j = i + 2;
+      if (adjacent(j - 1) && tokens[j]?.word === 'and' && adjacent(j)) j++;
+      const rest = adjacent(j - 1) ? twoDigit(j) ?? (onesWords[tokens[j]?.word] ? [onesWords[tokens[j].word], j + 1] as [number, number] : undefined) : undefined;
+      parsed = rest ? [hundreds * 100 + rest[0], rest[1]] : [hundreds * 100, i + 2];
+    } else if (onesWords[word] && adjacent(i)) {
+      const rest = twoDigit(i + 1);
+      if (rest && rest[0] >= 10) parsed = [onesWords[word] * 100 + rest[0], rest[1]];
+      else if (tokens[i + 1].word === 'oh' && adjacent(i + 1) && onesWords[tokens[i + 2].word]) parsed = [onesWords[word] * 100 + onesWords[tokens[i + 2].word], i + 3];
+    }
+    if (!parsed) { const pair = twoDigit(i); if (pair && (pair[1] - i > 1 || pair[0] >= 12)) parsed = pair; }
+    if (!parsed) { i++; continue; }
+    found.push({ value: parsed[0], start: tokens[i].start, end: tokens[parsed[1] - 1].end });
+    i = parsed[1];
+  }
+  return found;
+}
+const heightUnitMarker = /\d\s*(?:['’"”″]|ft\b|cm\b|m\b|in\b)|\b(?:feet|foot|ft|inch(?:es)?|cm|centimet\w*|met(?:er|re)s?)\b/i;
+/** "five ten" with no unit words: feet and inches, only for a height field. */
+function spokenHeightPairs(text: string): { feet: number; inches: number }[] {
+  if (heightUnitMarker.test(text)) return [];
+  const { tokens, adjacent } = numberTokens(text), pairs: { feet: number; inches: number }[] = [];
+  const inchWords: Record<string, number> = { ...onesWords, zero: 0, oh: 0, ten: 10, eleven: 11 };
+  for (let i = 0; i < tokens.length; i++) {
+    const feet = onesWords[tokens[i].word];
+    if (feet === undefined || feet < 3 || feet > 7 || !adjacent(i) || inchWords[tokens[i + 1].word] === undefined) continue;
+    pairs.push({ feet, inches: inchWords[tokens[i + 1].word] }); i++;
+  }
+  return pairs;
+}
+const unitWords: Record<string, string> = { lb: 'pounds', kg: 'kilograms', st: 'stone', cm: 'cm', m: 'm', in: 'inches', ft: 'feet' };
+function confirmText(value: SpokenNumberConfirm['value'], unit?: string): string {
+  const shown = typeof value === 'object' ? `${value.feet} ft ${value.inches} in` : `${value}${unit && unitWords[unit] ? ` ${unitWords[unit]}` : ''}`;
+  return spokenNumberConfirmWording.template.replace('{value}', shown);
+}
+type SpokenDerivation = { problem: string; patientFacing: boolean; confirm?: SpokenNumberConfirm['value'] };
+/** One spoken value that agrees with the model is proposed for confirmation; anything else is just asked again. */
+function spokenOutcome(values: readonly (number | { feet: number; inches: number })[], proposed: unknown): SpokenDerivation {
+  const distinct = [...new Map(values.map(value => [JSON.stringify(value), value])).values()];
+  const agrees = (value: number | { feet: number; inches: number }) => proposed === undefined || proposed === null || (typeof proposed === 'number' && Number.isNaN(proposed))
+    || (typeof value === 'object' ? typeof proposed === 'object' && (proposed as { feet: number; inches: number }).feet === value.feet && (proposed as { feet: number; inches: number }).inches === value.inches : proposed === value);
+  return distinct.length === 1 && agrees(distinct[0]) ? { problem: 'spoken-number-unconfirmed', patientFacing: true, confirm: distinct[0] } : { problem: 'ambiguous-spoken-number', patientFacing: true };
+}
+
 function textSupported(value: string, source: string): boolean {
   const lowered = norm(source);
   const words = norm(value).match(/[\p{L}\p{N}']+/gu)?.filter(word => /\d/.test(word) || word.length >= 3 && !stopWords.has(word)) ?? [];
@@ -405,6 +502,8 @@ interface Candidate {
   topicId: string; path: string; state: z.infer<typeof state>; value: unknown; quote: unknown; corrects?: number | null;
   /** Item-field candidates on a new item: the item id is server-generated. */
   item?: { list: string; field: string };
+  /** A spoken number the patient has just confirmed with a plain yes. */
+  confirmed?: SpokenNumberConfirm;
 }
 const sameAnswer = (a: SlotAnswer, b: SlotAnswer) => canonicalJson({ ...a, sourceIds: [], note: undefined }) === canonicalJson({ ...b, sourceIds: [], note: undefined });
 const emptyResponse = (): TopicResponse => ({ presented: false, answers: {} });
@@ -414,7 +513,10 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
   if (context.source.role !== 'patient' || !context.source.text.trim() || !context.sources.some(source => source.id === context.source.id && source.text === context.source.text)) throw new AdaptiveError('invalid-adaptive-source');
   if (context.safetyPaused || escalation(context.source.text)) throw new AdaptiveError('safety-interruption');
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new AdaptiveError('invalid-interpreter-output');
-  const wire = raw as Record<string, unknown>;
+  // A plain yes/no to "Just to confirm, is that 212 pounds?" settles that question and carries nothing else.
+  const pending = pendingSpokenConfirm(context);
+  const confirmReply = pending ? specificityPlainYes.test(context.source.text) ? 'yes' : specificityPlainNo.test(context.source.text) ? 'no' : undefined : undefined;
+  const wire = (confirmReply ? {} : raw) as Record<string, unknown>;
   const list = (value: unknown, limit: number) => Array.isArray(value) ? value.slice(0, limit) : [];
   const sourceText = context.source.text, sourceId = context.source.id;
   const responses = structuredClone(context.responses) as Record<string, TopicResponse | undefined>;
@@ -466,6 +568,7 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     if (!parsed.success) { reject({ kind: 'fact', reason: 'malformed' }); continue; }
     facts.push({ topicId: parsed.data.topic.trim().toUpperCase(), path: canonicalPath(parsed.data.topic.trim().toUpperCase(), parsed.data.field), state: parsed.data.state, value: parsed.data.value, quote: parsed.data.quote, corrects: parsed.data.corrects ?? null });
   }
+  if (pending && confirmReply === 'yes') facts.push({ topicId: pending.topicId, path: pending.path, state: 'known', value: pending.confirm.value, quote: sourceText.trim(), corrects: null, confirmed: pending.confirm });
   /** Tolerate case/spacing/separator slips in a field name, never a different field. */
   function canonicalPath(topicId: string, field: string): string {
     const t = topic(topicId), trimmed = field.trim();
@@ -508,6 +611,9 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     // An approximate number ("around 6", "about 200") is an uncertain value, never an exact one.
     const approximate = ['positive-number', 'height-value'].includes(definition.kind) && approximateWords.test(clause);
     if (candidate.state === 'uncertain' && !quoteUncertain && !uncertainty(clause) && !approximate) return 'uncertain-without-wording';
+    // A feeling on its own ("I've been feeling hopeless most days") is not an answer to another question, never a PHQ item,
+    // and never a history/diagnosis; it stays unplaced for review unless this exact text field was the one asked.
+    if (candidate.state === 'known' && moodOnly(sentence) && !(definition.kind === 'text' && context.displayed?.topicId === candidate.topicId && context.displayed.targetPaths.includes(candidate.path))) return 'mood-statement-not-answer';
     const asked = norm(sentence).trim();
     if (['presence', 'choice'].includes(definition.kind) && (clause.includes('?') || asked.endsWith('?') && /^(?:do|does|did|can|could|should|would|will|is|am|are|have|has|what|why|how|when|where|which|who)\b/.test(asked))) return 'question-not-answer';
     if (conditionKey) {
@@ -535,9 +641,14 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
   }
 
   /** Derive a content-native answer from the model's value, checked against the quote. */
-  function derive(candidate: Candidate, definition: SlotDefinition, spans: EvidenceSpan[]): { answer: SlotAnswer; impliedUnit?: string; transform: string } | { problem: string; patientFacing: boolean } {
+  function derive(candidate: Candidate, definition: SlotDefinition, spans: EvidenceSpan[]): { answer: SlotAnswer; impliedUnit?: string; transform: string } | SpokenDerivation {
     const quote = quoteOf(spans).join(' ');
     const sourceIds = [sourceId];
+    if (candidate.confirmed) {
+      const value = candidate.confirmed.value;
+      if ((typeof value === 'object') !== (definition.kind === 'height-value' && typeof value === 'object') || !['positive-number', 'height-value'].includes(definition.kind)) return { problem: 'invalid-confirmation', patientFacing: false };
+      return { answer: { state: 'known', value, sourceIds: [candidate.confirmed.sourceId, sourceId] }, transform: 'spoken-number-confirmed', ...(candidate.confirmed.unit ? { impliedUnit: candidate.confirmed.unit } : {}) };
+    }
     if (candidate.state !== 'known') {
       return { answer: { state: candidate.state, sourceIds, note: quote.slice(0, 400) }, transform: intakeInterpreterTransform };
     }
@@ -554,6 +665,9 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
       case 'positive-number': {
         const match = typeof candidate.value === 'number' ? [String(candidate.value), String(candidate.value)] : typeof candidate.value === 'string' ? /^\s*(\d+(?:\.\d+)?)\s*([a-z]+)?\.?\s*$/i.exec(candidate.value.replace(/(\d),(\d{3})/g, '$1$2')) : null;
         const value = match ? Number(match[1]) : NaN;
+        // Spoken words ("two twelve") are only ever proposed for confirmation, never recorded as said.
+        const spoken = Number.isFinite(value) && value > 0 && digitsMentioned(value, quote) ? [] : spokenNumbers(quote);
+        if (spoken.length) return spokenOutcome(spoken.map(entry => entry.value), match ? value : NaN);
         if (!Number.isFinite(value) || value <= 0) return { problem: 'invalid-number', patientFacing: true };
         if (!numberMentioned(value, quote)) return { problem: 'number-not-in-quote', patientFacing: false };
         const unit = match?.[2] ? unitAliases[match[2].toLowerCase()] : undefined;
@@ -561,6 +675,10 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
       }
       case 'height-value': {
         const parsed = parseHeightValue(candidate.value) ?? parseHeightValue(quote);
+        const pairs = spokenHeightPairs(quote);
+        if (pairs.length) return spokenOutcome(pairs, parsed ? parsed.value : undefined);
+        const scalarSpoken = parsed && typeof parsed.value === 'number' && digitsMentioned(parsed.value, quote) ? [] : spokenNumbers(quote);
+        if (scalarSpoken.length && (!parsed || typeof parsed.value === 'number')) return spokenOutcome(scalarSpoken.map(entry => entry.value), parsed ? parsed.value : undefined);
         if (!parsed) return { problem: 'invalid-height', patientFacing: true };
         const numbers = typeof parsed.value === 'object' ? [parsed.value.feet, ...(parsed.value.inches ? [parsed.value.inches] : [])] : [parsed.value as number];
         if (!numbers.every(number => numberMentioned(number, quote.replace(/[’']/g, ' ').replace(/["”]/g, ' ')))) return { problem: 'number-not-in-quote', patientFacing: false };
@@ -587,6 +705,18 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     }
   }
 
+  const spanText = (span: EvidenceSpan) => (context.sources.find(entry => entry.id === span.sourceId)?.text ?? '').slice(span.start, span.end);
+  /** The unit the patient used with a spoken number: in its words, else the only one in the turn, else the one already recorded. */
+  function confirmUnit(t: TopicDefinition, path: string, spans: EvidenceSpan[]): string | undefined {
+    const unitPath = path.replace(/\.value$/, '.unit');
+    if (unitPath === path) return;
+    let slot: ReturnType<typeof adaptiveSlot>;
+    try { slot = adaptiveSlot(t, response(t.id), unitPath); } catch { return; }
+    const choices = (slot.definition.choices ?? []).filter((choice): choice is string => typeof choice === 'string' && choice !== 'ft-in');
+    const quote = quoteOf(spans).join(' '), inTurn = choices.filter(choice => unitInQuote(choice, sourceText));
+    return choices.find(choice => unitInQuote(choice, quote)) ?? (inTurn.length === 1 ? inTurn[0] : undefined)
+      ?? (slot.answer?.state === 'known' && typeof slot.answer.value === 'string' && choices.includes(slot.answer.value) ? slot.answer.value : undefined);
+  }
   /** Apply one validated candidate at an exact resolved path. Never throws for model content. */
   function applyFact(candidate: Candidate, spans: EvidenceSpan[]): boolean {
     const t = topic(candidate.topicId);
@@ -599,12 +729,16 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     if (excludedSlot(definition) || definition.kind === 'collection' && candidate.state === 'known') { reject({ kind: 'fact', topicId: t.id, path: candidate.path, reason: 'field-forbidden', evidence: spans }); return false; }
     const problem = lexicalProblem(candidate, definition, spans);
     if (problem) { reject({ kind: 'fact', topicId: t.id, path: candidate.path, reason: problem, evidence: spans, state: candidate.state }); return false; }
-    const clarify = (reason: AdaptiveClarification['reason'], proposed?: SlotAnswer) => outcome.clarifications.push({ topicId: t.id, path: candidate.path, reason, evidence: spans, ...(resolved.answer ? { previous: resolved.answer } : {}), ...(proposed ? { proposed } : {}) });
+    const clarify = (reason: AdaptiveClarification['reason'], proposed?: SlotAnswer, confirm?: SpokenNumberConfirm) => outcome.clarifications.push({ topicId: t.id, path: candidate.path, reason, evidence: spans, ...(resolved.answer ? { previous: resolved.answer } : {}), ...(proposed ? { proposed } : {}), ...(confirm ? { confirm } : {}) });
     if (current.stopped) { clarify('stopped-topic'); return false; }
     if ((t.presentation === 'C' && current.applicability !== 'applicable') || !conditionalReady(definition, resolved.siblings, resolved.definitions, context)) { clarify('condition-unresolved'); return false; }
     const derived = derive(candidate, definition, spans);
     if ('problem' in derived) {
-      if (derived.patientFacing) clarify('ambiguous-value');
+      if (derived.confirm !== undefined) {
+        const value = derived.confirm, unit = typeof value === 'object' ? 'ft-in' : confirmUnit(t, candidate.path, spans);
+        clarify('ambiguous-value', { state: 'known', value, sourceIds: [sourceId] } as SlotAnswer, { value, ...(unit ? { unit } : {}), sourceId, evidence: spans, text: confirmText(value, unit) });
+      }
+      else if (derived.patientFacing) clarify('ambiguous-value');
       else reject({ kind: 'fact', topicId: t.id, path: candidate.path, reason: derived.problem, evidence: spans, state: candidate.state });
       return false;
     }
@@ -651,7 +785,9 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     const quote = quoteOf(spans);
     outcome.updates.push({ topicId: t.id, path: candidate.path, answer });
     if (order === 'later') for (const entry of outcome.provenance) if (entry.topicId === t.id && entry.path === candidate.path && !entry.transform.endsWith('-superseded-in-message')) entry.transform = `${intakeInterpreterTransform}-superseded-in-message`;
-    outcome.provenance.push({ topicId: t.id, path: candidate.path, evidence: spans, transform: order === 'later' ? `${intakeInterpreterTransform}-in-message-correction` : derived.transform, sourceText: quote, ...(correctsSourceIds?.length ? { correctsSourceIds } : {}) });
+    // A confirmed spoken number cites the original spoken words and the patient's yes.
+    if (candidate.confirmed) outcome.provenance.push({ topicId: t.id, path: candidate.path, evidence: [...candidate.confirmed.evidence, ...spans], transform: derived.transform, sourceText: [...candidate.confirmed.evidence, ...spans].map(spanText) });
+    else outcome.provenance.push({ topicId: t.id, path: candidate.path, evidence: spans, transform: order === 'later' ? `${intakeInterpreterTransform}-in-message-correction` : derived.transform, sourceText: quote, ...(correctsSourceIds?.length ? { correctsSourceIds } : {}) });
     // Unit implied by the value itself ("5 ft 8 in", "173 cm", "207 lb"); applied after explicit unit facts.
     const unitPath = candidate.path.replace(/\.value$/, '.unit');
     // A corrected value's unit replaces the unit implied by the value it superseded ("200 lb, no wait, 90 kg").
@@ -850,11 +986,34 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
   const settlingOnly = (entry: AdaptiveRejectedCandidate) => settlesFollowUp && !!entry.evidence?.length && entry.evidence.every(span => { const words = sourceText.slice(span.start, span.end); return oneSentence(words) && specificityReplySettles(!!followUp!.spelling, words); });
   const unplaced = rejected.some(entry => !(entry.topicId === context.displayed?.topicId && entry.path && followUpPaths.includes(entry.path)) && !settlingOnly(entry) && entry.evidence && (entry.state === 'known' && !['relative-subject', 'question-not-answer', 'label-vs-actual'].includes(entry.reason) || ['unknown-field', 'unknown-topic'].includes(entry.reason)));
   if (ack && ack.length <= 160 && !ackForbidden.test(ack) && ackGrounded(ack, sourceText) && outcome.updates.length && !outcome.clarifications.length && !unplaced) outcome.acknowledgement = ack;
+  // --- emotional disclosures, independent of the model: a sentence that only describes a feeling and that no accepted answer
+  // cites is kept with its exact words for clinician review, acknowledged neutrally (authored copy), and never interpreted ---
+  const cited = (region: Region) => outcome.provenance.some(entry => entry.evidence.some(span => span.sourceId === sourceId && span.start < region.end && span.end > region.start));
+  const disclosures = confirmReply ? [] : regions(sourceText).filter(region => moodOnly(region.text) && !cited(region)).slice(0, 4);
+  if (disclosures.length) {
+    outcome.unmapped = disclosures.map(region => ({ reason: 'unsupported-target' as const, evidence: [{ sourceId, start: region.start + region.text.search(/\S/), end: region.end - (region.text.length - region.text.trimEnd().length) }] }));
+    if (!outcome.clarifications.length && !outcome.acts.some(act => act.kind === 'question' || act.kind === 'move-on')) outcome.acknowledgement = outcome.updates.length ? disclosureAcknowledgement.answeredText : disclosureAcknowledgement.text;
+    else delete outcome.acknowledgement;
+  }
 
   if (rejected.length) outcome.rejectedCandidates = rejected.slice(0, 64);
-  outcome.hasUnresolvedInterpretation = !!outcome.unresolvedQuestions?.length || outcome.clarifications.length > 0 || unplaced
-    || outcome.updates.length === 0 && !settlesFollowUp && !outcome.acts.some(act => ['question', 'move-on', 'topic-switch'].includes(act.kind));
+  outcome.hasUnresolvedInterpretation = !!outcome.unresolvedQuestions?.length || outcome.clarifications.length > 0 || unplaced || !!outcome.unmapped?.length
+    || outcome.updates.length === 0 && !settlesFollowUp && !confirmReply && !outcome.acts.some(act => ['question', 'move-on', 'topic-switch'].includes(act.kind));
   return outcome;
+}
+
+/** The spoken-number confirmation on screen, checked again against the patient's saved words; never trusted on its own. */
+function pendingSpokenConfirm(context: AdaptiveContext): { topicId: string; path: string; confirm: SpokenNumberConfirm } | undefined {
+  const displayed = context.displayed, wording = displayed?.wording;
+  if (!displayed || wording?.version !== 'spoken-number-confirm.1' || displayed.targetPaths.length !== 1) return;
+  const confirm = wording.confirm, source = context.sources.find(entry => entry.id === confirm?.sourceId && entry.role === 'patient');
+  if (!confirm || !source || source.id === context.source.id || !confirm.evidence?.length || confirm.evidence.some(span => span.sourceId !== source.id || !Number.isInteger(span.start) || !Number.isInteger(span.end) || span.start < 0 || span.end <= span.start || span.end > source.text.length)) return;
+  const words = confirm.evidence.map(span => source.text.slice(span.start, span.end)).join(' ');
+  const value = confirm.value;
+  const heard = typeof value === 'object' ? spokenHeightPairs(words) : spokenNumbers(words).map(entry => entry.value);
+  if (heard.length !== 1 || JSON.stringify(heard[0]) !== JSON.stringify(value) || typeof value === 'object' && displayed.targetPaths[0] !== 'height.value') return;
+  if (confirm.unit !== undefined && (typeof value === 'object' ? confirm.unit !== 'ft-in' : !unitWords[confirm.unit])) return;
+  return { topicId: displayed.topicId, path: displayed.targetPaths[0], confirm: { value, ...(confirm.unit ? { unit: confirm.unit } : {}), sourceId: source.id, evidence: confirm.evidence.map(span => ({ sourceId: span.sourceId, start: span.start, end: span.end })), text: confirmText(value, confirm.unit) } };
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -403,7 +403,7 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             for (let guard = 0; interpreter && guard <= dialogueContext.topics.length; guard++) { // one topic parked per pass
                 const cycling = n.adaptive!.exchange.prompt;
                 // Specificity follow-ups reuse their field's prompt id but have their own budget; they are not repeats.
-                const shownForTopic = Object.values(n.adaptive!.operations ?? {}).filter(op => !op.displayed?.specificity && op.displayed?.topicId === cycling?.topicId && op.displayed?.promptId === cycling?.promptId).length;
+                const shownForTopic = Object.values(n.adaptive!.operations ?? {}).filter(op => !op.displayed?.specificity && op.displayed?.wording?.version !== 'spoken-number-confirm.1' && op.displayed?.topicId === cycling?.topicId && op.displayed?.promptId === cycling?.promptId).length;
                 if (!cycling || cycling.kind === 'instrument' || cycling.specificity || recentPrompts.filter(text => text === cycling.text).length < 2 && shownForTopic < 2) break;
                 parked.add(cycling.topicId);
                 const remaining = outcome.clarifications.filter(item => !parked.has(item.topicId));
