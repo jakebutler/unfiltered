@@ -11,7 +11,7 @@ this file is the single entry point. It holds:
 Update the status tables **as soon as** a task lands: a commit hash plus a one-line result. Do
 not batch the updates. The next agent trusts this file over chat history.
 
-Last updated: 2026-10-15 (Opus 5.5 orchestrator, final handoff to a GPT-6.1 Sol implementer; Opus 5.5 now does reviews only).
+Last updated: 2026-10-15 (Opus 5.5 orchestrator, final handoff to a Codex cloud agent).
 
 ## Workspace
 
@@ -20,7 +20,8 @@ Last updated: 2026-10-15 (Opus 5.5 orchestrator, final handoff to a GPT-6.1 Sol 
 | Worktree (all work happens here) | `/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered` |
 | Branch | `codex/unfiltered-foundation` (pushed to `origin`, which is public on GitHub) |
 | Open PRs (linked to the t3-code thread) | #7, #8 |
-| Last commit by the orchestrator | see `git log -1`; everything after `f906198` that is not listed in a status row as `done` is uncommitted WIP |
+| WIP snapshot | `0fd34e3` holds the **unverified** code from stopped agents (D-b/D-c, D-d, D-f, T1.3, T1.4a, T1.4b). Nothing in it has passed the six-command gate. A task becomes `done` only with a later verifying commit. |
+| Cloud agents | A Codex cloud agent works on a fresh clone of this branch. Local-only items do not exist there: the primary checkout, `.env.local`, `docs/implementation/evidence/`, `infra/cloud/.private/`, Medplum/Vercel credentials, t3-code preview tools. Skip anything that needs them and mark it `blocked: needs local/owner`. |
 | Primary checkout (do **not** work here) | `/Volumes/rexy/GitHub/unfiltered`, branch `codex/rebuild-discovery`. Its `.env.local` holds credentials. |
 | Shell note | The tool shell resets cwd to the primary checkout after every command. Always `cd <worktree> && …`. |
 | Hosted clinic demo | `https://corvo-clinic-demo.vercel.app` (stage8, native questionnaire `native-5`). Qualification expires **2026-10-21T01:48:12Z**. |
@@ -45,7 +46,7 @@ spec explicitly allows to be `it.fails` (a recorded bug).
 
 ### Hard rules
 
-1. **No new worktree or clone.** Preserve the existing WIP. No broad `git add`, `reset`, `stash`
+1. **No new worktree or clone** on the owner's machine (a cloud agent's own clone of this branch is fine). Preserve the existing WIP. No broad `git add`, `reset`, `stash`
    or cleanup.
 2. **Commit with explicit pathspecs only** (`git add path/a path/b`). **Never** commit
    `docs/implementation/evidence/**`, `infra/cloud/.private/**` or
@@ -100,11 +101,11 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | ID | Task | Status |
 |---|---|---|
 | D-a | Tier-0 safety false positive on negated statements | done (pre-cb0bfe8); docs still list it as open, which D-i fixes |
-| D-b | "Hopeless" free-text turn handling | WIP uncommitted (agent stopped at "now the interpreter changes": tests written in `packages/clinic-api/test/intake-interpreter.test.ts`, source edits in `intake-interpreter.ts` / `dialogue.ts` may be partial) |
-| D-c | Spoken weight/number confirmation | WIP uncommitted (same agent as D-b; check whether any source exists yet) |
-| D-d | Turn latency instrumentation + reductions | WIP uncommitted, believed code-complete (agent was about to run the full foundation suite; earlier failures were from other agents' concurrent edits). Files: `apps/clinic/src/{api.ts,turn-timing.ts}`, `packages/clinic-api/src/{handler.ts,request-timing.ts}`, `scripts/dev/latency-report.mts`, tests `apps/clinic/test/turn-timing.test.ts`, `packages/clinic-api/test/request-timing{,-handler}.test.ts` |
+| D-b | "Hopeless" free-text turn handling | WIP in `0fd34e3`, unverified (agent stopped at "now the interpreter changes": tests written in `packages/clinic-api/test/intake-interpreter.test.ts`, source edits in `intake-interpreter.ts` / `dialogue.ts` may be partial) |
+| D-c | Spoken weight/number confirmation | WIP in `0fd34e3`, unverified (same agent as D-b; check whether any source exists yet) |
+| D-d | Turn latency instrumentation + reductions | WIP in `0fd34e3`, unverified, believed code-complete (agent was about to run the full foundation suite; earlier failures were from other agents' concurrent edits). Files: `apps/clinic/src/{api.ts,turn-timing.ts}`, `packages/clinic-api/src/{handler.ts,request-timing.ts}`, `scripts/dev/latency-report.mts`, tests `apps/clinic/test/turn-timing.test.ts`, `packages/clinic-api/test/request-timing{,-handler}.test.ts` |
 | D-e | Staff safety screen visual check | not started |
-| D-f | Re-qualification without an admin grant (`/auth/me` observer) | WIP uncommitted, code believed complete (agent stopped at "now the docs, then full suites"). Files (attributed by timestamp, verify by diff): `packages/clinic-api/src/deployment-qualification.ts` + test, `infra/cloud/{clinic-manifest,medplum-preflight,seed-clinic}.mjs`, `infra/cloud/medplum-preflight.test.mjs`, `infra/cloud/vercel/{hosted-config.ts,test/hosting.test.ts}`, `infra/aws/clinic/config.ts`, `infra/aws/test/{config.test,fixtures}.ts`, `scripts/qualification/*`, `docs/implementation/CLOUD-CLINIC.md` |
+| D-f | Re-qualification without an admin grant (`/auth/me` observer) | WIP in `0fd34e3`, unverified, code believed complete (agent stopped at "now the docs, then full suites"). Files (attributed by timestamp, verify by diff): `packages/clinic-api/src/deployment-qualification.ts` + test, `infra/cloud/{clinic-manifest,medplum-preflight,seed-clinic}.mjs`, `infra/cloud/medplum-preflight.test.mjs`, `infra/cloud/vercel/{hosted-config.ts,test/hosting.test.ts}`, `infra/aws/clinic/config.ts`, `infra/aws/test/{config.test,fixtures}.ts`, `scripts/qualification/*`, `docs/implementation/CLOUD-CLINIC.md` |
 | D-g | Mobile layout check | not started |
 | D-h | Secret rotation + one-time calibration + re-qualify before 2026-10-21 | needs owner |
 | D-i | Docs: OPUS-HANDOFF, DEMO-TESTING-GUIDE, CLOUD-CLINIC | not started |
@@ -122,9 +123,9 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 |---|---|---|---|
 | T1.1 | Workflow registry (one `scenarioIds` source) | D-d landed (it touches `handler.ts`) | not started |
 | T1.2 | Declarative workflow behaviour fields | T1.1 | not started |
-| T1.3 | PHQ-4 coding only for the locked block | — | WIP uncommitted, believed complete (agent was re-running suites). Files: `packages/clinic-content/src/{mental-health,register}.ts`, `packages/clinical-core/src/questionnaire-response.ts`, `packages/clinical-core/test/phq4-response-scope.test.ts` |
-| T1.4a | Guided walk tests W02–W07 | — | WIP uncommitted, complete (12 tests pass incl. 4 `it.fails` = bugs below). File: `packages/clinic-api/test/guided-workflows.test.ts`. Commit as-is. |
-| T1.4b | Voice-mode tests, non-intake workflows | — | WIP uncommitted, unverified. Files: `packages/clinic-api/test/workflow-voice.test.ts`, `apps/clinic/test/workflow-choice-voice.test.ts` |
+| T1.3 | PHQ-4 coding only for the locked block | — | WIP in `0fd34e3`, unverified, believed complete (agent was re-running suites). Files: `packages/clinic-content/src/{mental-health,register}.ts`, `packages/clinical-core/src/questionnaire-response.ts`, `packages/clinical-core/test/phq4-response-scope.test.ts` |
+| T1.4a | Guided walk tests W02–W07 | — | WIP in `0fd34e3`; reported complete (12 tests pass incl. 4 `it.fails` = bugs below). File: `packages/clinic-api/test/guided-workflows.test.ts`. Commit as-is. |
+| T1.4b | Voice-mode tests, non-intake workflows | — | WIP in `0fd34e3`, unverified. Files: `packages/clinic-api/test/workflow-voice.test.ts`, `apps/clinic/test/workflow-choice-voice.test.ts` |
 | T2.5 | Pack zod schema | T1.2 | not started |
 | T2.6 | Pack compiler + exporter + parity test | T2.5 | not started |
 | T2.7 | FHIR Questionnaire export for new packs | T2.6 | not started |
@@ -158,9 +159,10 @@ only after Tracks 1 and 2 (T1–T2) complete. Its own status table lives in the 
    calibration before 2026-10-21 01:48 UTC. Steps are in
    [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md#d-h).
 
-## Uncommitted WIP map (as of 2026-10-15 handoff)
+## WIP map (snapshot commit `0fd34e3`, 2026-10-15)
 
-All earlier subagents are **stopped**; their IDs are irrelevant now. Their edits are in the tree:
+All earlier subagents are **stopped**; their IDs are irrelevant now. Their edits were committed
+unverified in `0fd34e3`. Inspect a task's part with `git show 0fd34e3 -- <paths>`:
 
 | Files | Task |
 |---|---|
@@ -171,7 +173,7 @@ All earlier subagents are **stopped**; their IDs are irrelevant now. Their edits
 | `packages/clinic-content/src/{mental-health,register}.ts`, `packages/clinical-core/src/questionnaire-response.ts`, `packages/clinical-core/test/phq4-response-scope.test.ts` | T1.3 |
 | `packages/clinic-api/test/guided-workflows.test.ts` | T1.4a |
 | `packages/clinic-api/test/workflow-voice.test.ts`, `apps/clinic/test/workflow-choice-voice.test.ts` | T1.4b |
-| `docs/implementation/evidence/**`, `.stream-chunk-diagnostic-stage/` | **never commit** |
+| `docs/implementation/evidence/**`, `.stream-chunk-diagnostic-stage/` | local only, **never commit** |
 
 ## Resuming paused subagents
 
@@ -179,6 +181,6 @@ If the orchestrator stopped mid-flight, uncommitted edits from the agents listed
 the tree. Before doing anything:
 
 1. Run `git status --short` and `git diff --stat`.
-2. Treat every uncommitted file listed in a status row as **that task's WIP**. Read the diff,
+2. Treat every file in the WIP map (or still uncommitted) as **that task's WIP**. Read the diff,
    then finish or verify the task against its spec rather than discarding it.
 3. Run all six commands. Attribute failures to a task by file before fixing.
