@@ -238,7 +238,7 @@ by exporting it as `/** @internal */`.
 New bugs are recorded as `it.fails` with a `// BUG:` comment and added to the hub bug table.
 Never edit runtime code in T1.4.
 
-### T1.4a Guided walk tests: `packages/clinic-api/test/workflow-guided-walk.test.ts`
+### T1.4a Guided walk tests: `packages/clinic-api/test/guided-workflows.test.ts`
 
 For each of `pre-visit, non-visit, post-visit, billing, scheduling, refill`, and for both
 `nativeContext` present and absent where the workflow has `contextPrompts`:

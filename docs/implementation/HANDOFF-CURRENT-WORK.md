@@ -17,7 +17,8 @@ Last updated: 2026-10-15 (Codex cloud continuation; baseline gate blocked).
 
 | Item | Value |
 |---|---|
-| Worktree (all work happens here) | `/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered` |
+| Cloud continuation checkout | `/workspace/unfiltered`; fetched requested branch at `45b1cc3`; `npm ci` completed |
+| Owner worktree (local work happens here) | `/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered` |
 | Branch | `codex/unfiltered-foundation` (pushed to `origin`, which is public on GitHub) |
 | Open PRs (linked to the t3-code thread) | #7, #8 |
 | WIP snapshot | `0fd34e3` holds the **unverified** code from stopped agents (D-b/D-c, D-d, D-f, T1.3, T1.4a, T1.4b). Nothing in it has passed the six-command gate. A task becomes `done` only with a later verifying commit. |
@@ -103,14 +104,14 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | D-a | Tier-0 safety false positive on negated statements | done (pre-cb0bfe8); docs still list it as open, which D-i fixes |
 | D-b | "Hopeless" free-text turn handling | WIP in `0fd34e3`, unverified (agent stopped at "now the interpreter changes": tests written in `packages/clinic-api/test/intake-interpreter.test.ts`, source edits in `intake-interpreter.ts` / `dialogue.ts` may be partial) |
 | D-c | Spoken weight/number confirmation | WIP in `0fd34e3`, unverified (same agent as D-b; check whether any source exists yet) |
-| D-d | Turn latency instrumentation + reductions | WIP in `0fd34e3`, unverified, believed code-complete (agent was about to run the full foundation suite; earlier failures were from other agents' concurrent edits). Files: `apps/clinic/src/{api.ts,turn-timing.ts}`, `packages/clinic-api/src/{handler.ts,request-timing.ts}`, `scripts/dev/latency-report.mts`, tests `apps/clinic/test/turn-timing.test.ts`, `packages/clinic-api/test/request-timing{,-handler}.test.ts` |
+| D-d | Turn latency instrumentation + reductions | WIP in `0fd34e3`; independent GPT-6.1 Sol xhigh review found timing/logging gaps; gate blocked (see below). Files: `apps/clinic/src/{api.ts,turn-timing.ts}`, `packages/clinic-api/src/{handler.ts,request-timing.ts}`, `scripts/dev/latency-report.mts`, tests `apps/clinic/test/turn-timing.test.ts`, `packages/clinic-api/test/request-timing{,-handler}.test.ts` |
 | D-e | Staff safety screen visual check | not started |
 | D-f | Re-qualification without an admin grant (`/auth/me` observer) | WIP in `0fd34e3`, unverified, code believed complete (agent stopped at "now the docs, then full suites"). Files (attributed by timestamp, verify by diff): `packages/clinic-api/src/deployment-qualification.ts` + test, `infra/cloud/{clinic-manifest,medplum-preflight,seed-clinic}.mjs`, `infra/cloud/medplum-preflight.test.mjs`, `infra/cloud/vercel/{hosted-config.ts,test/hosting.test.ts}`, `infra/aws/clinic/config.ts`, `infra/aws/test/{config.test,fixtures}.ts`, `scripts/qualification/*`, `docs/implementation/CLOUD-CLINIC.md` |
 | D-g | Mobile layout check | not started |
-| D-h | Secret rotation + one-time calibration + re-qualify before 2026-10-21 | needs owner |
+| D-h | Secret rotation + one-time calibration + re-qualify before 2026-10-21 | blocked: needs local/owner; no live calls authorized for this continuation |
 | D-i | Docs: OPUS-HANDOFF, DEMO-TESTING-GUIDE, CLOUD-CLINIC | not started |
 | D-j | Free text at a guided choice repeats the choice | not started (start after D-b lands; both may touch conversation flow) |
-| D-k | Crisis phrasing coverage **[digest]** | not started; hold for the bundled re-qualification and owner phrase review |
+| D-k | Crisis phrasing coverage **[digest]** | blocked: needs local/owner; hold for bundled re-qualification and owner phrase review |
 | D-l | PHQ-4 live/mock coverage | not started |
 | D-m | **Pre-/post-visit native guided crash without context** (see bug table) | not started (the fix agent was stopped immediately; no edits attributed to it) |
 
@@ -123,8 +124,8 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 |---|---|---|---|
 | T1.1 | Workflow registry (one `scenarioIds` source) | D-d landed (it touches `handler.ts`) | not started |
 | T1.2 | Declarative workflow behaviour fields | T1.1 | not started |
-| T1.3 | PHQ-4 coding only for the locked block | — | WIP in `0fd34e3`, unverified, believed complete (agent was re-running suites). Files: `packages/clinic-content/src/{mental-health,register}.ts`, `packages/clinical-core/src/questionnaire-response.ts`, `packages/clinical-core/test/phq4-response-scope.test.ts` |
-| T1.4a | Guided walk tests W02–W07 | — | WIP in `0fd34e3`; reported complete (12 tests pass incl. 4 `it.fails` = bugs below). File: `packages/clinic-api/test/guided-workflows.test.ts`. Commit as-is. |
+| T1.3 | PHQ-4 coding only for the locked block | — | WIP in `0fd34e3`; five scope tests pass; independent GPT-6.1 Sol xhigh review found fractional-number spec divergence; gate blocked (see below). Files: `packages/clinic-content/src/{mental-health,register}.ts`, `packages/clinical-core/src/questionnaire-response.ts`, `packages/clinical-core/test/phq4-response-scope.test.ts` |
+| T1.4a | Guided walk tests W02–W07 | — | blocked: needs local/owner evidence for the full gate; WIP in `0fd34e3` unchanged. 12 targeted tests pass including four expected failures, but coverage gaps remain (see cloud continuation below). File: `packages/clinic-api/test/guided-workflows.test.ts`. Commit as-is. |
 | T1.4b | Voice-mode tests, non-intake workflows | — | WIP in `0fd34e3`, unverified. Files: `packages/clinic-api/test/workflow-voice.test.ts`, `apps/clinic/test/workflow-choice-voice.test.ts` |
 | T2.5 | Pack zod schema | T1.2 | not started |
 | T2.6 | Pack compiler + exporter + parity test | T2.5 | not started |
@@ -151,6 +152,13 @@ overview file.
 | T1.4a | same | Pre-visit with context: the W02 `logistics` slot lists `S01a` first, which throws `context-fallback-inactive` (`scenarios.ts:26`, guard `native-questionnaire.ts:1065`). Fix: D-m. | — |
 | T1.4a | same | Pre-visit with context: `W02.followup.1` shows unfilled `[previously reported item]` / `[date]` to the patient (`content.ts:958`). Fix: T3.9 (D-m may hide the prompt in the meantime). | — |
 
+Additional defects found by the bounded D-d static review (regression tests still needed):
+
+| Found by | Location | Description | Fixed in |
+|---|---|---|---|
+| D-d independent review | `packages/clinic-api/src/request-timing.ts` | Arbitrary non-UUID route segments and caller request-ID text can enter request logs, contrary to the module's no-patient-text metadata contract. | — |
+| D-d independent review | `apps/clinic/src/api.ts` | `clientMs` ends before render and separates adaptive accept/interpret, so it is not submit-to-rendered-turn latency. | — |
+
 ## Open owner decisions
 
 1. **Research and the clinic engine.** Should research share the clinic engine? Recommendation:
@@ -169,7 +177,7 @@ unverified in `0fd34e3`. Inspect a task's part with `git show 0fd34e3 -- <paths>
 | `apps/clinic/src/{api.ts,turn-timing.ts}`, `packages/clinic-api/src/{handler.ts,request-timing.ts}`, `scripts/dev/latency-report.mts`, `apps/clinic/test/turn-timing.test.ts`, `packages/clinic-api/test/request-timing*.test.ts` | D-d |
 | `packages/clinic-api/src/deployment-qualification.ts` + test, `infra/**` (except `.private`), `scripts/qualification/*`, `docs/implementation/CLOUD-CLINIC.md` | D-f |
 | `packages/clinic-api/src/{intake-interpreter,dialogue}.ts`, `packages/clinic-api/test/intake-interpreter.test.ts` | D-b/D-c (dialogue.ts may instead be D-j-ish; read the diff) |
-| `packages/clinic-api/src/{adaptive-session,adaptive-validation}.ts` | unattributed: D-b or T1.3. Read the diff before committing either task. |
+| `packages/clinic-api/src/{adaptive-session,adaptive-validation}.ts` | D-c: spoken-number confirmation prompt repetition exemption and confirmation provenance/types, confirmed by independent diff review. |
 | `packages/clinic-content/src/{mental-health,register}.ts`, `packages/clinical-core/src/questionnaire-response.ts`, `packages/clinical-core/test/phq4-response-scope.test.ts` | T1.3 |
 | `packages/clinic-api/test/guided-workflows.test.ts` | T1.4a |
 | `packages/clinic-api/test/workflow-voice.test.ts`, `apps/clinic/test/workflow-choice-voice.test.ts` | T1.4b |
@@ -184,3 +192,117 @@ the tree. Before doing anything:
 2. Treat every file in the WIP map (or still uncommitted) as **that task's WIP**. Read the diff,
    then finish or verify the task against its spec rather than discarding it.
 3. Run all six commands. Attribute failures to a task by file before fixing.
+
+
+## Cloud continuation: baseline gate and review findings (2026-10-15)
+
+No runtime task has landed or been marked done. All snapshot source/test files remain unchanged.
+The first required landing, T1.4a, is blocked by the full gate; later runtime tasks remain queued
+in the requested order. Do not fabricate historical/private fixtures, skip their tests, or weaken
+assertions to make the gate green. No live providers, deployment, AccessPolicy edits or digest
+changes were performed. Chromium is installed, so D-e/D-g are pending the earlier task sequence,
+not proven blocked by browser availability. T3.8's digest/version edit remains blocked by hard
+rule 11 during this window, even though the continuation prompt suggests a separate commit.
+
+### Six-command baseline
+
+After root `npm ci`, exact hub commands produced:
+
+| Command | Result |
+|---|---|
+| `npx vitest run -c vitest.foundation.config.mts` | **FAIL**: 24 files failed / 109 passed; 41 tests failed / 1802 passed; five suites could not load; 214.21 s |
+| `npx vitest run -c apps/clinic/vitest.config.mts` | PASS: 15 files, 305 tests |
+| `npx vitest run -c vitest.hosting.config.mts` | PASS: 1 file, 29 tests |
+| `npx tsc -p tsconfig.foundation.json --noEmit` | PASS |
+| `npx tsc -p tsconfig.clinic.json --noEmit` | PASS |
+| `npx tsc -p tsconfig.hosting.json --noEmit` | **FAIL**: 659 diagnostics (654 Convex, five research code/tests) |
+
+Full command logs are local to this cloud workspace at `/workspace/scratch/unfiltered-validation/`.
+They are not committed. Representative failures and root causes:
+
+- **Missing owner-local fixtures**: `ENOENT ... docs/implementation/evidence/DO-A2.json`,
+  `DO-A3.json`, `DO-A4.json`, `DO-A19-PREFLIGHT.json`, retained AF/AS receipts,
+  `MEDPLUM-DYNAMIC-QUESTIONNAIRE-INVENTORY.json`, historical safety module, and
+  `Cannot find module '../../../.stream-chunk-diagnostic-stage/.../digitalocean-stream.js'`.
+  Some tests also need `infra/cloud/.private/DO-AF122-PREFIX.json`, `DO-AF138-REQUEST.json`
+  and `DO-AF67-PREFIX.json`. These are explicitly unavailable in the cloud handoff:
+  **blocked: needs local/owner**. They must never be committed. The owner can run the gate
+  locally with these inputs; this continuation cannot honestly claim it passes.
+- **Unbuilt local artifact**: four seed-upgrade tests initially report
+  `Cannot find module '../../.qualification-build/packages/clinic-api/src/deployment-qualification.js'`.
+  The root install is insufficient for those tests; `npm run foundation:build` is a local,
+  credential-free prerequisite and completed successfully during diagnosis.
+- **Timing/deadline failures**: six test timeouts (5 s or 15 s) and three grouped-stream assertions
+  occurred in the full run. Grouped-stream fixtures use real 200 ms/1000 ms deadlines, so
+  pre-dispatch work can consume the deadline. A serialized diagnostic run is recorded below;
+  neither timeout increases nor assertion changes are justified by the initial run alone.
+- **Hosting compiler graph** (read-only diagnosis): `tsconfig.hosting.json` includes research
+  sources and nested research tests via `infra/cloud/vercel/**/*.ts`, while inheriting NodeNext
+  and excluding only the immediate clinic `test` folder. Convex generated declarations exist;
+  the cascade comes from CJS/ESM Convex type identities (`cjs-types` versus `esm-types`, separate
+  private `TableDefinition.indexes`), not missing codegen. No diagnostic points to a source file
+  edited in `0fd34e3`; `OPUS-HANDOFF.md` already records research/Convex hosting errors.
+  Separate errors include `TS2307: Cannot find module '@vercel/functions'` (dependency belongs
+  to the nested research package), `TS1470` for two research tests using `import.meta`, and a
+  header fixture type mismatch. Future repair must preserve research coverage with the existing
+  ESNext/Bundler research config and appropriate research test checking, rather than silently
+  dropping files from the gate. A baseline checkout was not separately executed.
+
+### Serialized diagnosis after local build
+
+`npm run foundation:build` passed. Then the following command passed **6 files / 192 tests**
+in 93.46 s, with no source/assertion/timeout edits:
+
+```bash
+npx vitest run -c vitest.foundation.config.mts \
+  packages/clinic-api/test/adaptive-extraction-grouped-session.test.ts \
+  packages/clinic-api/test/adaptive-extraction-grouped-session-v2.test.ts \
+  packages/clinic-api/test/adaptive-extraction-sparse-route.test.ts \
+  packages/clinic-api/test/adaptive-session.test.ts \
+  packages/clinic-api/test/provisional-full-intake.test.ts \
+  packages/clinic-api/test/seed-upgrade.test.ts \
+  --maxWorkers=1 --no-file-parallelism
+```
+
+The seed tests now resolve the emitted local qualification module. The rich-context test took
+1856 ms in isolation (initial full run exceeded 5000 ms); the first-intake test took 7923 ms
+(initial exceeded 15000 ms). Grouped capture and timeout assertions also passed once serialized.
+This narrows the initial timing failures to load-sensitive real-deadline behavior, not a
+reproduced deterministic assertion failure. The first full run overlapped typechecks and a
+brief targeted guided test; the serialized diagnostic did not. Deadline consumption before
+extraction is relevant to D-d and needs deterministic clock/scheduling coverage before anyone
+claims the original full gate is robust. This targeted result does **not** replace the failed
+full command, nor resolve missing historical evidence.
+
+### Bounded task reviews (not completion claims)
+
+- **T1.4a**: targeted 12 tests pass, including all four `it.fails`. Spec filename corrected to
+  `guided-workflows.test.ts`. No test/expectation changes. Audit found missing assertions for
+  every workflow review detail and billing/scheduling `administrativeLogistics` fields. The
+  current harness also uses a 150-turn guard and October 20 date, differing from spec's 60 turns
+  and November 3 date. Context-present pre-visit currently expects administrative ownership;
+  preserve that expectation for D-m and investigate, rather than silently rewriting it.
+- **T1.3**: independent GPT-6.1 Sol xhigh review; integer choices and PHQ scoping are correct,
+  and existing golden/digest/count test files are unchanged. Fractional non-PHQ choices use
+  `valueDecimal`, whereas the spec says all numeric choices use `valueInteger`; resolve the
+  FHIR integer-versus-fractional contract explicitly before landing. New coverage lives in
+  `phq4-response-scope.test.ts`, not the spec's `questionnaire-response.test.ts`. Five scope
+  tests pass. No confirmed runtime defect was found within this bounded PHQ review.
+- **D-d**: independent GPT-6.1 Sol xhigh review found unresolved correctness/coverage issues:
+  (1) `clientMs` ends after JSON parsing, before rendering; adaptive accept/interpret use
+  unrelated request IDs, so the report does not measure submit-to-rendered-reply latency;
+  (2) `routeName()` retains non-UUID arbitrary path segments, and `requestIdFrom()` accepts
+  arbitrary safe-token text, allowing patient-looking text into request logs;
+  (3) handler timing tests cover unauthenticated failures, not successful guided/adaptive
+  timing or deferred safety completion; (4) report CLI still needs fixture-log execution.
+  Fixed Server-Timing phase names contain numeric durations and awaited safety ordering is
+  unchanged. These findings require fixes/tests before D-d can land.
+
+### Next resumption
+
+1. Resolve the missing-input gate with the owner/local environment and repair hosting compiler
+   coverage without weakening acceptance. Keep unavailable evidence/private files out of Git.
+2. Finish T1.4a's spec coverage, then run all six commands and make a verifying commit before
+   marking it done. Continue the original priority order; no snapshot task was discarded.
+3. Resolve the bounded T1.3/D-d findings above when those tasks reach the front of the queue.
+4. Phase 5 planning is delivered in `4b11c24`; Track 3 implementation remains not started.
