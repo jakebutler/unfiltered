@@ -218,7 +218,7 @@ Implement it as a lookup over `scenarios` where `additionalTopics.some(t => t.id
 **Fix.**
 - Emit the PHQ coding only when the slot id matches `/^MH0[1-4]$/` and the topic is `Q16`. Use
   the same predicate as `conversation.ts:157`, exported as
-  `isPhq4LockedSlot(topicId, slotId)` from `packages/clinic-content/src/mental-health.ts`.
+  `isPhq4ItemSlot(topicId, slotId)` from `packages/clinic-content/src/mental-health.ts` (already added by the T1.3 WIP, with `PHQ4_TOPIC_ID`, `PHQ4_ITEM_IDS` and `PHQ4_RESPONSE_SYSTEM`).
 - Any other numeric choice gets `{ valueInteger: value }`.
 - Do not change string or boolean paths.
 

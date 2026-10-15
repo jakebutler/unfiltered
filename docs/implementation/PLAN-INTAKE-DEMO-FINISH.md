@@ -191,3 +191,35 @@ silently.
 The live script never reached PHQ-4. Add a hosted-safe smoke step, used only during the owner
 re-qualification, that drives straight to Q16 with the buttons. Alternatively, extend the local
 mock walk-through (D-e) to complete PHQ-4 and check scoring in the staff view.
+
+## D-m Pre-/post-visit native guided crash without trusted context (HIGH)
+
+T1.4a found this (`packages/clinic-api/test/guided-workflows.test.ts`, four `it.fails` cases; see
+the hub bug table).
+
+**Symptom.** In native guided mode with no `nativeContext`, which is always the case on hosted,
+the second turn of pre-visit (after S01a) and post-visit (after S03a) returns 503
+`prompt-rule-inactive`. The runtime asks a slot whose only prompt (`W02.followup.1` /
+`W04.followup.1`) is gated on verified context.
+
+**Fix constraints**
+- Prefer a **runtime-only** fix that leaves the native digest unchanged:
+  - `nextNativeGuidedField` and the conversation `prompt()` selection must skip, or route
+    around, a slot whose prompt rule is inactive in the current context;
+  - for pre-visit, the `changes` slot without context is asked with an active authored prompt if
+    one exists. Otherwise it is left `not-asked`, so incomplete stays incomplete and staff see the
+    gap.
+- With context, the `logistics` slot must not select `S01a`. Pick the first *active* prompt id
+  (`Q20`).
+- Unfilled placeholders: a prompt that still contains `[` after filling must never be shown.
+  Fall back as above.
+- If a correct fix is impossible without changing the digest, stop and document the minimal
+  digest change for the bundled re-qualification. Do not ship it.
+
+**Acceptance**
+- the four `it.fails` in `guided-workflows.test.ts` flip to `it` with the expectations
+  unchanged;
+- the digest test and per-scenario counts are unedited;
+- all six commands are green;
+- check adaptive mode for the same failure, using existing adaptive scenario tests, and record
+  the result.
