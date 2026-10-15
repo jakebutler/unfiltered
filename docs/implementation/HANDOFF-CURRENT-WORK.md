@@ -11,7 +11,7 @@ this file is the single entry point. It holds:
 Update the status tables **as soon as** a task lands: a commit hash plus a one-line result. Do
 not batch the updates. The next agent trusts this file over chat history.
 
-Last updated: 2026-10-15 (Opus 5.5 orchestrator, final handoff to a Codex cloud agent).
+Last updated: 2026-10-15 (Codex cloud continuation; baseline gate blocked).
 
 ## Workspace
 
@@ -136,11 +136,11 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 ### Track 3: Unfiltered as an async mass-feedback platform
 
 Plan: [PLAN-ASYNC-FEEDBACK-AT-SCALE.md](PLAN-ASYNC-FEEDBACK-AT-SCALE.md) plus
-`PLAN-ASYNC-FEEDBACK-PHASE-{1..4}.md` (written, uncommitted until the handoff commit).
-**`PLAN-ASYNC-FEEDBACK-PHASE-5.md` is referenced but was never written** (the planner hit quota):
-write it from §10 of the overview (voice, interview-quality controls, optional pack items, task
-T5.8 depends on the pack track), in the same task format as Phases 1–4. Implementation starts
-only after Tracks 1 and 2 (T1–T2) complete. Its own status table lives in the overview file.
+`PLAN-ASYNC-FEEDBACK-PHASE-{1..5}.md`. Phase 5 planning was written in `4b11c24`
+(voice, interview-quality controls, optional pack items; T5.8 depends on the pack track).
+This is a documentation delivery, **not** a six-command-gate completion. Implementation remains
+not started and waits until Tracks 1 and 2 (T1–T2) complete. Its own status table lives in the
+overview file.
 
 ## Known bugs found by tests (append; never delete without a fix commit)
 
