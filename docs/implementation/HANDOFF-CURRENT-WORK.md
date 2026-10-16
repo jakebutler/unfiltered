@@ -108,7 +108,7 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 |---|---|---|
 | D-a | Tier-0 safety false positive on negated statements | done (pre-cb0bfe8); docs still list it as open, which D-i fixes |
 | D-b | "Hopeless" free-text turn handling | done `f68c94f`: safety precedes interpreter extraction; disclosures retain provenance without PHQ scoring, and a different authored probe preserves the unanswered gap; all six gates pass. |
-| D-c | Spoken weight/number confirmation | WIP in `0fd34e3`, unverified (same agent as D-b; check whether any source exists yet) |
+| D-c | Spoken weight/number confirmation | done `70437f8`: exact readback and reviewed confirmation required; raw provenance, precision/sign/units and estimate boundaries preserved; all six gates pass. |
 | D-d | Turn latency instrumentation + reductions | done `b6a1761`: submit-to-React-commit timing, safe metadata and fixture report verified; all six gates pass. Reductions remain measured follow-ups, not claimed. |
 | D-e | Staff safety screen visual check | not started |
 | D-f | Re-qualification without an admin grant (`/auth/me` observer) | done `07da259` (local implementation): projection/drift/freshness and complete sealing dependency pins verified; all six gates pass. Frozen private continuation smoke and live calibration remain owner steps. |
@@ -433,3 +433,16 @@ hopeless statements stay unplaced rather than becoming PHQ scores. The old WIP a
 requiring a repeated question and concurrent extraction were narrowly corrected to the stronger
 explicit D-b spec; all patient-visible safety/911/reviewer assertions remain. No authored crisis
 keyword list or questionnaire digest changed; no live classifier result is claimed.
+
+D-c `70437f8` passed fresh GPT-6.1 Sol xhigh review after correcting time-quantity
+confusion, uncertainty promoted to exact readings, and decimal/sign evidence mismatch.
+All six gates pass: foundation **133 / 2045**, clinic **16 / 315**, hosting **1 / 29**,
+all three typechecks. Logs: `/workspace/scratch/unfiltered-validation/dc-{0..6}.log`.
+Spoken/digit transcript weight and height require exact readback before recording; an
+unreviewed yes cannot confirm. Raw speech is immutable and retained in provenance; when the
+original source is unreviewed, numeric readiness cites the later reviewed confirmation only.
+Source-wide recognition may still keep the full handoff partial until transcript/final review;
+this task does not relabel or trust the entire raw turn. Approximation belongs only in an
+estimate-accepting slot; timing quantities, unit disagreement, precision loss and sign changes
+cannot become an exact measurement. No medication strength/dose normalization, PHQ scoring
+from speech, questionnaire digest change or provider call was introduced.
