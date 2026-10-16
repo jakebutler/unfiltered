@@ -11,7 +11,7 @@ this file is the single entry point. It holds:
 Update the status tables **as soon as** a task lands: a commit hash plus a one-line result. Do
 not batch the updates. The next agent trusts this file over chat history.
 
-Last updated: 2026-10-16 (Codex cloud continuation; historical fixtures restored, T1.4a verified).
+Last updated: 2026-10-16 (Codex cloud continuation; historical fixtures restored, T1.4a and T1.3 verified).
 
 ## Workspace
 
@@ -129,7 +129,7 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 |---|---|---|---|
 | T1.1 | Workflow registry (one `scenarioIds` source) | D-d landed (it touches `handler.ts`) | not started |
 | T1.2 | Declarative workflow behaviour fields | T1.1 | not started |
-| T1.3 | PHQ-4 coding only for the locked block | — | WIP in `0fd34e3`; five scope tests pass; independent GPT-6.1 Sol xhigh review found fractional-number spec divergence; gate blocked (see below). Files: `packages/clinic-content/src/{mental-health,register}.ts`, `packages/clinical-core/src/questionnaire-response.ts`, `packages/clinical-core/test/phq4-response-scope.test.ts` |
+| T1.3 | PHQ-4 coding only for the locked block | — | done `a811bd4`: strict topic/item scope and numeric decoding verified; fractional option sets explicitly use FHIR decimals; all six gates pass, golden/digest/count pins unchanged. |
 | T1.4a | Guided walk tests W02–W07 | — | done `7e46cde`: review details, confirmed owners and complete billing/scheduling logistics asserted; all six gates pass on Node 22. Four documented D-m expected failures remain. |
 | T1.4b | Voice-mode tests, non-intake workflows | — | WIP in `0fd34e3`, unverified. Files: `packages/clinic-api/test/workflow-voice.test.ts`, `apps/clinic/test/workflow-choice-voice.test.ts` |
 | T2.5 | Pack zod schema | T1.2 | not started |
@@ -378,3 +378,11 @@ commands and remains unresolved, not labelled flaky.
 Environment status currently reports configured Medplum/Vercel runtime variables as `unknown`,
 not ready. No values were printed. No live provider, deployment, Medplum write, policy/admin or
 qualification operation was performed. These remain owner steps.
+
+T1.3 `a811bd4` passed fresh GPT-6.1 Sol xhigh review and all six gates sequentially on
+Node 22: foundation **133 files / 1994 tests**, clinic **15 / 305**, hosting **1 / 29**,
+three typecheck commands pass. Logs: `/workspace/scratch/unfiltered-validation/t13-{0..6}.log`.
+The spec now explicitly uses `valueInteger` for integer-only option sets and `valueDecimal`
+for a scale with any fractional option (including an integral selection on that scale). No
+rounding, existing-assertion edit, questionnaire/export/digest change or runtime change was
+needed. Synthetic slot tests do not claim native export support for a new numeric scale.
