@@ -109,6 +109,7 @@ export interface StaffQueueItem {
 }
 export interface StaffHandoffView {
   workflow?: { completion: string; contextRequirement: string };
+  contextSources?: { kind: 'appointment' | 'plan' | 'prior-submission'; reference: string; recordedAt: string; truncated?: boolean }[];
   id: string; patientName: string; title: string; receivedAt?: string; version: number;
   completeness?: 'partial' | 'complete'; topics: TopicView[]; sources: SourceTurn[];
   deliveryState?: DeliveryView['state']; anchorsVerified?: boolean; canResume?: boolean;

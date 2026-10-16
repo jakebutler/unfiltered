@@ -9,6 +9,11 @@ import { Button, EmptyQueue, Header, Loading, Notice, SourceInspector, WorkHisto
 type Outcome = 'reviewed' | 'needs-information' | 'declined' | 'resolved';
 type QueuePage = { items: StaffQueueItem[]; recovery: StaffRecoveryItem[]; earlierVersion?: number; nextCursor?: string; recoveryCursor?: string };
 const canInspect = (handoff: StaffHandoffView) => handoff.anchorsVerified === true;
+// Pure rendering helper: keep the metadata tree visible to the existing staff renderer.
+export function renderStaffWorkflowMetadata({ handoff }: { handoff: Pick<StaffHandoffView, 'workflow' | 'contextSources'> }) {
+  if (!handoff.workflow) return null;
+  return <details className="metadata"><summary>About this workflow</summary><p><strong>What counts as done</strong>: {handoff.workflow.completion}</p><p><strong>Context this workflow expects</strong>: {handoff.workflow.contextRequirement}</p>{handoff.contextSources?.map(source => <p key={`${source.kind}:${source.reference}`}><strong>Context used</strong>: {source.reference} (recorded {dateTime(source.recordedAt)}){source.truncated ? ' (truncated)' : ''}</p>)}</details>;
+}
 type StaffSafetyPage = { items: StaffSafetyItem[]; nextCursor?: string };
 type SafetyOutcome = StaffSafetyAction['outcome'];
 const safetyOutcomes: SafetyOutcome[] = ['no-concern', 'contacted-patient', 'escalated'];
@@ -243,7 +248,7 @@ export function StaffApp() {
           <Button disabled={Boolean(busy) || Boolean(pendingAction)} className="mobile-only queue-back" variant="text" onClick={() => navigate(() => { setHandoff(undefined); setSource(undefined); })}><ArrowLeft size={16} aria-hidden="true" />Work queue</Button>
           <div className="handoff-header"><div><h1 ref={heading} tabIndex={-1}>{handoff.patientName}</h1><p>{handoff.title}</p></div><span className="status-label">{handoff.deliveryState === 'received' ? 'Received' : 'Confirmed'} version {handoff.version}</span></div>
           <div className="handoff-meta"><span>{handoff.deliveryState === 'received' ? handoff.receivedAt ? `Complete delivery ${dateTime(handoff.receivedAt)}` : 'Complete delivery verified · receipt time not established' : 'Complete delivery pending'}</span>{identity.role !== 'administrative' && handoff.completeness !== undefined && <span>{handoff.completeness === 'partial' ? 'Partial handoff · detail missing' : 'Required details recorded'}</span>}</div>
-          {handoff.workflow && <details className="metadata"><summary>About this workflow</summary><p><strong>What counts as done</strong>: {handoff.workflow.completion}</p><p><strong>Context this workflow expects</strong>: {handoff.workflow.contextRequirement}</p></details>}
+          {renderStaffWorkflowMetadata({ handoff })}
           <StaffDeliverySummary handoff={handoff} busy={Boolean(busy) || Boolean(pendingAction)} onResume={resumeDelivery} />
           <p className="scope-note">{identity.role === 'administrative' ? 'Administrative details only. Clinical history and conversation sources are available to the clinical care team. Action availability follows your assigned responsibilities.' : 'Full intake and original answers. Clinical context is shared with the assigned care team; available actions follow your role.'}</p>
           {identity.role !== 'administrative' && canInspect(handoff) && handoff.sources.some(turn => turn.corrects) && <Notice>This record includes corrected answers. Open a detail’s source to compare its current and earlier wording.</Notice>}

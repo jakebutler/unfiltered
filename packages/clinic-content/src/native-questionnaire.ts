@@ -11,6 +11,7 @@ import { lookupReference, referenceRelease } from "../../clinic-reference/src/in
 /** Answer specificity contracts with the exact offline reference releases they consult (D1). */
 const specificityContract = { ...specificityDefinition, reference: referenceRelease };
 import { scenarios, scenarioForWorkflowTopic } from "./scenarios.js";
+import { fillPrompt } from "./prompt-fill.js";
 import { conditionBranches } from "./branches.js";
 import { branchRules } from "./pack-rules.js";
 import {
@@ -69,7 +70,8 @@ export interface NativeRoutingContext {
     version: string;
     startsAt: string;
     timezone: string;
-    priorUpdateAt: string;
+    priorUpdateAt?: string;
+    recordedAt?: string;
   };
   plan?: {
     reference: string;
@@ -77,6 +79,17 @@ export interface NativeRoutingContext {
     author: string;
     recordedAt: string;
     text: string;
+    /** Truncation is audit metadata, never inserted into patient-facing copy. */
+    truncated?: boolean;
+  };
+  priorSubmission?: {
+    reference: string;
+    version: string;
+    recordedAt: string;
+    sourceDocumentReference: string;
+    item?: string;
+    topicId?: 'Q02' | 'Q08';
+    path?: string;
   };
   sleepApnea?: NativeSourceFact;
   surgeryEatingEffect?: NativeSourceFact;
@@ -780,7 +793,7 @@ export function evaluateNativeRule(
             !!a.version &&
             !!a.timezone &&
             Number.isFinite(Date.parse(a.startsAt)) &&
-            Number.isFinite(Date.parse(a.priorUpdateAt)),
+            Number.isFinite(Date.parse(a.priorUpdateAt ?? '')),
         );
         break;
       }
@@ -1955,14 +1968,12 @@ export function activeNativeGuidedPrompt(
     contextPrompts && id === contextPrompts.verifiedPromptId ? [id, contextPrompts.missingPromptId] : [id],
   );
   for (const promptId of new Set(candidates)) {
-    let text = promptsById[promptId]?.text;
-    if (!text) continue;
-    const verified = authority.context;
-    if (promptId === "S01" && verified?.appointment)
-      text = text.replace("[verified date/time/timezone]", `${verified.appointment.startsAt} ${verified.appointment.timezone}`).replace("[dated prior update]", verified.appointment.priorUpdateAt);
-    if (promptId === "S03" && verified?.plan)
-      text = text.replace("[demo author/role]", verified.plan.author).replace("[date]", verified.plan.recordedAt);
-    if (text.includes("[")) continue;
+    const authored = promptsById[promptId]?.text;
+    if (!authored) continue;
+    const { text, complete } = fillPrompt(authored, authority.context ?? {});
+    // Filled readback must still fit the existing saved displayed-prompt contract.
+    // A long exact quote remains prior context; it is never silently truncated.
+    if (!complete || text.length > 8000) continue;
     try {
       guardNativePrompt({ ...authority, promptId, topicId: topic.id, path: field.path, text }, evidence);
       return { promptId, text };

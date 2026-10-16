@@ -26,9 +26,10 @@ export function validatedMedplumConfig(config: MedplumConfig): MedplumConfig {
 export class MedplumClient {
   readonly config: MedplumConfig;
   constructor(config: MedplumConfig, private readonly fetcher: Fetch = fetch) { this.config = validatedMedplumConfig(config); }
-  async request(path: string, method = 'GET', body?: unknown, headers?: Record<string, string>) {
+  async request(path: string, method = 'GET', body?: unknown, headers?: Record<string, string>, options?: { timeoutMs?: number }) {
     if (path.startsWith('/') || path.includes('..') || /^[a-z]+:/i.test(path)) throw new ClinicalError('invalid-fhir-path');
-    return requestJson(this.fetcher, `${this.config.baseUrl}${path}`, { method, headers: { Authorization: `Bearer ${this.config.accessToken}`, Accept: 'application/fhir+json', 'Content-Type': 'application/fhir+json', ...headers }, ...(body ? { body: JSON.stringify(body) } : {}) }, this.config.timeoutMs);
+    if (options?.timeoutMs !== undefined && (!Number.isInteger(options.timeoutMs) || options.timeoutMs < 100 || options.timeoutMs > 60000)) throw new ClinicalError('invalid-medplum-timeout');
+    return requestJson(this.fetcher, `${this.config.baseUrl}${path}`, { method, headers: { Authorization: `Bearer ${this.config.accessToken}`, Accept: 'application/fhir+json', 'Content-Type': 'application/fhir+json', ...headers }, ...(body ? { body: JSON.stringify(body) } : {}) }, Math.min(this.config.timeoutMs, options?.timeoutMs ?? this.config.timeoutMs));
   }
   /** Read only: bind the authored business identity to the configured immutable native version. */
   async verifyNativeQuestionnaire(): Promise<string> {

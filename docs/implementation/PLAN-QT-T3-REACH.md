@@ -124,8 +124,10 @@ the hub. Deploying is a separate owner step.
 
    - If any `[…]` placeholder remains, `complete: false`. The caller then uses the workflow's
      `contextPrompts.missingPromptId`.
-   - For `W02.followup.1`, which has no missing variant today, the caller falls back to the
-     scoped question for the `changes` slot (`dialogue.ts` W02 copy).
+   - `W02.followup.1` has no missing variant, and the existing W02 scoped-question catalog has
+     no `changes` question. Without a verified prior item/date and the existing appointment
+     gate, preserve D-m: leave `changes` not asked with empty evidence and a partial handoff.
+     Do not invent fallback wording or reuse the appointment opening to credit this detail.
    - **A bracket never reaches the patient.** Add the invariant test "no patient-visible prompt
      contains `[`" to the T1.4a walk.
 5. Staff visibility: `StaffHandoffView` gains
@@ -151,6 +153,67 @@ The runtime AccessPolicy must allow reading `Appointment`, `DocumentReference` a
 `QuestionnaireResponse` for the patient compartment. Check the current policy in
 `infra/cloud/clinic-manifest.mjs` (`clinicalRules`). If a new read is needed, it is a policy
 change, applied during the owner's re-qualification. **Do not apply it with admin yourself.**
+
+### Local implementation boundaries and owner proposal
+
+The runtime readback is limited to native pre-visit and post-visit sessions. The first new
+session loads it once; save, resume, handler restart and patient turns use the frozen result,
+including an empty result after a failure. Static deployment `nativeContext` still wins for
+each explicitly supplied field. Historical patient values never become current answers or
+new-session source turns. This runtime/schema extension leaves the authored native definition,
+version, digest and counts unchanged. Deployment and any permission changes still await the
+owner's bundled re-qualification.
+
+The QuestionnaireResponse search adds `status=completed,stopped` to select confirmed captures.
+Readback accepts the current native canonical/version/digest and app-generated source binding
+only. It performs one additional, bounded read of the response's immutable source
+DocumentReference to verify patient, resource identity/version/date, matching handoff component
+and confirmation digest, and exact patient-source text. Only a known Q02 concern or known Q08
+medicine name with confirmed patient provenance is a prior item. Assistant text, model
+summaries, unreviewed speech, unreviewed collection ancestry and PHQ items cannot supply it.
+The first eligible Q02 concern precedes medicine names in authored order. Unsupported or
+malformed resources, transport errors and authorization failures discard the entire lookup;
+absent resources stay absent. Each GET uses the real transport abort timeout of at most five
+seconds with no retry. It does not leave an uncancelled background request after a timeout.
+
+The existing native response decoder re-evaluates source scope, routing, active values,
+completeness and the canonical response tree before any quote is selected. Source-channel and
+timestamp checks also reject raw known ancestors or mismatched source-time values. Captures
+with `reviewBinding` are conservatively unavailable: their prior qualification authority is
+not reconstructed from stored audit text. Ordinary guided/text-confirmed captures have no
+such binding and are covered through the real answer/review/confirmation/FHIR compiler flow.
+Support for prior qualified provisional representations needs a separate authority-bearing
+design before enabling that readback.
+
+An appointment is a booked future appointment with exactly the requested patient participant.
+Its timezone comes from `http://hl7.org/fhir/StructureDefinition/timezone` (`valueCode`); an
+absent extension is explicitly `Not recorded`. Its audit date is `meta.lastUpdated`. Without
+a dated confirmed prior submission, `priorUpdateAt` is absent and the existing S01 gate stays
+inactive. The appointment itself remains available as consulted context.
+
+Plan lookup uses the deliberately narrow synthetic category
+`urn:corvo:clinical:document-kind|follow-up-plan`. A plan must be current/final, have the requested
+patient, a valid resource version/date and a displayed author, and contain a single inline
+`text/plain` UTF-8 attachment. No external attachment URL, Binary fetch or content summary is
+used. Text is capped at 8000 UTF-16 code units without splitting a surrogate pair. The
+`(truncated)` marker appears only in the staff audit, never inside plan text or patient prompts.
+Missing inline text leaves plan context absent. This category and timezone convention must
+be confirmed against owner-authored synthetic fixtures before deployment.
+
+Staff context sources are derived from the context bound into the confirmed capture. They are
+shown only on an authorized clinical handoff with verified source/response anchors, after the
+named staff client reads each immutable context version in the same patient compartment.
+Inaccessible sources are omitted; administrative and unrelated staff receive no context audit.
+Prior-submission audit additionally requires named access to its immutable source document.
+
+**Owner proposal, not an active policy edit:** `clinic-manifest.mjs` currently omits Appointment
+from both runtime resources and named clinical read rules. Add only patient-scoped
+`Appointment` read/search/vread/history permission for the configured synthetic patients,
+without create/update/delete or administrative access, during re-qualification. Existing
+DocumentReference/QuestionnaireResponse compartment reads and immutable source-document reads
+must be verified, including cross-patient denials. Do not append Appointment to `RUNTIME_TYPES`
+as-is, because that helper would also grant writes. No AccessPolicy, seed, membership, admin
+grant, qualification or hosted deployment is changed by the local implementation.
 
 ---
 

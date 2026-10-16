@@ -100,6 +100,8 @@ export interface Draft {
     activeSlot?: string;
     relevantTopicIds?: string[];
     questionnaireHistory?: import('../../clinic-content/src/native-questionnaire.js').NativeInactiveAnswer[];
+    /** Loaded once for a new session; record changes do not alter saved/resumed prompts. */
+    priorContext?: import('./prior-context.js').FrozenPriorContext;
     safety?: {
         rule: import('./safety.js').EscalationRule;
         version: 'E-0.1' | 'E-0.2';

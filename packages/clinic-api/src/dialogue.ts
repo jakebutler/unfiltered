@@ -1,3 +1,4 @@
+import { fillPrompt } from '../../clinic-content/src/prompt-fill.js';
 import { activeNativeGuidedPrompt, guardNativePrompt, nextNativeGuidedField } from '../../clinic-content/src/native-questionnaire.js';
 import { evaluateTopic, mentalHealthOptions, promptsById, scenarios, type TopicDefinition, type TopicResponse } from '../../clinic-content/src/index.js';
 import { adaptiveSlot, adaptiveHistoryScopes, adaptiveHistoryWindowUncertainty, type AdaptiveContext, type AdaptiveOutcome, type DialogueState, type DisplayedPrompt } from './adaptive-validation.js';
@@ -148,9 +149,7 @@ export function eligibleAdaptiveProbes(context: AdaptiveContext, rejectedTargets
         const anchor = ['name', 'time', 'foods', 'drinks'].map(key => field.siblings[key]).find(answer => answer?.state === 'known' && typeof answer.value === 'string');
         if (anchor?.state === 'known') group.text = `Thinking about ${anchor.value}, ${group.text[0].toLowerCase()}${group.text.slice(1)}`;
       }
-      const verified = context.nativeRouting?.context;
-      if (group.promptId === 'S01' && verified?.appointment) group.text = group.text.replace('[verified date/time/timezone]', `${verified.appointment.startsAt} ${verified.appointment.timezone}`).replace('[dated prior update]', verified.appointment.priorUpdateAt);
-      if (group.promptId === 'S03' && verified?.plan) group.text = group.text.replace('[demo author/role]', verified.plan.author).replace('[date]', verified.plan.recordedAt);
+      group.text = fillPrompt(group.text, context.nativeRouting?.context ?? {}).text;
       if (/\[[^\]]+\]/.test(group.text)) {
         // AdaptiveContext currently carries no verified appointment/plan
         // identity. A patient's recollection cannot fill trusted templates.

@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { sourceChannels } from '../../clinic-contract/src/index.js';
 import { accountForSource, allowsProvisionalOtherOwner, typedCaptureBound } from './provisional-draft.js';
 import { createHash } from 'node:crypto';
+import { frozenPriorContextSchema } from './prior-context.js';
 export const DRAFT_SYSTEM = 'urn:corvo:clinic:draft';
 export const SNAPSHOT_SYSTEM = 'urn:corvo:clinic:handoff';
 export const APP_EXTENSION = 'https://corvo.example/fhir/StructureDefinition/clinic-view';
@@ -131,6 +132,8 @@ function stored(resource: FhirResource, patient: string, id: string, confirmedRe
     if (!Array.isArray(draft.turns) || draft.turns.some(turn => turn.channel !== undefined && !sourceChannels.includes(turn.channel)))
         throw new ApiFailure('invalid-stored-source', 503);
     validateSavedAdaptive(draft);
+    if (draft.priorContext !== undefined && !frozenPriorContextSchema.safeParse(draft.priorContext).success)
+        throw new ApiFailure('invalid-stored-context', 503);
     if (Date.parse(draft.createdAt) + 30 * 86400000 < Date.now() && !(confirmedRecovery && draft.confirmed))
         throw new ApiFailure('session-expired', 404);
     return { resource, draft, versionId };

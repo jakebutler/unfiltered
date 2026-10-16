@@ -9,6 +9,7 @@ import { sourceChannels, type ScenarioId, type TurnInput } from '../../clinic-co
 import { cookies, type PatientClaims } from './cookies.js';
 import { staffAuthentication } from './auth.js';
 import { conversation, scenarioTitles } from './conversation.js';
+import { loadPriorContext } from './prior-context.js';
 import { handoffs } from './handoffs.js';
 import { runtimeProvider, type Runtime } from './runtime.js';
 import { createDraft, readDraft, saveDraft, queueOffset } from './store.js';
@@ -165,6 +166,8 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                     if (request.signal.aborted) throw new ApiFailure('request-aborted', 499, false);
                     const now = new Date().toISOString();
                     d = { schema: 1, id: crypto.randomUUID(), patient: config.patients[input.scenario].reference, scenario: input.scenario, revision: 0, savedAt: now, createdAt: now, phase: 'conversation', turns: [], topics: {}, requests: {}, version: 1 };
+                    if (config.mentalHealth === 'phq4' && ['pre-visit', 'post-visit'].includes(d.scenario)) d.priorContext = { ...await loadPriorContext(r.client, d.patient, d.scenario), loadedAt: new Date().toISOString() };
+                    if (request.signal.aborted) throw new ApiFailure('request-aborted', 499, false);
                     d = (await createDraft(r.client, adaptive.initialize(d))).draft;
                 }
                 const c: PatientClaims = { kind: 'patient', sessionId: d.id, patient: d.patient, scenario: d.scenario, identityConfirmed: false, expires: Date.now() + 30 * 86400000 };

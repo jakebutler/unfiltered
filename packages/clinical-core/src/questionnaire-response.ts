@@ -156,9 +156,10 @@ export const nativeRoutingContextSchema = z
       .object({
         reference: z.string().regex(/^Appointment\/[A-Za-z0-9.-]+$/),
         version: sourceId,
-        startsAt: z.string().datetime(),
+        startsAt: z.string().datetime({ offset: true }),
         timezone: bounded,
-        priorUpdateAt: z.string().datetime(),
+        priorUpdateAt: z.string().datetime({ offset: true }).optional(),
+        recordedAt: z.string().datetime({ offset: true }).optional(),
       })
       .strict()
       .optional(),
@@ -169,11 +170,23 @@ export const nativeRoutingContextSchema = z
           .regex(/^(CarePlan|DocumentReference)\/[A-Za-z0-9.-]+$/),
         version: sourceId,
         author: bounded,
-        recordedAt: z.string().datetime(),
+        recordedAt: z.string().datetime({ offset: true }),
         text: bounded,
+        truncated: z.boolean().optional(),
       })
       .strict()
       .optional(),
+    priorSubmission: z.object({
+      reference: z.string().regex(/^QuestionnaireResponse\/[A-Za-z0-9.-]{1,64}$/),
+      version: sourceId,
+      recordedAt: z.string().datetime({ offset: true }),
+      sourceDocumentReference: z.string().regex(/^DocumentReference\/[A-Za-z0-9.-]{1,64}\/_history\/[A-Za-z0-9.-]{1,64}$/),
+      item: bounded.optional(),
+      topicId: z.enum(['Q02', 'Q08']).optional(),
+      path: z.string().max(300).optional(),
+    }).strict().refine(prior => prior.item === undefined
+      ? prior.topicId === undefined && prior.path === undefined
+      : prior.topicId === 'Q02' && prior.path === 'concern' || prior.topicId === 'Q08' && /^medicines\[[A-Za-z0-9_-]{1,64}\]\.name$/.test(prior.path ?? '')).optional(),
     sleepApnea: sourceFact.optional(),
     surgeryEatingEffect: sourceFact.optional(),
     reproductive: sourceFact.optional(),
@@ -390,7 +403,7 @@ function parseNativeQuestionnaireCaptureShape(
   );
   if (validSourceIds) {
     for (const [name, value] of Object.entries(capture.context ?? {})) {
-      if (name === "appointment" || name === "plan") continue;
+      if (name === "appointment" || name === "plan" || name === "priorSubmission") continue;
       const facts = Array.isArray(value) ? value : [value];
       for (const fact of facts) {
         ensure(
