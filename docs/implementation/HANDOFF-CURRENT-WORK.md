@@ -11,7 +11,7 @@ this file is the single entry point. It holds:
 Update the status tables **as soon as** a task lands: a commit hash plus a one-line result. Do
 not batch the updates. The next agent trusts this file over chat history.
 
-Last updated: 2026-10-16 (Codex cloud continuation; hosting gate repair, historical fixtures pending).
+Last updated: 2026-10-16 (Codex cloud continuation; historical fixtures restored, T1.4a verified).
 
 ## Workspace
 
@@ -130,7 +130,7 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 | T1.1 | Workflow registry (one `scenarioIds` source) | D-d landed (it touches `handler.ts`) | not started |
 | T1.2 | Declarative workflow behaviour fields | T1.1 | not started |
 | T1.3 | PHQ-4 coding only for the locked block | — | WIP in `0fd34e3`; five scope tests pass; independent GPT-6.1 Sol xhigh review found fractional-number spec divergence; gate blocked (see below). Files: `packages/clinic-content/src/{mental-health,register}.ts`, `packages/clinical-core/src/questionnaire-response.ts`, `packages/clinical-core/test/phq4-response-scope.test.ts` |
-| T1.4a | Guided walk tests W02–W07 | — | blocked: needs local/owner evidence for the full gate; WIP in `0fd34e3` unchanged. 12 targeted tests pass including four expected failures, but coverage gaps remain (see cloud continuation below). File: `packages/clinic-api/test/guided-workflows.test.ts`. Commit as-is. |
+| T1.4a | Guided walk tests W02–W07 | — | done `7e46cde`: review details, confirmed owners and complete billing/scheduling logistics asserted; all six gates pass on Node 22. Four documented D-m expected failures remain. |
 | T1.4b | Voice-mode tests, non-intake workflows | — | WIP in `0fd34e3`, unverified. Files: `packages/clinic-api/test/workflow-voice.test.ts`, `apps/clinic/test/workflow-choice-voice.test.ts` |
 | T2.5 | Pack zod schema | T1.2 | not started |
 | T2.6 | Pack compiler + exporter + parity test | T2.5 | not started |
@@ -344,3 +344,37 @@ while historical fixtures are obtained. The complete hosting gate is now
 
 The historical baseline failure table above is retained as evidence of the original run, not
 as the current hosting compiler result. No intake WIP task is newly marked done by this repair.
+
+
+## Verified cloud continuation (2026-10-16)
+
+Started from latest remote `e8dc812`, preserving snapshot WIP. Downloaded release
+`historical-fixtures-v1`; `sha256sum -c` passed. Inspected every archive member for absolute
+paths, traversal, non-file/directory entries and existing-content conflicts, then restored all
+109 files unchanged. Restored files and downloaded archive/checksum remain uncommitted.
+
+Use **Node 22.23.3** for these gates (the research hosting package requires Node 22). The first
+unchanged Node 24.19.0 baseline passed five gates; foundation reported 6 failed / 1973 passed,
+all in `stream-chunk-diagnostics.test.ts` full mock-call equality. Vitest 3.2.4 compares
+enumerable AbortSignal symbol keys with undefined values inconsistently; Node 24 cleaned
+signals contain such keys. The same archived suite passes 23/23 unchanged on Node 22. No
+historical bytes, assertions, adapter code or test inclusion were changed to resolve this.
+
+T1.4a `7e46cde` passed independent GPT-6.1 Sol xhigh review and all six exact hub checks
+sequentially on Node 22: foundation **133 files / 1979 tests**, clinic **15 / 305**, hosting
+**1 / 29**, all three aggregate/typecheck commands pass. A separate cloud verification
+worktree `/workspace/unfiltered-verify` contains only the task candidate, avoiding concurrent
+subagent edits; only the parent runs full suites. Logs: `/workspace/scratch/unfiltered-validation/t14a-{0..6}.log`.
+The spec explicitly preserves W02.changes as not-asked with no evidence and partial completion
+when trusted prior-item context is unavailable; no invented answer or digest change.
+
+The separate research-package test still reports **7 passed / 1 timeout** on Node 22:
+`npx vitest run -c vitest.research-hosting.config.mts infra/cloud/vercel/research/test/research-package.test.ts`.
+The failing test is “unknown interview response retains native lease until the actual late
+provider settles”, timing out after 5000 ms. Log:
+`/workspace/scratch/unfiltered-validation/research-node22.log`. It is outside the six gate
+commands and remains unresolved, not labelled flaky.
+
+Environment status currently reports configured Medplum/Vercel runtime variables as `unknown`,
+not ready. No values were printed. No live provider, deployment, Medplum write, policy/admin or
+qualification operation was performed. These remain owner steps.
