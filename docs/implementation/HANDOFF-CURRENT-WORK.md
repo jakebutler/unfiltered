@@ -133,7 +133,7 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 | T1.4a | Guided walk tests W02–W07 | — | done `7e46cde`: review details, confirmed owners and complete billing/scheduling logistics asserted; all six gates pass on Node 22. Four documented D-m expected failures remain. |
 | T1.4b | Voice-mode tests, non-intake workflows | — | done `46a1a3b`: provenance/unreviewed/PHQ coverage verified; all six gates pass with ten documented expected failures awaiting D-j. |
 | T2.5 | Pack zod schema | T1.2 | done `b6a7537`: strict schema/PHQ locks, named branch rules and scoped workflow copy; all six gates pass. |
-| T2.6 | Pack compiler + exporter + parity test | T2.5 | not started |
+| T2.6 | Pack compiler + exporter + parity test | T2.5 | in progress: parity stage `124242b` verified; runtime switch pending separate commit. |
 | T2.7 | FHIR Questionnaire export for new packs | T2.6 | not started |
 | T3.8 | Between-visit check-in pack | T2.6, T1.3 | not started |
 | T3.9 | Prior-submission readback | T1.2 | not started |
@@ -515,3 +515,13 @@ latency measurements. D-l's separate offline harness passed three tests and the
 real PatientApp/StaffApp PHQ walk (scores 3/3/6, partial intake, clinician review).
 Logs/screenshots: `/workspace/scratch/unfiltered-validation/{choice,phq}-browser*`.
 Neither D-j nor D-l is marked done until its isolated full gate and verifying commit.
+
+T2.6 parity stage `124242b` passed fresh GPT-6.1 Sol xhigh review and all six
+checks: foundation **137 / 2114**, clinic **16 / 318**, hosting **1 / 29**, all
+three typechecks. Logs: `/workspace/scratch/unfiltered-validation/t26-parity-{0..6}.log`.
+Compiler output strictly matches direct authored assembly in all three mental-health
+modes; JSON/TS mirrors and repeated exports match byte for byte. The unchanged native
+publisher produces the original pinned digest from compiled PHQ content. Review fixes
+reject generated-slot collisions, dangling references after mode changes and reordered
+direct PHQ blocks. Runtime still uses the original assembly; its separate switch is next.
+The TS authoring modules remain canonical until an explicit owner decision changes that.
