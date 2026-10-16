@@ -118,7 +118,7 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | D-j | Free text at a guided choice repeats the choice | not started (start after D-b lands; both may touch conversation flow) |
 | D-k | Crisis phrasing coverage **[digest]** | blocked: needs local/owner; hold for bundled re-qualification and owner phrase review |
 | D-l | PHQ-4 live/mock coverage | not started |
-| D-m | **Pre-/post-visit native guided crash without context** (see bug table) | not started (the fix agent was stopped immediately; no edits attributed to it) |
+| D-m | **Pre-/post-visit native guided crash without context** (see bug table) | done `63a1483`: runtime-only active prompt routing; four original regressions pass with unchanged expectations; all six gates pass. |
 
 ### Track 2: intake as a questionnaire template
 
@@ -152,11 +152,10 @@ overview file.
 
 | Found by | Test | Description | Fixed in |
 |---|---|---|---|
-| T1.4a | `packages/clinic-api/test/guided-workflows.test.ts` | Pre-visit with no `nativeContext`: the turn after S01a returns 503 `prompt-rule-inactive` at the `changes` slot. `W02.followup.1` is gated on `context.pre-visit` (`native-questionnaire.ts:928`, guard `:1062`). **The hosted demo never supplies nativeContext, so this hits real testers in native guided mode.** Fix: D-m. | — |
-| T1.4a | same | Post-visit with no context: `W04.followup.1` fails the same way (`native-questionnaire.ts:930`). Fix: D-m. | — |
-| T1.4a | same | Pre-visit with context: the W02 `logistics` slot lists `S01a` first, which throws `context-fallback-inactive` (`scenarios.ts:26`, guard `native-questionnaire.ts:1065`). Fix: D-m. | — |
-| T1.4a | same | Pre-visit with context: `W02.followup.1` shows unfilled `[previously reported item]` / `[date]` to the patient (`content.ts:958`). Fix: T3.9 (D-m may hide the prompt in the meantime). | — |
-
+| T1.4a | `packages/clinic-api/test/guided-workflows.test.ts` | Pre-visit with no `nativeContext`: the turn after S01a returns 503 `prompt-rule-inactive` at the `changes` slot. `W02.followup.1` is gated on `context.pre-visit` (`native-questionnaire.ts:928`, guard `:1062`). **The hosted demo never supplies nativeContext, so this hits real testers in native guided mode.** Fix: D-m. | fixed `63a1483`. |
+| T1.4a | same | Post-visit with no context: `W04.followup.1` fails the same way (`native-questionnaire.ts:930`). Fix: D-m. | fixed `63a1483`. |
+| T1.4a | same | Pre-visit with context: the W02 `logistics` slot lists `S01a` first, which throws `context-fallback-inactive` (`scenarios.ts:26`, guard `native-questionnaire.ts:1065`). Fix: D-m. | fixed `63a1483`. |
+| T1.4a | same | Pre-visit with context: `W02.followup.1` shows unfilled `[previously reported item]` / `[date]` to the patient (`content.ts:958`). Fix: T3.9 (D-m may hide the prompt in the meantime). | fixed `63a1483`; unavailable prior-item prompt remains hidden pending T3.9. |
 | T1.4b | `packages/clinic-api/test/workflow-voice.test.ts` | Billing and scheduling accept a confirmed-transcript choice without explicit choice confirmation (two expected failures). Fix: D-j. | — |
 | T1.4b / independent review | same | Q16 MH01–MH04 accept speech with a valid voice or control confirmation payload despite buttons-only D4 (eight expected failures). Fix: D-j; retain exact PHQ wording and direct button scoring. | — |
 
@@ -458,3 +457,12 @@ API file has 51 tests including ten expected failures (two missing non-PHQ confi
 eight PHQ voice/control bypasses); browser workflow voice coverage has 28 tests. Existing
 assertions remain unchanged; no runtime change is in this task. D-j owns these now-explicit
 clinical/input defects and must turn the expected failures into ordinary passing tests.
+
+D-m `63a1483` passed fresh GPT-6.1 Sol xhigh review and all six checks:
+foundation **133 / 2072**, clinic **16 / 316**, hosting **1 / 29**, all three
+typechecks. Logs: `/workspace/scratch/unfiltered-validation/dm-{0..6}.log`.
+The four original expected failures now pass as ordinary tests with unchanged
+expectations. Runtime selection checks active authored candidates and substitutes
+only trusted appointment/plan context; unavailable prior-item questions remain
+unasked, preserving partial handoffs. Explicit selection also rejects stale answers
+without mutation. Questionnaire bytes, digest and count pins remain unchanged.
