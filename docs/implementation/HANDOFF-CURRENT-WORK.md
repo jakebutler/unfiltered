@@ -117,7 +117,7 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | D-i | Docs: OPUS-HANDOFF, DEMO-TESTING-GUIDE, CLOUD-CLINIC | not started |
 | D-j | Free text at a guided choice repeats the choice | done `6dbc672`: explicit choice confirmation, retained source/question, PHQ buttons-only; all six gates pass. |
 | D-k | Crisis phrasing coverage **[digest]** | blocked: needs local/owner; hold for bundled re-qualification and owner phrase review |
-| D-l | PHQ-4 live/mock coverage | not started |
+| D-l | PHQ-4 live/mock coverage | done `8067411`: offline native API and actual PatientApp/StaffApp smoke; all six gates pass. Live retest remains owner-only. |
 | D-m | **Pre-/post-visit native guided crash without context** (see bug table) | done `63a1483`: runtime-only active prompt routing; four original regressions pass with unchanged expectations; all six gates pass. |
 
 ### Track 2: intake as a questionnaire template
@@ -506,7 +506,7 @@ Moved workflow dialogue copy is excluded only from native serialization where it
 was previously absent, leaving the original digest/count assertions unchanged.
 Compiler/exporter parity and the separate runtime switch remain T2.6.
 
-Pending task verification: D-j passed fresh review plus 153 focused API and 127
+Earlier candidate verification (superseded by the verifying commits below): D-j passed fresh review plus 153 focused API and 127
 browser-unit tests and both typechecks. A real local PatientApp walk also verified
 unmatched-source retention without repeated assistant questions and exact typed
 choice confirmation before saving. Two submit-to-React-commit entries were captured
@@ -514,7 +514,7 @@ in `choice-browser-timings.json`; these are local mocked operations, not hosted
 latency measurements. D-l's separate offline harness passed three tests and the
 real PatientApp/StaffApp PHQ walk (scores 3/3/6, partial intake, clinician review).
 Logs/screenshots: `/workspace/scratch/unfiltered-validation/{choice,phq}-browser*`.
-Neither D-j nor D-l is marked done until its isolated full gate and verifying commit.
+D-j and D-l subsequently passed their isolated full gates; see the verifying records below.
 
 T2.6 parity stage `124242b` passed fresh GPT-6.1 Sol xhigh review and all six
 checks: foundation **137 / 2114**, clinic **16 / 318**, hosting **1 / 29**, all
@@ -567,3 +567,15 @@ passed, then the unchanged candidate passed all six full checks. No assertion, d
 worker setting or historical fixture changed. Logs `dj-1.log` and
 `dj-transport-diagnostic.log` preserve the failed run and diagnosis; this is not labelled
 flaky or erased by the successful rerun.
+
+D-l `8067411` passed fresh GPT-6.1 Sol xhigh review and all six checks:
+foundation **140 / 2151**, clinic **17 / 333**, hosting **1 / 29**, all three
+typechecks. Logs: `/workspace/scratch/unfiltered-validation/dl-{0..6}.log`.
+The new harness uses the real native handler and staff projection with disposable
+in-memory FHIR/synthetic auth and no external fetches or credentials. Three PHQ answers
+retain null scores; four explicit choices yield GAD-2 3, PHQ-2 3 and PHQ-4 6. Actual
+PatientApp/StaffApp browser review, confirmation and clinician-review text passed while
+overall intake remained partial. Evidence: `phq-browser.log`, `phq-browser-review.png`
+and `phq-browser-staff.png` under the validation directory. This does not execute or
+replace owner-authorized hosted/live qualification. The older local-mock-clinic still
+makes real DigitalOcean calls and is not the offline harness.
