@@ -246,7 +246,7 @@ For each of `pre-visit, non-visit, post-visit, billing, scheduling, refill`, and
 1. Create a session via the handler, following an existing guided test such as
    `grep -ln "conversation: { mode: 'guided'" packages/clinic-api/test`.
 2. Answer each displayed prompt with a fixed synthetic answer appropriate to the slot kind:
-   - text: "Synthetic answer";
+   - text: "Synthetic answer" (optional None controls do not change the authored slot kind);
    - choice: the first choice;
    - date slots: `2026-11-03`.
 3. Do this until `prompt` is undefined, with at most 60 turns as a loop guard.
@@ -254,7 +254,12 @@ For each of `pre-visit, non-visit, post-visit, billing, scheduling, refill`, and
 
 Assert:
 - no thrown `ApiFailure`;
-- the review lists every slot of the workflow topic as answered;
+- the review lists every authored workflow slot as answered, except a slot with no active,
+  placeholder-free authored prompt must remain `not-asked` with no source evidence, as required
+  by D-m. In these fixtures this is `W02.changes` both with and without appointment context:
+  neither fixture supplies the prior item/date needed by `W02.followup.1`. Its review and
+  confirmed submission remain partial. Conditional native additions, such as refill
+  `administrationClarification`, are not fabricated to fill inactive rows;
 - the confirmed submission's `work` owners equal the expected set (pre-visit with no context
   includes admin);
 - billing and scheduling include `administrativeLogistics` with the answered fields.

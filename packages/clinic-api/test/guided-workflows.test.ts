@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createClinicHandler } from '../src/handler.js';
+import { readDraft } from '../src/store.js';
+import { scenarios } from '../../clinic-content/src/scenarios.js';
 import type { Runtime } from '../src/runtime.js';
 import type { ClinicApiConfig } from '../src/types.js';
 import type { ClinicSessionView, PromptView, ScenarioId } from '../../clinic-contract/src/index.js';
@@ -52,18 +54,22 @@ async function walk(scenario: ScenarioId, options: { context?: boolean } = {}) {
   const f = await fixture(scenario, options);
   const started = await f.call<ClinicSessionView>('/api/clinic/sessions', { scenario, syntheticAcknowledged: true });
   expect(started.status).toBe(201);
-  let current = (await f.call<ClinicSessionView>('/api/clinic/confirm-identity', { confirmed: true })).body;
+  const identity = await f.call<ClinicSessionView>('/api/clinic/confirm-identity', { confirmed: true });
+  expect(identity.status).toBe(200);
+  let current = identity.body;
   const prompts: PromptView[] = [], answers: Answer[] = [], statuses: number[] = [], errors: { prompt: string; code: unknown }[] = [];
   let first: PromptView | undefined;
-  for (let step = 0; step < 150 && current.currentPrompt; step++) {
+  for (let step = 0; step < 60 && current.currentPrompt; step++) {
     const prompt = current.currentPrompt;
     first ??= prompt;
     prompts.push(prompt);
     const path = prompt.id.slice(prompt.id.indexOf(':') + 1);
-    const choice = prompt.choices?.find(c => c.value === '__negative')?.value ?? prompt.choices?.find(c => c.value === '__done')?.value ?? prompt.choices?.find(c => c.value === '__topic-not-applicable')?.value ?? prompt.choices?.find(c => c.value === '__applicable')?.value ?? prompt.choices?.[0]?.value;
+    const slot = scenarios[scenario].additionalTopics.find(topic => topic.id === prompt.topicId)?.slots.find(slot => slot.id === path);
+    // Optional None controls do not turn an authored text slot into a choice slot.
+    const choice = slot?.kind === 'text' ? undefined : prompt.choices?.[0]?.value;
     const text = choice !== undefined ? choice
-      : /serviceDate|requestedDate/.test(path) ? '2026-10-20'
-      : `Synthetic answer for ${prompt.purpose}: typical example recalled.`;
+      : /serviceDate|requestedDate/.test(path) ? '2026-11-03'
+      : 'Synthetic answer';
     const result = await f.call<ClinicSessionView>('/api/clinic/turns', { requestId: crypto.randomUUID(), expectedRevision: current.revision, promptId: prompt.id, action: 'answer', text, channel: 'text' });
     statuses.push(result.status);
     if (result.status !== 200) { errors.push({ prompt: prompt.id, code: (result.body as { code?: unknown }).code ?? result.body }); break; }
@@ -74,7 +80,46 @@ async function walk(scenario: ScenarioId, options: { context?: boolean } = {}) {
   const confirmed = review.status === 200 ? await f.call<ClinicSessionView>('/api/clinic/confirm', { expectedRevision: review.body.session.revision, digest: review.body.digest }) : undefined;
   const tasks = [...f.native.resources.values()].filter(r => r.resourceType === 'Task');
   const owners = [...new Set(tasks.map(t => ((t.owner as { reference?: string } | undefined)?.reference ?? '')).filter(Boolean))].map(ref => ownerRole[ref] ?? ref).sort();
-  return { f, first, prompts, answers, statuses, errors, review, confirmed, tasks, owners, final: current };
+  const submission = (await readDraft(f.client, started.body.id, patient.reference)).draft.confirmed?.confirmation.submission;
+  return { f, first, prompts, answers, statuses, errors, review, confirmed, tasks, owners, submission, final: current };
+}
+
+/** Check the reviewed details and persisted confirmed submission, in addition to delivered Task owners. */
+function expectCompletedWorkflow(w: Awaited<ReturnType<typeof walk>>, scenario: ScenarioId) {
+  expect(w.final.currentPrompt).toBeUndefined();
+  expect(w.prompts.some(prompt => prompt.text.includes('['))).toBe(false);
+  expect(w.prompts.length).toBeLessThanOrEqual(60);
+  expect(w.review.status).toBe(200);
+  expect(w.confirmed?.status).toBe(200);
+  const topic = scenarios[scenario].additionalTopics[0]!;
+  const details = w.review.body.session.topics.find(view => view.id === topic.id)?.details;
+  // Native projection may also list conditional details (e.g. refill administration clarification).
+  expect(details?.map(detail => detail.id)).toEqual(expect.arrayContaining(topic.slots.map(slot => slot.id)));
+  for (const slot of topic.slots) {
+    const detail = details?.find(detail => detail.id === slot.id);
+    // D-m: the only W02 changes prompt requires prior-item/date context absent in this fixture.
+    // Preserve the gap instead of inventing a question or crediting an answer.
+    if (scenario === 'pre-visit' && slot.id === 'changes') {
+      expect(detail).toMatchObject({ id: slot.id, state: 'not-asked', sourceIds: [] });
+      expect(detail!.text).toBeUndefined();
+      expect(w.review.body.session.completeness).toBe('partial');
+      expect(w.confirmed?.body.completeness).toBe('partial');
+      expect(w.submission?.completeness).toBe('partial');
+      continue;
+    }
+    const text = slot.kind === 'choice' ? String(slot.choices![0])
+      : ['serviceDate', 'requestedDate'].includes(slot.id) ? '2026-11-03' : 'Synthetic answer';
+    expect(detail).toMatchObject({ id: slot.id, state: 'answered', text });
+    expect(detail!.sourceIds.length).toBeGreaterThan(0);
+  }
+  expect(w.submission?.work.map(work => work.responsibility).sort()).toEqual(expectations[scenario].owners);
+  expect(w.submission?.work.map(work => work.owner).sort()).toEqual(expectations[scenario].owners.map(role => careTeams[role as keyof typeof careTeams]).sort());
+  if (scenario === 'billing') {
+    expect(w.submission?.administrativeLogistics).toEqual({ kind: 'billing', issueType: 'bill-question', serviceDate: '2026-11-03', requestedResolution: 'explanation' });
+  }
+  if (scenario === 'scheduling') {
+    expect(w.submission?.administrativeLogistics).toEqual({ kind: 'scheduling', intent: 'request', visitCategory: 'first-visit', preferredDay: 'Monday', preferredWindow: 'Morning', requestedDate: '2026-11-03', timezone: 'America/New_York' });
+  }
 }
 
 /** Patient-visible text carries no unfilled template placeholder such as "[date]". */
@@ -109,6 +154,7 @@ describe('guided workflow walks through the clinic handler', () => {
       expect(w.owners).toEqual(expectations[scenario].owners);
       expect(phqOutsideQ16(w.prompts)).toEqual([]);
       expect(w.prompts.filter(p => unfilled(p.text))).toEqual([]);
+      expectCompletedWorkflow(w, scenario);
     });
   }
   it('pre-visit without verified context opens with S01a', async () => {
@@ -135,6 +181,7 @@ describe('guided workflow walks through the clinic handler', () => {
     expect(w.owners).toEqual(['medical', 'nutrition']);
     expect(phqOutsideQ16(w.prompts)).toEqual([]);
     expect(w.prompts.filter(p => unfilled(p.text))).toEqual([]);
+    expectCompletedWorkflow(w, 'post-visit');
   });
   // The bugs below are real: each test asserts the correct behaviour and is marked it.fails so the suite stays green.
   it.fails('pre-visit without verified context walks to a handoff', async () => {
@@ -144,6 +191,8 @@ describe('guided workflow walks through the clinic handler', () => {
     expect(w.confirmed?.status).toBe(200);
     expect(w.owners).toEqual(['administrative', 'medical', 'nutrition']);
     expect(phqOutsideQ16(w.prompts)).toEqual([]);
+    expect(w.prompts.some(p => p.text.includes('['))).toBe(false);
+    expectCompletedWorkflow(w, 'pre-visit');
   });
   it.fails('post-visit without verified context walks to a handoff', async () => {
     // BUG: W04.followup.1 is gated on context.post-visit, so the question slot after S03a throws prompt-rule-inactive (503) without nativeContext (native-questionnaire.ts:930, guard ~:1062).
@@ -152,6 +201,8 @@ describe('guided workflow walks through the clinic handler', () => {
     expect(w.confirmed?.status).toBe(200);
     expect(w.owners).toEqual(['medical', 'nutrition']);
     expect(phqOutsideQ16(w.prompts)).toEqual([]);
+    expect(w.prompts.some(p => p.text.includes('['))).toBe(false);
+    expectCompletedWorkflow(w, 'post-visit');
   });
   it.fails('pre-visit with verified context walks to a handoff', async () => {
     // BUG: the W02 logistics slot lists S01a first (scenarios.ts:26), so with a verified appointment the guard throws context-fallback-inactive (native-questionnaire.ts:1065) and the walk returns 503 at that prompt.
@@ -160,6 +211,8 @@ describe('guided workflow walks through the clinic handler', () => {
     expect(w.confirmed?.status).toBe(200);
     expect(w.owners).toEqual(['administrative', 'medical', 'nutrition']);
     expect(phqOutsideQ16(w.prompts)).toEqual([]);
+    expect(w.prompts.some(p => p.text.includes('['))).toBe(false);
+    expectCompletedWorkflow(w, 'pre-visit');
   });
   it.fails('pre-visit with verified context shows no unfilled placeholder', async () => {
     // BUG: W02.followup.1 renders "[previously reported item] since [date]" to the patient; only S01/S03 are filled (content.ts:958, conversation.ts prompt()).
