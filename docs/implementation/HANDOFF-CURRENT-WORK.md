@@ -136,7 +136,7 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 | T2.6 | Pack compiler + exporter + parity test | T2.5 | done `9f818d6`: runtime switch after separately verified parity `124242b`; both stages pass all six gates. |
 | T2.7 | FHIR Questionnaire export for new packs | T2.6 | done `2702415`: governed R4 draft exporter, scoped controls and PHQ locks; all six gates pass. |
 | T3.8 | Between-visit check-in pack | T2.6, T1.3 | not started |
-| T3.9 | Prior-submission readback | T1.2 | not started |
+| T3.9 | Prior-submission readback | T1.2 | done `ef96f47` (local): validated/frozen readback and scoped staff audit; all six gates pass. Deployment permissions remain owner-only. |
 | T3.10 | Clinic-initiated link (Resend) | T3.9 recommended | not started |
 
 ### Track 3: Unfiltered as an async mass-feedback platform
@@ -589,3 +589,24 @@ and require owner authorization/current runtime proof for live setup. Old q4f lo
 commands are historical and cloud-connected; new offline harness instructions are separate.
 Schema-2/3 qualification, expiry, calibration, runtime proof and no-admin-renewal boundaries
 remain explicit. No current deployment or live verification is claimed.
+
+T3.9 `ef96f47` passed fresh GPT-6.1 Sol xhigh review and all six checks:
+foundation **143 / 2198**, clinic **18 / 335**, hosting **1 / 29**, all three
+typechecks. Logs: `/workspace/scratch/unfiltered-validation/t39-rerun-{0..6}.log`.
+One-attempt bounded lookups validate native semantics/canonical response trees and
+immutable patient-source provenance before selecting an exact Q02/Q08 quote. Context
+is frozen after loading; static fixture context still wins. Missing/unsupported context
+retains authored fallbacks or the unasked partial changes gap, never a fabricated answer.
+Staff audit requires named clinical access to immutable versions; admin/inaccessible
+sources remain absent. Native definition/digest/count pins are unchanged.
+
+The first full run exposed the existing shallow staff test's inability to inspect a
+new component boundary (`t39-2.log`). A pure render helper preserves the same markup and
+all original assertions; 19 focused render tests and the full rerun pass. Fresh reviewer
+confirmed no authorization or rendered-content change.
+
+Limits/owner work: captures with `reviewBinding` conservatively return empty context
+until prior qualification authority can be reconstructed safely. Ordinary production
+guided confirmations are covered. Appointment read-only permissions, plan category/timezone
+fixtures and clinical immutable-source reads require owner verification/re-qualification;
+the spec contains a proposal only, with no active policy, seed, admin or deployment edit.
