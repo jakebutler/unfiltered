@@ -85,12 +85,16 @@ export interface ClinicApiConfig {
     staff: StaffAssignment[];
     nativeQuestionnaire?: import('../../clinic-content/src/native-questionnaire.js').NativeBinding & { reference: string };
     mentalHealth: 'pending' | 'phq4' | 'unscored';
+    /** Server-only synthetic email configuration. Omitted means copy-link only. */
+    invitationEmail?: import('./invitation-email-config.js').ConfiguredInvitationEmail;
 }
 export interface Draft {
     schema: 1;
     id: string;
     patient: string;
     scenario: ScenarioId;
+    /** Server-issued invitation authority, also bound into the signed patient session. */
+    invitationId?: string;
     revision: number;
     savedAt: string;
     createdAt: string;

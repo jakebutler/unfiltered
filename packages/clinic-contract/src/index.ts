@@ -1,6 +1,7 @@
 /** Browser-safe clinic API views. Secrets, FHIR credentials and trusted assessments never cross this boundary. */
 // Kept literal so the browser contract has no runtime dependencies; checked in content/workflows.ts.
 export type ScenarioId = 'first-intake' | 'pre-visit' | 'non-visit' | 'post-visit' | 'billing' | 'scheduling' | 'refill';
+export type { InvitationOptionsView, InvitationIssueView } from './invitations.js';
 export type TopicStatus = 'not-started' | 'more-detail-needed' | 'ready-for-review' | 'stopped-with-gaps';
 export type AnswerState = 'answered' | 'negative' | 'unknown' | 'declined' | 'uncertain' | 'not-asked' | 'conflicting';
 export const sourceChannels = ['text', 'confirmed-transcript', 'unreviewed-transcript'] as const;
@@ -121,6 +122,9 @@ export interface StaffRecoveryItem { id: string; patientName: string; scenarioTi
 
 /** Same-origin JSON API contract. All mutation calls require Origin verification and an HttpOnly session. */
 export interface ClinicApiContract {
+  'GET /api/clinic/staff/invitations': { response: import('./invitations.js').InvitationOptionsView };
+  'POST /api/clinic/staff/invitations': { body: { patient: string; scenario: ScenarioId; requestId: string }; response: import('./invitations.js').InvitationIssueView };
+  'POST /api/clinic/invitations/redeem': { body: { token: string; syntheticAcknowledged: true }; response: ClinicSessionView };
   'GET /api/clinic/config': { response: ClinicConfig };
   'POST /api/clinic/sessions': { body: { scenario: ScenarioId; syntheticAcknowledged: true }; response: ClinicSessionView };
   'GET /api/clinic/session': { response: ClinicSessionView };

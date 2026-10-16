@@ -7,6 +7,7 @@ export interface PatientClaims {
     sessionId: string;
     patient: string;
     scenario: string;
+    invitationId?: string;
     expires: number;
     identityConfirmed?: boolean;
 }

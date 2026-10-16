@@ -6,6 +6,7 @@ import { readDraft } from './store.js';
 import { requireNoPendingInterpretation } from './adaptive-session.js';
 import { streamSpeechScopeDigest } from './adaptive-stream-session.js';
 import { ApiFailure, type ClinicApiConfig } from './types.js';
+import { requirePatientScope, requireInvitationDraftScope } from './patient-fixture.js';
 import type { Runtime } from './runtime.js';
 import { conversationSpeech, type ScenarioId } from '../../clinic-contract/src/index.js';
 import { promptAllowsFreeText } from '../../clinic-contract/src/prompt-input.js';
@@ -27,8 +28,8 @@ export function createSpeechAccess(config: ClinicApiConfig, options: { runtime()
     if (!options.enabled) throw new ApiFailure('speech-unavailable', 503);
     if (request.headers.get('origin') !== origin) throw new ApiFailure('origin-denied', 403);
     const claims = await jar.read(request, 'clinic_patient');
-    if (claims.kind !== 'patient' || !Object.hasOwn(config.patients, claims.scenario)
-      || config.patients[claims.scenario as ScenarioId].reference !== claims.patient) throw new ApiFailure('session-scope-denied', 403);
+    if (claims.kind !== 'patient') throw new ApiFailure('session-scope-denied', 403);
+    requirePatientScope(config, claims);
     if (!claims.identityConfirmed) throw new ApiFailure('identity-confirmation-required', 403);
     return claims;
   }
@@ -36,7 +37,7 @@ export function createSpeechAccess(config: ClinicApiConfig, options: { runtime()
     const claims = await authenticate(request);
     if (scope.sessionId !== claims.sessionId) throw new ApiFailure('session-scope-denied', 403);
     const { draft } = await readDraft((await options.runtime()).client, claims.sessionId, claims.patient);
-    if (draft.scenario !== claims.scenario || draft.id !== claims.sessionId) throw new ApiFailure('session-scope-denied', 403);
+    requireInvitationDraftScope(claims, draft);
     if (draft.phase !== 'conversation' || draft.safety?.paused || (refuse.confirmed && draft.confirmed)) throw new ApiFailure('speech-conversation-required', 409);
     const active = draft.adaptive?.activeOperationId && draft.adaptive.operations[draft.adaptive.activeOperationId];
     const savedReply = active && active.stream?.reply === 'saved' && active.stream.replyScope;
@@ -75,7 +76,7 @@ export function createSpeechAccess(config: ClinicApiConfig, options: { runtime()
       const claims = await authenticate(request);
       if (input.sessionId !== claims.sessionId) throw new ApiFailure('session-scope-denied', 403);
       const { draft } = await readDraft((await options.runtime()).client, claims.sessionId, claims.patient);
-      if (draft.scenario !== claims.scenario || draft.id !== claims.sessionId) throw new ApiFailure('session-scope-denied', 403);
+      requireInvitationDraftScope(claims, draft);
       if (draft.phase !== 'conversation' || draft.safety?.paused || draft.confirmed) throw new ApiFailure('speech-conversation-required', 409);
       return { sessionId: draft.id, promptId: input.promptId, revision: draft.revision };
     },

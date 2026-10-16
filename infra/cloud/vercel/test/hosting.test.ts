@@ -50,13 +50,22 @@ describe('hosted configuration boundary', () => {
     expect(() => hostedClinicConfig({ CLINIC_CONFIG_PATH: '/private/env' })).toThrow('hosted-clinic-configuration-invalid');
     expect(() => hostedClinicConfig({ CLINIC_CONFIG_JSON: 'synthetic-secret-not-json' })).toThrow(/^hosted-clinic-configuration-invalid$/);
   });
+  it('loads explicit server email configuration with an empty default allowlist', () => {
+    const config = hostedClinicConfig({ CLINIC_CONFIG_JSON: JSON.stringify(fixture()), RESEND_API_KEY: 'synthetic-server-only-email-key', RESEND_FROM: 'demo@example.invalid' });
+    expect(config.invitationEmail).toEqual({ apiKey: 'synthetic-server-only-email-key', from: 'demo@example.invalid', allowlist: [], recipients: {} });
+    expect(hostedClinicConfig({ CLINIC_CONFIG_JSON: JSON.stringify(fixture()) }).invitationEmail).toBeUndefined();
+  });
+  it('rejects malformed email environment input without echoing its value', () => {
+    expect(() => hostedClinicConfig({ CLINIC_CONFIG_JSON: JSON.stringify(fixture()), RESEND_API_KEY: 'synthetic-secret\r\ninjected' })).toThrow(/^hosted-clinic-configuration-invalid$/);
+  });
 });
 
 describe('hosted static boundary', () => {
   it('serves known page/asset routes, supports HEAD/ETag, and keeps pages revalidated', async () => {
-    for (const path of ['/', '/staff', '/staff/']) {
+    for (const path of ['/', '/staff', '/staff/', '/join']) {
       const response = serveClinicAsset(new Request(origin + path), assets());
       expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe('no-cache');
+      expect(response.headers.get('referrer-policy')).toBe('no-referrer');
       expect(response.headers.get('content-security-policy')).toContain("connect-src 'self'");
       expect(await response.text()).toContain('Corvo Clinic');
     }

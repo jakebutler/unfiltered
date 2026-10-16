@@ -35,7 +35,7 @@ const headers = {
 export function serveClinicAsset(request: Request, assets: ClinicAssets, canonicalOrigin?: string, connect: readonly string[] = []): Response {
   const path = new URL(request.url).pathname;
   if (!['GET', 'HEAD'].includes(request.method)) return new Response(null, { status: 405, headers: { ...headers, Allow: 'GET, HEAD', 'Cache-Control': 'no-store' } });
-  const asset = assets.get(path === '/' || path === '/staff' || path === '/staff/' ? '/index.html' : path);
+  const asset = assets.get(path === '/' || path === '/staff' || path === '/staff/' || path === '/join' ? '/index.html' : path);
   if (!asset) return new Response('Not found', { status: 404, headers: { ...headers, 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } });
   const etag = `"${asset.digest}"`, cache = asset.immutable ? 'public, max-age=31536000, immutable' : 'no-cache';
   const socketOrigin = canonicalOrigin ? canonicalOrigin.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:') : undefined;

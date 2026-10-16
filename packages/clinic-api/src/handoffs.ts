@@ -1,3 +1,4 @@
+import { draftPatientFixture } from './patient-fixture.js';
 import { requireFinalRepresentationAuthority, type FinalRepresentationQualification } from './final-representation.js';
 import type { ProvisionalQualification } from './provisional-projection.js';
 import { scenarios } from '../../clinic-content/src/scenarios.js';
@@ -12,7 +13,7 @@ import { authorizedContextSources } from './prior-context.js';
 import { NATIVE_QUESTIONNAIRE_VERSION } from '../../clinic-content/src/native-questionnaire.js';
 import { appendAction, signAction, verifiedTaskHistory, type ActionScope } from './task-history.js';
 
-export interface Snapshot { schema: 2; deliveryContract: typeof DELIVERY_CONTRACT; id: string; patient: string; patientName: string; scenario: ScenarioId; confirmation: ConfirmedSubmission; topics: TopicView[]; }
+export interface Snapshot { schema: 2; deliveryContract: typeof DELIVERY_CONTRACT; id: string; patient: string; patientName: string; scenario: ScenarioId; invitationId?: string; confirmation: ConfirmedSubmission; topics: TopicView[]; }
 const canAct = (role: StaffAssignment['role'], responsibility: string) => responsibility === 'administrative' ? role === 'administrative' : responsibility === 'nutrition' ? role === 'registered-dietitian' : ['physician', 'physician-assistant', 'nurse-practitioner'].includes(role);
 const title = (responsibility: string) => responsibility === 'medical' ? 'Medical review' : responsibility === 'nutrition' ? 'Nutrition review' : 'Administrative assistance';
 const canResume = (receipt: Receipt) => ['absent', 'incomplete'].includes(receipt.state);
@@ -34,11 +35,12 @@ export function handoffs(config: ClinicApiConfig, options: { provisionalQualific
   const frozen = (draft: Draft): Snapshot => {
     if (!draft.confirmed) throw new ApiFailure('confirmation-required');
     requireFinalRepresentationAuthority(draft.confirmed.confirmation, options.provisionalQualification, options.finalRepresentationQualification);
-    return { schema: 2, deliveryContract: DELIVERY_CONTRACT, id: draft.id, patient: draft.patient, patientName: config.patients[draft.scenario].displayName, scenario: draft.scenario, confirmation: draft.confirmed.confirmation, topics: draft.confirmed.topics };
+    return { schema: 2, deliveryContract: DELIVERY_CONTRACT, id: draft.id, patient: draft.patient, patientName: draftPatientFixture(config, draft).displayName, scenario: draft.scenario, ...(draft.invitationId ? { invitationId: draft.invitationId } : {}), confirmation: draft.confirmed.confirmation, topics: draft.confirmed.topics };
   };
   async function validateSnapshot(resource: FhirResource, id: string, expected?: Snapshot) {
     const value = decodeDocument<Snapshot>(resource), submission = value.confirmation?.submission;
-    if (value.schema !== 2 || value.deliveryContract !== DELIVERY_CONTRACT || !submission || value.id !== submission.submissionId || value.patient !== submission.patient || value.scenario !== submission.scenario || object(resource.subject).reference !== value.patient || `${value.id}.v${submission.version}` !== id || !Object.hasOwn(config.patients, value.scenario) || config.patients[value.scenario].reference !== value.patient || config.patients[value.scenario].displayName !== value.patientName || !Array.isArray(value.topics)) throw new ApiFailure('snapshot-conflict', 409);
+    const fixture = draftPatientFixture(config, value);
+    if (value.schema !== 2 || value.deliveryContract !== DELIVERY_CONTRACT || !submission || value.id !== submission.submissionId || value.patient !== submission.patient || value.scenario !== submission.scenario || object(resource.subject).reference !== value.patient || `${value.id}.v${submission.version}` !== id || !Object.hasOwn(config.patients, value.scenario) || fixture.reference !== value.patient || fixture.displayName !== value.patientName || !Array.isArray(value.topics)) throw new ApiFailure('snapshot-conflict', 409);
     requireFinalRepresentationAuthority(value.confirmation, options.provisionalQualification, options.finalRepresentationQualification);
     await planHandoff(value.confirmation, config.nativeQuestionnaire?.reference);
     const expectedDocument = document(SNAPSHOT_SYSTEM, id, value.patient, value);

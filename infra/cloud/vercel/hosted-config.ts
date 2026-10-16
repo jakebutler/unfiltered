@@ -2,6 +2,7 @@ import { NATIVE_QUESTIONNAIRE_CANONICAL, NATIVE_QUESTIONNAIRE_VERSION } from '..
 import { nativeRoutingContextSchema } from '../../../packages/clinical-core/src/questionnaire-response.js';
 import { z } from 'zod';
 import type { QualifiedClinicConfig } from '../../../packages/clinic-api/src/deployment-qualification.js';
+import { configuredInvitationEmail } from '../../../packages/clinic-api/src/invitation-email-config.js';
 
 const projectId = '13eaac67-a2c3-4aa1-aa9e-590a083e5fef';
 const clientId = '50db76bd-d099-4305-8ec3-7439ffc38ca1';
@@ -30,6 +31,7 @@ export function hostedClinicConfig(environment: Record<string, string | undefine
     if (url.protocol !== 'https:' || url.origin !== parsed.origin || url.username || url.password || ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) throw new Error();
     if (parsed.storageQualification.payload.origin !== parsed.origin || !Number.isFinite(Date.parse(parsed.storageQualification.payload.expiresAt)) || Date.parse(parsed.storageQualification.payload.expiresAt) <= Date.now()) throw new Error();
     if (scenarios.some(scenario => !parsed.patients[scenario])) throw new Error();
-    return parsed as unknown as QualifiedClinicConfig;
+    const invitationEmail = configuredInvitationEmail(environment);
+    return { ...parsed, ...(invitationEmail ? { invitationEmail } : {}) } as unknown as QualifiedClinicConfig;
   } catch { throw new Error('hosted-clinic-configuration-invalid'); }
 }

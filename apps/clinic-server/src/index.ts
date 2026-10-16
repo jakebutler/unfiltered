@@ -8,10 +8,13 @@ import { createSpeechAccess } from '../../../packages/clinic-api/src/speech-acce
 import { createNodeSpeechTransport } from './speech.js';
 import { nodeHttpHandler } from './http.js';
 import type { ClinicApiConfig } from '../../../packages/clinic-api/src/types.js';
+import { configuredInvitationEmail } from '../../../packages/clinic-api/src/invitation-email-config.js';
 const path = resolve(process.env.CLINIC_CONFIG_PATH ?? 'infra/local/.clinic-config.json');
 if (statSync(path).mode & 0o077)
     throw new Error('clinic-configuration-must-be-private');
 const config = JSON.parse(readFileSync(path, 'utf8')) as ClinicApiConfig;
+const invitationEmail = configuredInvitationEmail(process.env);
+if (invitationEmail) config.invitationEmail = invitationEmail;
 const runtime = runtimeProvider(config, fetch);
 const providers = configuredProviders(runtime);
 const speech = providers.speech ? createNodeSpeechTransport({ ...providers.speech, access: createSpeechAccess(config, { runtime, enabled: true, adaptiveAvailable: !!(providers.adaptiveProposer || providers.adaptiveInterpreter || providers.adaptiveGroupedExtractor) }) }) : undefined;

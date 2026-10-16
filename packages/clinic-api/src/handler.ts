@@ -10,6 +10,9 @@ import { cookies, type PatientClaims } from './cookies.js';
 import { staffAuthentication } from './auth.js';
 import { conversation, scenarioTitles } from './conversation.js';
 import { loadPriorContext } from './prior-context.js';
+import { invitations } from './invitations.js';
+import { invitationEmail } from './email.js';
+import { requirePatientScope, requireInvitationDraftScope } from './patient-fixture.js';
 import { handoffs } from './handoffs.js';
 import { runtimeProvider, type Runtime } from './runtime.js';
 import { createDraft, readDraft, saveDraft, queueOffset } from './store.js';
@@ -24,6 +27,8 @@ import { createRequestTiming, finishRequest, requestIdFrom, routeName, type Requ
 const revision = z.number().int().nonnegative();
 const schemas = {
     sessions: z.object({ scenario: z.enum(scenarioIds), syntheticAcknowledged: z.literal(true) }).strict(),
+    invitation: z.object({ patient: z.string().regex(/^Patient\/[A-Za-z0-9.-]{1,64}$/), scenario: z.enum(scenarioIds), requestId: z.string().uuid() }).strict(),
+    redeemInvitation: z.object({ token: z.string().regex(/^[a-f0-9]{64}$/), syntheticAcknowledged: z.literal(true) }).strict(),
     identity: z.object({ confirmed: z.literal(true) }).strict(),
     turns: z.object({ requestId: z.string().uuid(), expectedRevision: revision, promptId: z.string().min(1).max(300), action: z.enum(['answer', 'unknown', 'decline', 'move-on']), text: z.string().max(8000).optional(), fields: z.record(z.string().max(8000)).refine(x => Object.keys(x).length <= 8).optional(), channel: z.enum(sourceChannels).optional(), choiceConfirmation: z.object({ optionTranscript: z.string().min(1).max(8000), confirmationTranscript: z.string().max(8000), confirmationMethod: z.enum(['voice', 'control']) }).strict().optional(), choiceTranscriptOnly: z.literal(true).optional(), priorChoiceTranscript: z.string().min(1).max(8000).optional() }).strict(),
     adaptiveTurn: z.object({ requestId: z.string().uuid(), expectedRevision: revision, text: z.string().min(1).max(8000), channel: z.enum(sourceChannels) }).strict(),
@@ -98,6 +103,7 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
         throw new Error('clinic-origin-must-be-origin');
     const fetcher = options.fetcher ?? fetch, jar = cookies(config.cookieSecret, origin.startsWith('https:')), staff = staffAuthentication(config, fetcher, jar), runtime = options.runtime ?? runtimeProvider(config, fetcher), content = conversation(config, { provisionalQualification: options.provisionalQualification, finalRepresentationQualification: options.finalRepresentationQualification }), handoff = handoffs(config, { provisionalQualification: options.provisionalQualification, finalRepresentationQualification: options.finalRepresentationQualification });
     const adaptive = adaptiveSession(content, options.adaptiveProposer, { now: options.adaptiveNow, timeoutMs: options.adaptiveTimeoutMs, streamProposer: options.adaptiveStreamProposer, groupedExtractor: options.adaptiveGroupedExtractor, fullCapture: options.adaptiveFullCapture, interpreter: options.adaptiveInterpreter });
+    const invitation = invitations(config), email = invitationEmail(config.invitationEmail, fetcher);
     const view = (d: Draft, identity = true) => content.view(d, identity, adaptive.available);
     const safety = safetyReviews({ reviewer: options.safetyReviewer }), staffSafetyApi = staffSafety(reference => Object.values(config.patients).find(fixture => fixture.reference === reference)?.displayName);
     function adaptiveStore(p: { r: Runtime; claims: PatientClaims }, timing?: RequestTiming): AdaptiveDraftStore { const timed = <T>(name: string, fn: () => Promise<T>) => timing ? timing.phase(name, fn) : fn(); return { read: () => readDraft(p.r.client, p.claims.sessionId, p.claims.patient), save: (previous, next) => timed('store', () => saveDraft(p.r.client, previous, next)), safetyGate: (draft, sourceId) => timed('safety', () => safety.gate(p.r.client, draft, sourceId)) }; }
@@ -114,11 +120,11 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
         return;
     } if (++r.count > max)
         throw new ApiFailure('try-again-later', 429, true); }
-    async function claims(request: Request, confirmed = true) { const c = await jar.read(request, 'clinic_patient'); if (c.kind !== 'patient' || !Object.hasOwn(config.patients, c.scenario) || config.patients[c.scenario as ScenarioId].reference !== c.patient)
-        throw new ApiFailure('session-scope-denied', 403); if (confirmed && !c.identityConfirmed)
+    async function claims(request: Request, confirmed = true) { const c = await jar.read(request, 'clinic_patient'); if (c.kind !== 'patient')
+        throw new ApiFailure('session-scope-denied', 403); requirePatientScope(config, c); if (confirmed && !c.identityConfirmed)
         throw new ApiFailure('identity-confirmation-required', 403); return c; }
-    async function patient(request: Request, confirmed = true) { const c = await claims(request, confirmed), r = await runtime(), stored = await readDraft(r.client, c.sessionId, c.patient); if (stored.draft.scenario !== c.scenario)
-        throw new ApiFailure('session-scope-denied', 403);
+    async function patient(request: Request, confirmed = true) { const c = await claims(request, confirmed), r = await runtime(), stored = await readDraft(r.client, c.sessionId, c.patient);
+        requireInvitationDraftScope(c, stored.draft);
         for (const frozen of [stored.draft.preview, stored.draft.confirmed]) if (frozen?.confirmation.submission.representationReview) {
             requireFinalRepresentationAuthority(frozen.confirmation, options.provisionalQualification, options.finalRepresentationQualification);
             await validateRepresentationDigests(frozen.confirmation.submission, frozen.confirmation.representationAuthority);
@@ -145,6 +151,34 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
             const suppliedOrigin = request.headers.get('origin');
             if ((request.method === 'POST' && suppliedOrigin !== origin) || (suppliedOrigin && suppliedOrigin !== origin))
                 throw new ApiFailure('origin-denied', 403);
+            if (path === '/api/clinic/staff/invitations') {
+                const s = await staff.read(request);
+                if (request.method === 'GET') return reply(invitation.options(s.assignment));
+                const input = await body(request, schemas.invitation);
+                limit(`invitation:${s.assignment.membershipId}`, 20);
+                // Preserve native deployment admission even though creation uses named authority.
+                await runtime();
+                const issued = await invitation.issue(s.client, s.assignment, input);
+                let emailStatus: 'sent' | 'failed' | 'copy-only' | 'not-repeated' = issued.link ? 'copy-only' : 'not-repeated';
+                const to = config.invitationEmail?.recipients?.[input.patient];
+                if (issued.link && to && config.invitationEmail?.apiKey && config.invitationEmail.from && config.invitationEmail.allowlist?.some(allowed => allowed.toLowerCase() === to.toLowerCase())) emailStatus = await email.sendInvitationEmail({ to, link: issued.link, workflowTitle: scenarioTitles[input.scenario] });
+                return reply({ ...issued, emailStatus }, issued.link ? 201 : 200);
+            }
+            if (path === '/api/clinic/invitations/redeem' && request.method === 'POST') {
+                const input = await body(request, schemas.redeemInvitation);
+                limit('invitation-redeem', 30);
+                const r = await runtime();
+                await options.ingress?.reserve({ kind: 'session-create', attemptId: crypto.randomUUID() });
+                if (request.signal.aborted) throw new ApiFailure('request-aborted', 499);
+                const redeemed = await invitation.redeem(r.client, input.token);
+                const now = new Date().toISOString();
+                let d: Draft = { schema: 1, id: crypto.randomUUID(), invitationId: redeemed.invitationId, patient: redeemed.patient, scenario: redeemed.scenario, revision: 0, savedAt: now, createdAt: now, phase: 'conversation', turns: [], topics: {}, requests: {}, version: 1 };
+                if (config.mentalHealth === 'phq4') d.priorContext = { ...await loadPriorContext(r.client, d.patient, d.scenario), loadedAt: new Date().toISOString() };
+                d = (await createDraft(r.client, adaptive.initialize(d))).draft;
+                if (Date.parse(redeemed.expiresAt) <= Date.now()) throw new ApiFailure('invitation-invalid', 410);
+                const c: PatientClaims = { kind: 'patient', sessionId: d.id, invitationId: d.invitationId, patient: d.patient, scenario: d.scenario, identityConfirmed: false, expires: Date.now() + 30 * 86400000 };
+                return reply(view(d, false), 201, await jar.issue('clinic_patient', c));
+            }
             if (path === '/api/clinic/config' && request.method === 'GET')
                 return reply({ clinicName: 'Corvo Clinic', syntheticOnly: true, scenarios: Object.entries(scenarioTitles).map(([id, title]) => ({ id, title, description: content.register.scenarios[id as ScenarioId].patientSummary })), conversation: { mode: adaptive.available ? 'adaptive' : 'guided', explanation: adaptive.available ? 'Natural answers are saved before interpretation. Guided questions remain available; exact screening responses use guided choices.' : 'Adaptive conversation is unavailable. Guided questions record your explicit answers.' }, voice: options.speechEnabled === true ? { available: true, explanation: options.speechInput === 'upload' ? 'Hold a short recording, then review the words before sending. Questions can be read aloud by your browser. You can keep typing at any time.' : options.speechInput === 'direct' ? 'Talk through the questions hands-free, or dictate one answer and check it. Answer choices stay as buttons. You can keep typing at any time.' : 'Review recognized words before sending. You can keep typing at any time.', input: options.speechInput ?? 'stream', output: options.speechOutput ?? (options.speechInput === 'stream' || options.speechInput === undefined ? 'provider' : 'browser') } : { available: false, explanation: 'Voice is currently unavailable. Continue by typing.' } });
             if (path === '/api/clinic/sessions' && request.method === 'POST') {
@@ -154,8 +188,10 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 let d: Draft | undefined;
                 try {
                     const old = await claims(request, false);
-                    if (old.scenario === input.scenario)
+                    if (old.scenario === input.scenario) {
                         d = (await readDraft(r.client, old.sessionId, old.patient)).draft;
+                        requireInvitationDraftScope(old, d);
+                    }
                 }
                 catch (error) {
                     if (!(error instanceof ApiFailure) || !['session-required', 'session-not-found', 'session-expired'].includes(error.code))
@@ -170,7 +206,7 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                     if (request.signal.aborted) throw new ApiFailure('request-aborted', 499, false);
                     d = (await createDraft(r.client, adaptive.initialize(d))).draft;
                 }
-                const c: PatientClaims = { kind: 'patient', sessionId: d.id, patient: d.patient, scenario: d.scenario, identityConfirmed: false, expires: Date.now() + 30 * 86400000 };
+                const c: PatientClaims = { kind: 'patient', sessionId: d.id, ...(d.invitationId ? { invitationId: d.invitationId } : {}), patient: d.patient, scenario: d.scenario, identityConfirmed: false, expires: Date.now() + 30 * 86400000 };
                 return reply(view(d, false), 201, await jar.issue('clinic_patient', c));
             }
             if (path === '/api/clinic/session' && request.method === 'GET') {

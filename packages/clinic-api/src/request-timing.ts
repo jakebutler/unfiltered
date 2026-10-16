@@ -18,6 +18,7 @@ const staticRoutes = new Set([
   '/api/clinic/conversation-mode', '/api/clinic/turns', '/api/clinic/topics', '/api/clinic/safety-reviews',
   '/api/clinic/review', '/api/clinic/confirm', '/api/clinic/retry-delivery', '/api/clinic/receipt',
   '/api/staff/login', '/api/staff/logout', '/api/staff/me', '/api/staff/queue', '/api/staff/safety',
+  '/api/clinic/staff/invitations', '/api/clinic/invitations/redeem',
 ]);
 const dynamicRoutes: readonly [RegExp, string][] = [
   [/^\/api\/clinic\/adaptive-turns\/[^/]+$/, '/api/clinic/adaptive-turns/:id'],

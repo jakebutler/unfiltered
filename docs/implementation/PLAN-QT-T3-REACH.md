@@ -4,9 +4,11 @@ Parent: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Status
 [HANDOFF-CURRENT-WORK.md](HANDOFF-CURRENT-WORK.md).
 
 T3 tasks change the published questionnaire and/or the hosted surface, so each one is a
-**re-qualification event** (hub rule 11). Build and test them locally against
-`scripts/dev/local-mock-clinic.mts`. Deploy only in the next bundled re-qualification, which needs
-the owner.
+**re-qualification event** (hub rule 11). Use the provider-free in-memory harnesses
+`scripts/dev/phq4-local-smoke.mts` and `scripts/dev/invitations-local-smoke.mts` for offline
+checks. `scripts/dev/local-mock-clinic.mts` makes real DigitalOcean calls and remains an
+owner-authorized provider exercise only. Deploy only in the next bundled re-qualification,
+which needs the owner.
 
 ---
 
@@ -302,3 +304,52 @@ The research invitation capability token, `convex/invitations.ts:12-35`:
 
 - Create a Resend account/API key, or decide to ship copy-link only.
 - Approve the AccessPolicy change for invitation Tasks at re-qualification.
+
+### T3.10 implementation and owner setup
+
+The local implementation uses native conditional creation under the named staff identity.
+A second identifier, `urn:corvo:clinic:invitation-token|<sha256>`, supports bounded hash-only
+lookup; the request identifier is `urn:corvo:clinic:invitation|<requestId>`. A lost create response
+can recover only a receipt. A lost consumption response cannot issue a cookie or retry the
+write. Each native request has a three-second deadline; email has a five-second deadline and
+no retry. Policy denials fail closed without switching creation to the service credential.
+
+`/join` clears the entire fragment and query from history before React effects or redemption.
+The patient must acknowledge the synthetic demo before redemption, then confirm the displayed
+fictional identity before answering. A signed invitation marker must match the stored draft;
+that explicit scope permits an assigned configured patient to use another workflow. Legacy
+cookies keep their original scenario/patient binding. Ambiguous configured-patient mappings
+are refused. Conversation, speech and handoff projections resolve the actual invited patient.
+
+Vercel and the local clinic API accept these **server-only** environment variables:
+
+- `RESEND_API_KEY`: the owner's Resend secret; never use a public/browser prefix.
+- `RESEND_FROM`: a verified plain sender address, such as `demo@example.invalid` in fixtures.
+- `CLINIC_INVITATION_ALLOWLIST_JSON`: a JSON array of explicitly approved synthetic recipient
+  addresses. The default is an empty array, which makes no Resend call.
+- `CLINIC_INVITATION_RECIPIENTS_JSON`: a JSON object mapping configured `Patient/<id>` references
+  to synthetic recipient addresses. Staff requests cannot choose a destination address.
+
+Missing configuration leaves a valid first-issue link available for copying. Email failure
+leaves that link available; replay returns no link and sends no second email. The email has
+generic synthetic-demo wording without the workflow title or clinical content. AWS's existing
+provider-off profile ignores Resend variables and remains copy-link only.
+
+Owner steps remain: choose copy-link only or configure a Resend account, verified sender and
+explicit synthetic recipients; review native Task search/create/update permissions and any
+necessary AccessPolicy changes during the bundled re-qualification. No policy/admin changes,
+live email, provider call, deployment or qualification renewal are part of these offline edits.
+
+For a disposable local browser backend, run
+`npx tsx scripts/dev/invitations-local-smoke.mts --serve-local`, then `npm run clinic:dev`.
+The harness uses only synthetic mock authentication and in-memory FHIR. Its deliberately
+different pre-visit default patient checks that invitation identity and workflow stay bound.
+The separate `--local` API smoke prints only safe outcome flags, never invitation tokens.
+
+The actual offline browser walk passed through StaffApp workflow selection, immediate fragment
+removal, synthetic acknowledgment before redemption, the exact invited patient and pre-visit
+workflow, and identity confirmation before answering. A second redemption returned 410.
+Screenshots and the safe outcome log are under
+`/workspace/scratch/unfiltered-validation/invitations-browser*`; they retain no invitation
+capability. Both local servers were stopped afterward. Fresh review is clear; the task's full
+six-command gate remains pending before the hub can mark T3.10 done.
