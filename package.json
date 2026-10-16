@@ -25,6 +25,7 @@
     "clinic:dev": "vite apps/clinic --config apps/clinic/vite.config.ts --host 127.0.0.1",
     "clinic:build": "vite build apps/clinic --config apps/clinic/vite.config.ts",
     "clinic:typecheck": "tsc -p tsconfig.clinic.json",
+    "hosting:typecheck": "tsc -p tsconfig.hosting.json --noEmit && tsc -p tsconfig.research-hosting.json --noEmit",
     "clinic:api": "npm run foundation:build --silent && node .qualification-build/apps/clinic-server/src/index.js",
     "research:dev": "vite apps/research --config apps/research/vite.config.ts --host 127.0.0.1",
     "research:build": "vite build apps/research --config apps/research/vite.config.ts",

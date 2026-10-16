@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/infra/cloud/vercel/research/node_modules/
 /.pnp
 .pnp.*
 .yarn/*

@@ -1,4 +1,5 @@
-import { z } from 'zod';
+// Nested hosting dependencies can resolve Zod 4; retain v3's parsing of nested defaults.
+import { z } from 'zod/v3';
 import { HOSTED_DEPLOYMENT, HOSTED_CONVEX_SITE, parseHostedConfig } from '../../../../apps/research-server/src/hosted-runtime';
 import { parseAnalysisConfig } from '../../../../apps/research-server/src/analysis-config';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
