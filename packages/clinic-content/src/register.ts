@@ -1,23 +1,31 @@
 import type { ContentContract } from '../../clinical-core/src/domain.js';
-import { documentProvenance, topicText } from './content.js';
-import { conditionBranches } from './branches.js';
-import { scenarios } from './scenarios.js';
-import { coreSlots, mentalHealthSlots } from './slots.js';
-import { ContentConfigurationError, type EvidenceContext, type MentalHealthChoice, type TopicDefinition, type TopicResponse } from './types.js';
+import type { documentProvenance } from './content.js';
+import type { conditionBranches } from './branches.js';
+import type { scenarios } from './scenarios.js';
+import { coreSlots } from './slots.js';
+import type { EvidenceContext, MentalHealthChoice, TopicDefinition, TopicResponse } from './types.js';
 import { evaluateTopic } from './readiness.js';
+import { compilePack } from './pack-compile.js';
+import { adultIntakePack } from './packs/adult-intake.js';
 
 import { approvedMentalHealthSelection, mentalHealthOptions, promptsById, stopSemantics } from './content-constants.js';
 export { approvedMentalHealthSelection, mentalHealthOptions, promptsById, stopSemantics, type RuntimePrompt } from './content-constants.js';
 
+/** Explicit legacy shape prevents a recursive ReturnType across register and compiler. */
+interface ClinicContentDefinition {
+  readonly provenance: typeof documentProvenance;
+  readonly mentalHealth: MentalHealthChoice;
+  readonly mentalHealthOption: typeof mentalHealthOptions[MentalHealthChoice];
+  readonly topics: readonly TopicDefinition[];
+  readonly promptsById: typeof promptsById;
+  readonly branches: typeof conditionBranches;
+  readonly scenarios: typeof scenarios;
+  readonly stopSemantics: typeof stopSemantics;
+}
+
 /** The default follows the recorded targeted choice; explicit pending remains a truthful partial workflow. */
-export function createClinicContent(configuration: { mentalHealth: MentalHealthChoice } = approvedMentalHealthSelection) {
-  if (!configuration || !['phq4','unscored','pending'].includes(configuration.mentalHealth)) throw new ContentConfigurationError('mental-health-selection-required');
-  const choice = configuration.mentalHealth;
-  const topics: readonly TopicDefinition[] = topicText.map(text => ({
-    ...text, slots: text.id === 'Q16' ? [...coreSlots.Q16.slice(0,3), ...(choice === 'pending' ? [{ id:'mentalHealth.configuration',label:'Current depression/anxiety check selection is pending',kind:'configuration' as const,promptIds:[] }] : mentalHealthSlots[choice]), ...coreSlots.Q16.slice(3)] : coreSlots[text.id],
-    stopWhen:stopSemantics.reasons, visibility:'assigned-clinical-full' as const,
-  }));
-  return { provenance:documentProvenance, mentalHealth:choice, mentalHealthOption:mentalHealthOptions[choice], topics, promptsById, branches:conditionBranches, scenarios, stopSemantics } as const;
+export function createClinicContent(configuration: { mentalHealth: MentalHealthChoice } = approvedMentalHealthSelection): ClinicContentDefinition {
+  return compilePack(adultIntakePack, configuration);
 }
 export type ClinicContent = ReturnType<typeof createClinicContent>;
 

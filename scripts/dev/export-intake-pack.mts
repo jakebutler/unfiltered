@@ -5,9 +5,21 @@ import { documentProvenance, promptText, supplementalPromptText, topicText } fro
 import { conditionBranches } from '../../packages/clinic-content/src/branches.js';
 import { scenarios } from '../../packages/clinic-content/src/scenarios.js';
 import { coreSlots, mentalHealthSlots } from '../../packages/clinic-content/src/slots.js';
-import { mentalHealthOptions, stopSemantics } from '../../packages/clinic-content/src/content-constants.js';
+import { approvedMentalHealthSelection, mentalHealthOptions, promptsById, stopSemantics } from '../../packages/clinic-content/src/content-constants.js';
 import { PACK_SCHEMA_VERSION, questionnairePackSchema, type PackItem, type QuestionnairePack } from '../../packages/clinic-content/src/pack.js';
-import type { SlotDefinition, TopicDefinition } from '../../packages/clinic-content/src/types.js';
+import { ContentConfigurationError, type MentalHealthChoice, type SlotDefinition, type TopicDefinition } from '../../packages/clinic-content/src/types.js';
+import type { ClinicContent } from '../../packages/clinic-content/src/register.js';
+
+/** Frozen legacy assembly oracle: read authoring modules, never compile the generated pack. */
+export function createAuthoredClinicContent(configuration: { mentalHealth: MentalHealthChoice } = approvedMentalHealthSelection) {
+  if (!configuration || !['phq4','unscored','pending'].includes(configuration.mentalHealth)) throw new ContentConfigurationError('mental-health-selection-required');
+  const choice = configuration.mentalHealth;
+  const topics: readonly TopicDefinition[] = topicText.map(text => ({
+    ...text, slots: text.id === 'Q16' ? [...coreSlots.Q16.slice(0,3), ...(choice === 'pending' ? [{ id:'mentalHealth.configuration',label:'Current depression/anxiety check selection is pending',kind:'configuration' as const,promptIds:[] }] : mentalHealthSlots[choice]), ...coreSlots.Q16.slice(3)] : coreSlots[text.id],
+    stopWhen:stopSemantics.reasons, visibility:'assigned-clinical-full' as const,
+  }));
+  return { provenance:documentProvenance, mentalHealth:choice, mentalHealthOption:mentalHealthOptions[choice], topics, promptsById, branches:conditionBranches, scenarios, stopSemantics } as const satisfies ClinicContent;
+}
 
 /** Preserve explicit false and optional:false separately from absent properties. */
 export function slotToPackItem(slot: SlotDefinition): PackItem {

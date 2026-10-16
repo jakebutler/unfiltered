@@ -6,20 +6,22 @@ import { compilePack, compilePackItem } from '../src/pack-compile.js';
 import { adultIntakePack } from '../src/packs/adult-intake.js';
 import { questionnairePackSchema } from '../src/pack.js';
 import { createClinicContent } from '../src/register.js';
-import { buildAdultIntakePack, exportAdultIntakePack, serializeAdultIntakePack, slotToPackItem } from '../../../scripts/dev/export-intake-pack.mts';
+import { buildAdultIntakePack, createAuthoredClinicContent, exportAdultIntakePack, serializeAdultIntakePack, slotToPackItem } from '../../../scripts/dev/export-intake-pack.mts';
 import type { SlotDefinition } from '../src/types.js';
 
 const jsonPath = new URL('../packs/adult-intake.pack.json', import.meta.url);
 const tsPath = new URL('../src/packs/adult-intake.ts', import.meta.url);
 
-describe('adult intake pack parity before runtime switchover', () => {
+describe('adult intake pack parity with independent authoring oracle', () => {
   it.each(['phq4', 'unscored', 'pending'] as const)('reconstructs every runtime field for %s', mentalHealth => {
-    expect(compilePack(questionnairePackSchema.parse(adultIntakePack), { mentalHealth })).toStrictEqual(createClinicContent({ mentalHealth }));
+    const authored = createAuthoredClinicContent({ mentalHealth });
+    expect(compilePack(questionnairePackSchema.parse(adultIntakePack), { mentalHealth })).toStrictEqual(authored);
+    expect(createClinicContent({ mentalHealth })).toStrictEqual(authored);
   });
 
   it('retains the published native digest when the publisher consumes compiled content', async () => {
     const compiled = compilePack(questionnairePackSchema.parse(adultIntakePack), { mentalHealth: 'phq4' });
-    expect(compiled).toStrictEqual(createClinicContent({ mentalHealth: 'phq4' }));
+    expect(compiled).toStrictEqual(createAuthoredClinicContent({ mentalHealth: 'phq4' }));
     const factory = vi.fn(() => compiled);
     vi.resetModules();
     vi.doMock('../src/register.js', async () => ({
@@ -88,7 +90,7 @@ describe('adult intake pack parity before runtime switchover', () => {
     delete pack.mentalHealth.slots.phq4;
     const parsed = questionnairePackSchema.parse(pack);
     for (const mentalHealth of ['phq4', 'unscored', 'pending'] as const) {
-      expect(compilePack(parsed, { mentalHealth })).toStrictEqual(createClinicContent({ mentalHealth }));
+      expect(compilePack(parsed, { mentalHealth })).toStrictEqual(createAuthoredClinicContent({ mentalHealth }));
     }
   });
 

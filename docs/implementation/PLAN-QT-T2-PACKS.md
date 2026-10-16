@@ -149,9 +149,14 @@ export function compilePack(pack: QuestionnairePack, configuration: { mentalHeal
 - It must return **exactly** what `createClinicContent(configuration)` returns today: the same
   keys, the same `as const` shapes and the same array order. Each step is the inverse of the
   exporter.
-- `ClinicContent` is `ReturnType<typeof createClinicContent>`. Keep that type and have
-  `compilePack` return it. Retype `createClinicContent` as a thin wrapper only after parity is
-  green (see below).
+- `ClinicContent` remains `ReturnType<typeof createClinicContent>` and `compilePack` returns
+  that type. At switchover, annotate `createClinicContent` with the explicit legacy
+  `ClinicContentDefinition` shape to break recursive return-type inference across the wrapper
+  and compiler. That shape retains the existing readonly fields and authoring constant types.
+- The compiler validates input, preserves optional property presence and array order, and
+  accepts PHQ items either in the `mentalHealth.slots.phq4` variant or directly under Q16.
+  Direct PHQ declarations require the canonical locked order. Selecting another mode replaces
+  direct PHQ slots; merged duplicate IDs or references to removed slots fail closed.
 
 ### `scripts/dev/export-intake-pack.mts`
 
@@ -170,10 +175,15 @@ writes the `.json` and also this `.ts` mirror. A test asserts the two are identi
 
 ### Parity test (`packages/clinic-content/test/pack-parity.test.ts`)
 
-1. For each `mentalHealth` in `['phq4', 'unscored', 'pending']`:
-   `expect(compilePack(questionnairePackSchema.parse(adultIntakePack), { mentalHealth })).toEqual(createClinicContent({ mentalHealth }))`.
+1. For each `mentalHealth` in `['phq4', 'unscored', 'pending']`, both
+   `compilePack(questionnairePackSchema.parse(adultIntakePack), { mentalHealth })` and
+   `createClinicContent({ mentalHealth })` strictly equal `createAuthoredClinicContent({ mentalHealth })`.
+   The independent oracle retains the former assembly in `scripts/dev/export-intake-pack.mts`
+   and imports authoring modules directly; it never calls the wrapper or compiler.
 2. The native digest of the compiled content equals the pinned digest
-   (`45ece585…60a8f`). Call the same function the pin test uses.
+   (`45ece585…60a8f`). A test-only mock supplies compiled content to the unchanged native
+   publisher's register factory, then calls `getNativeQuestionnaireDefinition` and verifies
+   the factory was used. Existing native digest/count tests remain unedited.
 3. Running the exporter in-process, converting its output to JSON and comparing it with the
    committed `.json` gives equality. This drift guard fails if someone edits `content.ts` without
    re-exporting.
@@ -181,7 +191,10 @@ writes the `.json` and also this `.ts` mirror. A test asserts the two are identi
 ### Switch over (separate commit, after parity is green)
 
 - `register.ts`'s `createClinicContent` becomes `return compilePack(adultIntakePack, configuration)`,
-  and the old assembly code moves into the exporter.
+  and the old assembly code moves into the exporter's independent
+  `createAuthoredClinicContent` function. Runtime code does not import the `.mts` exporter.
+- Pure shared constants live in `packages/clinic-content/src/content-constants.ts` and remain
+  re-exported by `register.ts`; schema/compiler imports avoid a runtime cycle through the wrapper.
 - `content.ts` / `slots.ts` / `branches.ts` / `scenarios.ts` stay as the **authoring source**
   for adult-intake until the owner decides to make the JSON canonical. Note that decision in the
   hub as an owner decision. Do not delete them.
