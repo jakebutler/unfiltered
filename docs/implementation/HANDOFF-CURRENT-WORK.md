@@ -131,7 +131,7 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 | T1.2 | Declarative workflow behaviour fields | T1.1 | not started |
 | T1.3 | PHQ-4 coding only for the locked block | — | done `a811bd4`: strict topic/item scope and numeric decoding verified; fractional option sets explicitly use FHIR decimals; all six gates pass, golden/digest/count pins unchanged. |
 | T1.4a | Guided walk tests W02–W07 | — | done `7e46cde`: review details, confirmed owners and complete billing/scheduling logistics asserted; all six gates pass on Node 22. Four documented D-m expected failures remain. |
-| T1.4b | Voice-mode tests, non-intake workflows | — | WIP in `0fd34e3`, unverified. Files: `packages/clinic-api/test/workflow-voice.test.ts`, `apps/clinic/test/workflow-choice-voice.test.ts` |
+| T1.4b | Voice-mode tests, non-intake workflows | — | done `46a1a3b`: provenance/unreviewed/PHQ coverage verified; all six gates pass with ten documented expected failures awaiting D-j. |
 | T2.5 | Pack zod schema | T1.2 | not started |
 | T2.6 | Pack compiler + exporter + parity test | T2.5 | not started |
 | T2.7 | FHIR Questionnaire export for new packs | T2.6 | not started |
@@ -156,6 +156,9 @@ overview file.
 | T1.4a | same | Post-visit with no context: `W04.followup.1` fails the same way (`native-questionnaire.ts:930`). Fix: D-m. | — |
 | T1.4a | same | Pre-visit with context: the W02 `logistics` slot lists `S01a` first, which throws `context-fallback-inactive` (`scenarios.ts:26`, guard `native-questionnaire.ts:1065`). Fix: D-m. | — |
 | T1.4a | same | Pre-visit with context: `W02.followup.1` shows unfilled `[previously reported item]` / `[date]` to the patient (`content.ts:958`). Fix: T3.9 (D-m may hide the prompt in the meantime). | — |
+
+| T1.4b | `packages/clinic-api/test/workflow-voice.test.ts` | Billing and scheduling accept a confirmed-transcript choice without explicit choice confirmation (two expected failures). Fix: D-j. | — |
+| T1.4b / independent review | same | Q16 MH01–MH04 accept speech with a valid voice or control confirmation payload despite buttons-only D4 (eight expected failures). Fix: D-j; retain exact PHQ wording and direct button scoring. | — |
 
 Additional defects found by the bounded D-d static review (regression tests still needed):
 
@@ -446,3 +449,12 @@ this task does not relabel or trust the entire raw turn. Approximation belongs o
 estimate-accepting slot; timing quantities, unit disagreement, precision loss and sign changes
 cannot become an exact measurement. No medication strength/dose normalization, PHQ scoring
 from speech, questionnaire digest change or provider call was introduced.
+
+T1.4b `46a1a3b` passed fresh GPT-6.1 Sol xhigh review after adding explicit
+PHQ confirmation-bypass coverage. All six checks pass under the spec's recorded-bug
+allowance: foundation **133 / 2066**, clinic **16 / 316**, hosting **1 / 29**, all three
+typechecks. Logs: `/workspace/scratch/unfiltered-validation/t14b-{0..6}.log`. The focused
+API file has 51 tests including ten expected failures (two missing non-PHQ confirmations,
+eight PHQ voice/control bypasses); browser workflow voice coverage has 28 tests. Existing
+assertions remain unchanged; no runtime change is in this task. D-j owns these now-explicit
+clinical/input defects and must turn the expected failures into ordinary passing tests.
