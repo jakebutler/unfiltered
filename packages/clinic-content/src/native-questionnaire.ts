@@ -12,6 +12,7 @@ import { lookupReference, referenceRelease } from "../../clinic-reference/src/in
 const specificityContract = { ...specificityDefinition, reference: referenceRelease };
 import { scenarios, scenarioForWorkflowTopic } from "./scenarios.js";
 import { conditionBranches } from "./branches.js";
+import { branchRules } from "./pack-rules.js";
 import {
   guidedFieldForPath,
   nextGuidedField,
@@ -36,6 +37,8 @@ export const NATIVE_QUESTIONNAIRE_VERSION = "CC-0.2.phq4.native-5";
 /** Extraction-only interpretation hints are server policy, not questionnaire structure. */
 const definitionSlot = ({ extractionNegativeScope: _hint, ...slot }: SlotDefinition): SlotDefinition =>
   ({ ...slot, ...(slot.fields ? { fields: slot.fields.map(definitionSlot) } : {}) });
+/** Dialogue metadata is not part of the published native Questionnaire contract. */
+const definitionTopic = ({ corvo: _dialogue, ...topic }: TopicDefinition) => topic;
 export const NATIVE_EXTENSION =
   "https://corvo.example/fhir/StructureDefinition/";
 export type NativeOutcome = "applicable" | "not-applicable" | "unknown";
@@ -1114,16 +1117,24 @@ export function nativeScenarioTopics(
     context: context.context,
   };
   const evidence = context.evidence ?? { validSourceIds: new Set<string>() };
-  for (const rule of nativeRoutingRules(all).filter(
-    (r) => r.kind === "topic" && ["DM", "SLEEP", "GI"].includes(r.target),
-  )) {
+  const routingRules = nativeRoutingRules(all);
+  for (const branch of Object.values(register.branches)) {
+    if (!("rule" in branch)) continue;
+    const rule = routingRules.find((rule) => rule.kind === "topic" && rule.target === branch.topic.id);
+    if (!rule) continue;
     const eligible = rule.anchors.some((anchor) =>
       topics.some((t) => anchor.startsWith(`${t.id}.`)),
     );
     const decision = evaluateNativeRule(rule, snapshot, evidence);
+    const namedApplicable = branchRules[branch.rule.id](
+      context.responses?.Q06?.answers ?? {}, evidence,
+      "slot" in branch.rule ? branch.rule.slot : undefined,
+    );
+    // The native adapter additionally preserves source-qualified context, reviewed facts,
+    // and unknown outcomes. Named rules alone do not replace these published semantics.
     if (
       eligible &&
-      (decision.outcome === "applicable" ||
+      (namedApplicable || decision.outcome === "applicable" ||
         (context.includeUnresolvedBranches && decision.outcome === "unknown"))
     )
       topics.push(all.find((t) => t.id === rule.target)!);
@@ -1422,7 +1433,7 @@ function compile(
         extension: [
           {
             url: `${NATIVE_EXTENSION}topic-definition`,
-            valueString: nativeCanonicalJson({ ...topic, slots: undefined }),
+            valueString: nativeCanonicalJson({ ...definitionTopic(topic), slots: undefined }),
           },
         ],
         item: [
@@ -1496,7 +1507,8 @@ export function getNativeQuestionnaireDefinition(): Promise<NativeQuestionnaireD
     const payload = {
       canonical: NATIVE_QUESTIONNAIRE_CANONICAL,
       version: NATIVE_QUESTIONNAIRE_VERSION,
-      topics: topics.map((topic) => ({ ...topic, slots: topic.slots.map(definitionSlot) })),
+      // Scoped dialogue copy has never been part of the published native definition.
+      topics: topics.map(topic => ({ ...definitionTopic(topic), slots: topic.slots.map(definitionSlot) })),
       promptTargets,
       routingRules,
       aliases: nativeAliases,

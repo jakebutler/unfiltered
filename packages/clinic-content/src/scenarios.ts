@@ -1,10 +1,20 @@
 import type { EvidenceContext, ScenarioId, SlotDefinition, TopicDefinition, TopicId, TopicResponse } from './types.js';
-import { conditionBranches, diabetesBranchApplicability } from './branches.js';
-import { hasValidEvidence } from './readiness.js';
+import type { ConditionBranch } from './branches.js';
+import { branchRules } from './pack-rules.js';
+
+/** Existing workflow-specific dialogue wording, retained verbatim. */
+const scopedWorkflowQuestions: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  W02: { appointmentContext: 'What appointment details should staff check?', priority: 'What matters most to you for this visit?', logistics: 'Is there anything practical you need help with before the visit?' },
+  W03: { update: 'What update or concern would you like to share?', timing: 'About when did this start or change?', effect: 'How is it affecting you?', help: 'What would you like the care team to help with?' },
+  W04: { planContext: 'What plan or plan detail would you like the care team to check?', difficulty: 'Has anything changed or been difficult since the visit?', question: 'What question would you like the care team to review?', help: 'What support would you like from the care team?' },
+  W05: { issueType: 'Is your question about a bill, coverage, payment, or something else?', serviceDate: 'What was the service date, if you know it?', requestedResolution: 'Would you like an explanation, a possible error reviewed, payment options, or staff to contact you?', reference: 'Do you have a bill or service reference you can share?', help: 'What would you like billing staff to help with?' },
+  W06: { intent: 'Would you like to request, change, or cancel a visit?', visitCategory: 'Is this for a first visit or a follow-up, or are you unsure?', preferredDay: 'Which day would you prefer?', preferredWindow: 'What time of day works best for you?', requestedDate: 'Is there a particular date you would like to request?', visit: 'Which visit are you asking about, if you know?', timing: 'What dates or times would work for you?', timezone: 'What time zone should staff use?', constraints: 'Are there any timing or accessibility needs staff should consider?', help: 'What would you like scheduling staff to do next?' },
+  W07: { medicine: 'Which medicine is the refill request for?', directions: 'What directions are written on the medicine label? Please do not guess if you are unsure.', actualUse: 'How do you actually take or use the medicine?', remaining: 'How much of the medicine do you have left?', pharmacy: 'Which pharmacy would you like to use?', symptomsChanges: 'Have you noticed any symptoms or changes in how you use the medicine?', help: 'What would you like your medical care team to help with?' },
+};
 
 const f = (id: string, label: string, promptIds: string[], acceptsNegative = false): SlotDefinition => ({ id, label, kind: 'text', promptIds, acceptsNegative });
 const choice = (id:string,label:string,promptIds:string[],choices:readonly string[]):SlotDefinition => ({id,label,kind:'choice',promptIds,choices});
-const topic = (id: string, openingPromptId: string, slots: SlotDefinition[]): TopicDefinition => ({ id, openingPromptId, slots, presentation: 'R', minimumDetailText: slots.map(s=>s.label).join('; '), visibility: 'assigned-clinical-full', stopWhen: ['target-met','does-not-know','patient-declines','patient-moves-on','resistance-after-purpose','safety-interruption'] });
+const topic = (id: string, openingPromptId: string, slots: SlotDefinition[]): TopicDefinition => ({ id, openingPromptId, slots, presentation: 'R', minimumDetailText: slots.map(s=>s.label).join('; '), visibility: 'assigned-clinical-full', stopWhen: ['target-met','does-not-know','patient-declines','patient-moves-on','resistance-after-purpose','safety-interruption'], corvo: { scopedQuestions: scopedWorkflowQuestions[id] } });
 export interface ScenarioTemplate {
   readonly id: ScenarioId;
   readonly workflowId: string;
@@ -50,7 +60,7 @@ export function scenarioOpeningPrompt(id: ScenarioId, hasVerifiedContext: boolea
 }
 
 /** Short workflows add reused topics only after an explicit relevance decision; no full intake rerun. */
-export function scenarioTopics(register: {readonly topics: readonly TopicDefinition[]}, id: ScenarioId, context: {
+export function scenarioTopics(register: {readonly topics: readonly TopicDefinition[]; readonly branches: Readonly<Record<string, ConditionBranch>>}, id: ScenarioId, context: {
   readonly relevantTopicIds?: readonly TopicId[];
   readonly responses?: Readonly<Record<string,TopicResponse | undefined>>;
   readonly evidence?: EvidenceContext;
@@ -61,10 +71,10 @@ export function scenarioTopics(register: {readonly topics: readonly TopicDefinit
   const topics = [...scenario.additionalTopics,...register.topics.filter(topic=>selected.includes(topic.id as TopicId))];
   const answers = context.responses?.Q06?.answers;
   if (answers && context.evidence && topics.some(topic=>topic.id === 'Q06')) {
-    if (diabetesBranchApplicability(answers,context.evidence) === 'applicable') topics.push(conditionBranches.diabetes.topic);
-    const positive = (id:string) => { const answer=answers[id]; return answer?.state === 'known' && answer.value === true && hasValidEvidence(answer,context.evidence!); };
-    if (positive('conditions.sleepApnea')) topics.push(conditionBranches.sleepApnea.topic);
-    if (positive('conditions.digestive')) topics.push(conditionBranches.digestive.topic);
+    // Authoring order is diabetes, (unruled otherCondition), sleepApnea, digestive.
+    for (const branch of Object.values(register.branches)) {
+      if (branch.rule && branchRules[branch.rule.id](answers, context.evidence, branch.rule.slot)) topics.push(branch.topic);
+    }
   }
   return topics;
 }

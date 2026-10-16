@@ -36,6 +36,8 @@ export interface TopicDefinition {
   readonly minimumDetailText: string;
   readonly stopWhen: readonly StopReason[];
   readonly visibility: 'assigned-clinical-full';
+  /** Authored dialogue copy; operational metadata, outside the native Questionnaire definition. */
+  readonly corvo?: { readonly scopedQuestions?: Readonly<Record<string, string>> };
 }
 export interface TopicResponse {
   readonly presented: boolean;

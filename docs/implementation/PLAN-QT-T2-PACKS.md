@@ -52,10 +52,13 @@ const item: z.ZodType<PackItem> = z.lazy(() => z.object({
 const topic = z.object({
   linkId: z.string(), openingPromptId: z.string(), presentation: z.enum(['R', 'R-value', 'O', 'C']),
   minimumDetailText: z.string(), stopWhen: z.array(z.enum([...stop reasons])), item: z.array(item),
-  corvo: z.object({ wordingVersion: z.number().int().optional(), wordingStatus, purpose: z.string().optional(), branchAndClarification: z.string().optional(), workAccountability: z.string().optional() }).passthrough(),
+  corvo: z.object({ wordingVersion: z.number().int().optional(), wordingStatus, purpose: z.string().optional(), branchAndClarification: z.string().optional(), workAccountability: z.string().optional(), scopedQuestions: z.record(z.string()).optional() }).strict(),
 }).strict();
 
-const prompt = z.object({ id: z.string(), text: z.string(), origin: z.string(), wordingStatus }).strict();
+// Preserve the existing PHQ-4 stem/item status without changing source content.
+// accepted-targeted-choice is accepted only on the exact retained locked prompts.
+const promptStatus = z.enum([...wordingStatus.options, 'accepted-targeted-choice']);
+const prompt = z.object({ id: z.string(), text: z.string(), origin: z.string(), wordingStatus: promptStatus }).strict();
 
 const lockedInstrument = z.object({
   id: z.literal('phq4'), topicLinkId: z.string(), itemLinkIds: z.array(z.string()),
@@ -64,7 +67,7 @@ const lockedInstrument = z.object({
 
 /** Branch applicability is a NAMED rule from a closed registry, never inline code. */
 export const branchRuleIds = ['diabetes-explicit-status', 'slot-positive'] as const;
-const branch = z.object({ id: z.string(), topic, trigger: z.string(), rule: z.object({ id: z.enum(branchRuleIds), slot: z.string().optional() }).strict(), /* copy remaining conditionBranches metadata fields */ }).passthrough();
+const branch = z.object({ id: z.string(), topic, trigger: z.string(), rule: /* optional strict discriminated union; slot-positive requires slot */ branchRule.optional(), /* exact remaining conditionBranches metadata fields */ }).strict();
 
 const workflow = z.object({ /* exact ScenarioTemplate fields incl. behaviour (T1.2) */ }).strict();
 
@@ -74,7 +77,10 @@ export const questionnairePackSchema = z.object({
   provenance: z.record(z.unknown()),              // documentProvenance verbatim
   prompts: z.array(prompt), topics: z.array(topic), branches: z.array(branch),
   workflows: z.array(workflow), lockedInstruments: z.array(lockedInstrument),
-  mentalHealth: z.object({ /* mentalHealthOptions + mentalHealthSlots per choice */ }),
+  mentalHealth: z.object({
+    options: z.object({ /* optional pending/phq4/unscored mentalHealthOptions entries, verbatim */ }).strict(),
+    slots: z.object({ /* optional phq4/unscored arrays of pack items, from mentalHealthSlots */ }).strict(),
+  }).strict(),
 }).strict().superRefine(crossReferenceChecks);
 export type QuestionnairePack = z.infer<typeof questionnairePackSchema>;
 ```
@@ -90,6 +96,12 @@ export type QuestionnairePack = z.infer<typeof questionnairePackSchema>;
   fails.** The PHQ-4 stem, items and choices are compared against `mental-health.ts` and
   `mentalHealthOptions.phq4` constants.
 
+The variant slots are logically children of Q16. Validate each variant together with the base
+Q16 item list so compilation cannot introduce duplicate sibling ids. The strict schemas retain
+all current authoring metadata, including optional branch facts/slots and T1.2 workflow behaviour.
+The existing source's `accepted-targeted-choice` PHQ prompt status must survive export/compile
+verbatim; the four-status sketch above was incomplete. It does not authorize new wording.
+
 Named-rule registry in `packages/clinic-content/src/pack-rules.ts`:
 
 ```ts
@@ -100,7 +112,9 @@ export const branchRules = {
 ```
 
 `scenarioTopics` (`scenarios.ts:44`) and `nativeScenarioTopics` (`native-questionnaire.ts:~1090`)
-are refactored to iterate `register.branches` and use `branchRules[rule.id]`. Today they
+are refactored to iterate `register.branches` and use `branchRules[rule.id]`. The native adapter
+also retains its existing source-qualified context, reviewed-fact and tri-state decisions;
+the simpler boolean rules must not discard those published behaviours. Today they
 hard-code diabetes, sleepApnea and digestive in a fixed order. Keep the push order identical:
 diabetes, sleepApnea, digestive. `otherCondition` has no automatic rule today; give it no `rule`
 (`rule` is optional), so it is never auto-pushed.
@@ -109,9 +123,11 @@ diabetes, sleepApnea, digestive. `otherCondition` has no automatic rule today; g
 - W07 medication label/actual role checks (`adaptive-validation.ts:478-484`);
 - the refill `help` projection (`:829-843`);
 - the billing phrase synonyms (`:548`);
-- per-workflow scoped question copy (`dialogue.ts:72-77`). This one is moved: add
+- per-workflow scoped question copy (`packages/clinic-api/src/dialogue.ts`). This one is moved: add
   `corvo.scopedQuestions: Record<slotId, string>` on the workflow topic and have `dialogue.ts`
-  read it. The parity test covers it.
+  read it. The parity test covers it. This dialogue-only metadata is excluded from both native
+  topic serialization sites (definition payload and FHIR topic extension), preserving the
+  published native definition and digest.
 
 Tests (`packages/clinic-content/test/pack.test.ts`):
 1. A minimal valid pack parses.
