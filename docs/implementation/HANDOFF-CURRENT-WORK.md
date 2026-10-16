@@ -17,11 +17,11 @@ Last updated: 2026-10-16 (Codex cloud continuation; current verifying commits an
 
 | Item | Value |
 |---|---|
-| Cloud continuation checkout | `/workspace/unfiltered`; fetched requested branch at `45b1cc3`; `npm ci` completed |
+| Cloud continuation checkout | `/workspace/unfiltered`; this continuation started from remote `e8dc812`; both locked dependency installs completed |
 | Owner worktree (local work happens here) | `/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered` |
 | Branch | `codex/unfiltered-foundation` (pushed to `origin`, which is public on GitHub) |
 | Open PRs (linked to the t3-code thread) | #7, #8 |
-| WIP snapshot | `0fd34e3` holds the **unverified** code from stopped agents (D-b/D-c, D-d, D-f, T1.3, T1.4a, T1.4b). Nothing in it has passed the six-command gate. A task becomes `done` only with a later verifying commit. |
+| WIP snapshot | `0fd34e3` holds the starting snapshot from stopped agents (D-b/D-c, D-d, D-f, T1.3, T1.4a, T1.4b), **unverified when captured**. Later verifying commits and their gates are recorded below; the snapshot was preserved. |
 | Cloud agents | A Codex cloud agent works on a fresh clone of this branch. Local-only items do not exist there: the primary checkout, `.env.local`, `docs/implementation/evidence/`, `infra/cloud/.private/`, Medplum/Vercel credentials, t3-code preview tools. Skip anything that needs them and mark it `blocked: needs local/owner`. |
 | Primary checkout (do **not** work here) | `/Volumes/rexy/GitHub/unfiltered`, branch `codex/rebuild-discovery`. Its `.env.local` holds credentials. |
 | Shell note | The tool shell resets cwd to the primary checkout after every command. Always `cd <worktree> && …`. |
@@ -650,3 +650,29 @@ Review fixes cover context load-completion timestamps and live Location mutation
 query rejection. No live email/provider call, deployment, policy/admin or qualification
 change was made. Owner must authorize/verify invitation Task permissions and decide
 copy-only versus Resend account/from/allowlist/recipient configuration before live use.
+
+## Closing cloud audit (2026-10-16)
+
+All requested locally implementable tasks are verified and pushed; T3.8 remains a
+reviewed/tested standalone proposal with protected runtime registration blocked. Track 3
+async-platform implementation was not started, and the existing Phase 5 plan was not
+recreated. No deployment, live provider/email call, Medplum write, policy/admin or
+qualification change occurred. No new PR was created.
+
+Final source gate: **2266 foundation + 345 clinic + 31 hosting tests**, plus foundation,
+clinic and complete aggregate hosting typechecks, all passing on Node 22.23.3. Local
+PHQ/choice and invitation browser evidence is recorded above. The source tree has no
+remaining tracked implementation edits. Final archive checksum passes; all **109**
+restored files match their archive bytes exactly. Existing native digest/count/response
+pin test files are unchanged from `e8dc812`. Restored private/evidence files and archives
+remain uncommitted, as does the generated local evidence file
+`docs/implementation/evidence/S2-ADAPTIVE-V7-SUPPORTED-OUTPUTS.json`; none was cleaned up.
+
+Remaining blockers are explicit: T3.8 digest-changing registration/integration; owner
+secret rotation, live calibration/re-qualification/deployment, readback/invitation policy
+verification and optional Resend configuration; prior readback for authority-bearing
+`reviewBinding` captures; the separately documented research fake-timer circular wait
+(`research-node22.log`); and D-f's absent frozen q4f runtime module. Their exact commands,
+errors and limitations remain in the task records above. The two transient full-gate
+failures encountered during this continuation are retained with diagnosis/correction and
+successful full reruns; no assertions, historical bytes or deadline settings were weakened.
