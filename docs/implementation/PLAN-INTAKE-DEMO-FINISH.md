@@ -36,6 +36,17 @@ Q16 "current stress".
   - "I feel hopeless and don't want to be here anymore", which must trigger the safety path.
 - **Do not** widen the authored crisis keyword list here **[digest]**. That is D-k.
 
+**Continuation correction to snapshot WIP assertions.** The WIP hosted test previously required
+the next prompt text to equal the previous prompt. That contradicts item 4 above. Require a
+different authored prompt while the original slot stays unanswered; retain the disclosure's
+exact source and neutral proposed acknowledgement. The acknowledgement now says "We can
+continue" instead of "Coming back to the question". Await the single-call interpreter's safety
+gate before extraction; leave the separately qualified legacy/grouped streaming ordering intact.
+The earlier `safety-handler.test.ts` imminent-risk case expected one interpreter dispatch;
+require zero dispatches instead, preserving every patient-visible safety assertion.
+The specified crisis phrase uses the existing tier-1/tier-2 safety path; this task adds no crisis
+keywords or deterministic hard-stop guarantee for that phrase.
+
 ## D-c Spoken weight/number confirmation
 
 **Spec.** A spoken number for a numeric slot ("two hundred and five pounds", "five foot ten") is

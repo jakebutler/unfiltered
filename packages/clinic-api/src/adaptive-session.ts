@@ -87,7 +87,7 @@ type Content = ReturnType<typeof conversation>;
 export interface AdaptiveDraftStore {
     read(): Promise<StoredDraft>;
     save(previous: StoredDraft, next: Draft): Promise<StoredDraft>;
-    /** Model safety gate for one free-text turn, run beside interpretation. Undefined: nothing to record. */
+    /** Model safety gate for one free-text turn. The single-call interpreter waits before extraction. Undefined: nothing to record. */
     safetyGate?(draft: Draft, sourceId: string): Promise<{ signal?: NonNullable<Draft['safetySignals']>[number]; entry: SafetyReviewEntry; unsaved?: true } | undefined>;
 }
 const pending = (op: AdaptiveOperation) => op.status === 'accepted' || op.status === 'processing';
@@ -331,8 +331,23 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         op = operation(stored.draft, id);
         if (op.status !== 'processing' || op.attemptId !== attemptId || op.processingRevision !== stored.draft.revision)
             throw new ApiFailure('processing-claim-unverified', 503);
-        // The safety gate runs beside interpretation on every turn, so risk is decided before the next question is shown.
+        // The single-call intake interpreter must screen the patient's words before extraction.
+        // Legacy proposer concurrency and the already-gated streaming protocols retain their existing ordering.
         const gate = store.safetyGate ? store.safetyGate(stored.draft, op.sourceId).catch(() => undefined) : undefined;
+        if (interpreter && gate) {
+            const screened = await gate;
+            if (screened?.entry.escalated) {
+                await settleGate(store, screened);
+                const paused = await store.read();
+                return { draft: paused.draft, operation: operation(paused.draft, id) };
+            }
+            // A stop or discard while screening was pending must prevent a new provider dispatch.
+            const screenedDraft = await store.read(), screenedOperation = operation(screenedDraft.draft, id);
+            if (screenedOperation.status !== 'processing' || screenedOperation.attemptId !== attemptId || screenedDraft.draft.revision !== op.processingRevision) {
+                if (screened) await settleGate(store, screened);
+                return reconcile(store, id);
+            }
+        }
         if (options.groupedExtractor || options.streamProposer) {
             // These paths save (and may publish) their next question themselves, so the gate decides first.
             const gated = gate ? await gate : undefined;
@@ -396,6 +411,10 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             if (interpreter && mark) n.specificity = settleSpecificityReply(n.specificity ?? {}, mark, { sourceId: op.sourceId, text: context.source.text, updatedPath: outcome.updates.some(update => update.topicId === op.displayed!.topicId && op.displayed!.targetPaths.includes(update.path)), value: specificityFindings(n.topics).find(finding => finding.key === mark.key)?.value });
             const dialogueContext = { ...context, nativeRouting: content.nativeNavigation(n), ...(interpreter ? { specificity: n.specificity ?? {} } : {}) };
             n.adaptive!.exchange = selectAdaptiveDialogue(dialogueContext, outcome);
+            // With no alternative authored question, leave the interrupted topic for review;
+            // the guided fallback must not immediately repeat it or fabricate an answer.
+            if (outcome.acknowledgement && outcome.unmapped?.length && !n.adaptive!.exchange.prompt && context.displayed)
+                n.adaptive!.parkedTopicIds = [...new Set([...(n.adaptive!.parkedTopicIds ?? []), context.displayed.topicId])];
             // Interpreter path: never show the same question a third time, in a short window (A/B cycles) or for the same topic all session.
             // Park that topic for now and continue with others; its gaps stay visible in review.
             const recentPrompts = n.turns.filter(turn => turn.role === 'assistant').slice(-12).map(turn => turn.text);
@@ -419,7 +438,7 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             const asked = n.adaptive!.exchange.prompt?.specificity;
             if (asked) n.specificity = countSpecificityAsk(n.specificity ?? {}, asked, specificityFindings(n.topics).find(finding => finding.key === asked.key)?.value);
             // A guarded acknowledgement precedes the next AUTHORED question; approved replies always win.
-            if (outcome.acknowledgement && !n.adaptive!.exchange.reply && n.adaptive!.exchange.prompt && n.adaptive!.exchange.status === 'question')
+            if (outcome.acknowledgement && !n.adaptive!.exchange.reply && ['question', 'review-available', 'interpretation-review'].includes(n.adaptive!.exchange.status))
                 n.adaptive!.exchange.reply = { id: `ack-${outcome.sourceId}`, text: outcome.acknowledgement };
             delete n.activeTopic; delete n.activeSlot; delete n.preview;
         }

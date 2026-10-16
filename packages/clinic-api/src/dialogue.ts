@@ -218,7 +218,13 @@ function selectDialogue(context: AdaptiveContext, outcome?: AdaptiveOutcome, rej
   const state: DialogueState = { ...context.dialogue };
   const nextContext = { ...context, responses: outcome?.responses ?? context.responses };
   if (context.safetyPaused) return { state, status: 'paused' };
-  const probes = eligibleAdaptiveProbes(nextContext,rejectedTargets);
+  // An acknowledged disclosure leaves the unanswered detail open. Continue with another
+  // authored probe rather than repeating the question the disclosure interrupted.
+  const disclosure = !!outcome?.acknowledgement && !!outcome.unmapped?.length;
+  const probes = eligibleAdaptiveProbes(nextContext,rejectedTargets).filter(probe => !disclosure
+    || probe.kind === 'instrument'
+    || !(probe.topicId === context.displayed?.topicId && probe.promptId === context.displayed.promptId
+      || probe.text === context.displayedText));
   const acts = outcome?.acts ?? [];
   const explicitTopic = acts.find(act => act.kind === 'topic-switch')?.targetTopicId;
   const question = acts.filter(act => act.kind === 'question').sort((a, b) => (a.replyId === 'COPY-05' ? 0 : a.replyId === 'COPY-04' ? 1 : 2) - (b.replyId === 'COPY-05' ? 0 : b.replyId === 'COPY-04' ? 1 : 2))[0];

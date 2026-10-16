@@ -7,6 +7,7 @@ import { createClinicHandler } from '../src/handler.js';
 import { decodeDocument } from '../src/store.js';
 import type { ClinicApiConfig, Draft } from '../src/types.js';
 import type { Runtime } from '../src/runtime.js';
+import type { SafetyReviewer } from '../src/safety-review.js';
 import type { FhirResource } from '../../clinical-core/src/fhir.js';
 import type { AdaptiveTurnResult, ClinicSessionView, ReviewPreview } from '../../clinic-contract/src/index.js';
 import { context, register, source } from './fixtures/adaptive.js';
@@ -265,7 +266,7 @@ describe('intake-interpreter-v1 per-fact validation', () => {
 const origin = 'http://127.0.0.1:5173';
 const patient = { reference: 'Patient/test', displayName: 'Synthetic Patient', description: 'Synthetic only', careTeams: { medical: 'CareTeam/md', nutrition: 'CareTeam/rd', administrative: 'CareTeam/admin' } };
 const config = { origin, cookieSecret: 'test-secret-'.repeat(5), mentalHealth: 'phq4', patients: Object.fromEntries(['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill'].map(id => [id, patient])) } as ClinicApiConfig;
-function handlerFixture(interpreter: IntakeInterpreter) {
+function handlerFixture(interpreter: IntakeInterpreter, options: { safetyReviewer?: SafetyReviewer } = {}) {
   const records = new Map<string, FhirResource>();
   let sequence = 0;
   const client = {
@@ -289,7 +290,7 @@ function handlerFixture(interpreter: IntakeInterpreter) {
     deliver: vi.fn(async () => ({ receipt: { state: 'unknown', present: 0 }, write: 'outcome-unknown' })),
   };
   const runtime = async () => ({ client, qualification: {} } as unknown as Runtime);
-  const handler = createClinicHandler(config, { runtime, adaptiveInterpreter: interpreter });
+  const handler = createClinicHandler(config, { runtime, adaptiveInterpreter: interpreter, ...options });
   let cookie = '';
   async function request<T = ClinicSessionView>(path: string, data?: unknown) {
     const response = await handler(new Request(`${origin}${path}`, { method: data === undefined ? 'GET' : 'POST', headers: { ...(cookie ? { cookie } : {}), ...(data === undefined ? {} : { origin, 'Content-Type': 'application/json' }) }, ...(data === undefined ? {} : { body: JSON.stringify(data) }) }));
@@ -673,16 +674,18 @@ describe('intake-interpreter-v1 emotional disclosure on another question', () =>
     // The exact words stay saved as an unplaced statement for clinician review.
     expect(outcome.unmapped).toEqual([{ reason: 'unsupported-target', evidence: [{ sourceId: ctx.source.id, start: 0, end: hopeless.length }] }]);
     expect(outcome.hasUnresolvedInterpretation).toBe(true);
-    // Authored neutral acknowledgement (rule 14: <= 20 words, no question, no clinical wording) that leads back to the question.
+    // Proposed neutral acknowledgement (rule 14: <= 20 words, no question or clinical interpretation).
     expect(outcome.acknowledgement).toBe(disclosureAcknowledgement.text);
     expect(disclosureAcknowledgement.wordingStatus).toBe('proposed-detail');
     expect(disclosureAcknowledgement.text.split(/\s+/).length).toBeLessThanOrEqual(20);
     expect(disclosureAcknowledgement.text).not.toMatch(/\?|hopeless|depress|anxi|diagnos|risk|normal/i);
-    expect(disclosureAcknowledgement.text).toMatch(/back to the question/i);
-    // The outstanding question is asked again; the disclosure is not an unsuccessful attempt at it.
+    expect(disclosureAcknowledgement.text).toMatch(/continue/i);
+    // The original gap stays open; continue with another authored prompt without counting a failed attempt.
     const dialogue = selectAdaptiveDialogue(ctx, outcome);
     expect(dialogue.status).toBe('question');
     expect(dialogue.prompt?.topicId).toBe('Q04');
+    expect(dialogue.prompt?.promptId).not.toBe(ctx.displayed.promptId);
+    expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
     expect(dialogue.reply).toBeUndefined();
     expect(dialogue.state.lastUnsuccessful).toBeUndefined();
   });
@@ -729,7 +732,7 @@ describe('intake-interpreter-v1 emotional disclosure on another question', () =>
     expect(outcome.acknowledgement).toBe(disclosureAcknowledgement.answeredText);
   });
 
-  it('reproduces the hosted turn through the clinic handler: no pause, neutral ack, same outstanding question, nothing in Q16 or PHQ', async () => {
+  it('reproduces the hosted turn: no pause, neutral ack, next authored question with the original gap open and no Q16 or PHQ answer', async () => {
     const interpret = vi.fn(async (ctx: AdaptiveContext) => ({ outcome: interpretIntakeResponse(recorded, ctx), receipt: { requestId: 'p1', model: 'qwen3.8-max', evidenceProtocol: 'intake-interpreter-v1' as const } }));
     const f = handlerFixture({ interpret });
     await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
@@ -746,9 +749,89 @@ describe('intake-interpreter-v1 emotional disclosure on another question', () =>
     expect(q16.stress).toBeUndefined();
     for (const id of ['MH01', 'MH02', 'MH03', 'MH04']) expect(q16[id]).toBeUndefined();
     expect(applied.body.session.adaptive?.reply?.text).toBe(disclosureAcknowledgement.text);
-    expect(applied.body.session.currentPrompt?.topicId).toBe(before.topicId);
-    expect(applied.body.session.currentPrompt?.text).toBe(before.text);
+    expect(applied.body.session.currentPrompt).toBeDefined();
+    expect(applied.body.session.currentPrompt?.text).not.toBe(before.text);
+    expect(f.draft().topics[before.topicId]?.answers ?? {}).toEqual({});
+    const next = f.draft().adaptive!.exchange!.prompt!;
+    expect(next.text).toBe(register.promptsById[next.promptId].text);
     expect(applied.body.session.adaptive?.unresolvedSources?.map(entry => entry.sourceId)).toContain(applied.body.operation.sourceId);
+  });
+
+  it.each(["I've been feeling hopeless lately", 'honestly kind of hopeless about the weight thing'])(
+    'screens before extracting a non-crisis disclosure: %s', async text => {
+      let finishReview!: (value: Awaited<ReturnType<SafetyReviewer['review']>>) => void;
+      const review = vi.fn(() => new Promise<Awaited<ReturnType<SafetyReviewer['review']>>>(resolve => { finishReview = resolve; }));
+      const interpret = vi.fn(async (ctx: AdaptiveContext) => ({ outcome: interpretIntakeResponse({ ...empty,
+        facts: [{ topic: 'Q16', field: 'stress', state: 'known', value: text, quote: text }],
+      }, ctx) }));
+      const f = handlerFixture({ interpret }, { safetyReviewer: { review } });
+      await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
+      const session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
+      const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text, channel: 'text' });
+      const applying = f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+      await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(1));
+      expect(interpret).not.toHaveBeenCalled();
+      finishReview({ concern: true, level: 'moderate', categories: ['mental-distress'], rationale: 'Clinician review requested.', model: 'synthetic-reviewer' });
+      const applied = await applying;
+      expect(applied.status).toBe(200);
+      expect(interpret).toHaveBeenCalledTimes(1);
+      expect(f.draft().topics.Q16?.answers.stress).toBeUndefined();
+      for (const id of ['MH01', 'MH02', 'MH03', 'MH04']) expect(f.draft().topics.Q16?.answers[id]).toBeUndefined();
+      expect(applied.body.session.adaptive?.reply?.text).toBe(disclosureAcknowledgement.text);
+      expect(applied.body.session.currentPrompt?.text).not.toBe(session.currentPrompt?.text);
+      expect(f.draft().safetySignals?.[0].review).toEqual({ status: 'needs-human-review', level: 'moderate' });
+    },
+  );
+
+  it('routes the specified crisis disclosure through the existing safety gate without extracting or changing crisis keywords', async () => {
+    const interpret = vi.fn(async (ctx: AdaptiveContext) => ({ outcome: interpretIntakeResponse(empty, ctx) }));
+    const review = vi.fn(async () => ({ concern: true, level: 'high' as const, categories: ['self-harm' as const], rationale: 'Current self-harm concern.', model: 'synthetic-reviewer' }));
+    const f = handlerFixture({ interpret }, { safetyReviewer: { review } });
+    await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
+    const session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
+    const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text: "I feel hopeless and don't want to be here anymore", channel: 'text' });
+    const paused = await f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+    expect(paused.status).toBe(200);
+    expect(review).toHaveBeenCalledTimes(1);
+    expect(interpret).not.toHaveBeenCalled();
+    expect(f.draft().safety).toMatchObject({ rule: 'E04', paused: true, via: 'model-review' });
+    expect(paused.body.session.currentPrompt).toBeUndefined();
+    expect(paused.body.session.notice?.text).toContain('988');
+    expect(f.draft().topics.Q16?.answers ?? {}).toEqual({});
+  });
+
+  it('does not repeat the interrupted prompt when no other authored probe remains', () => {
+    const base = context(hopeless, ['Q04']);
+    const slot = base.topics[0].slots.find(slot => slot.id === 'lastMeasuredWeight.value')!;
+    const ctx = { ...base, topics: [{ ...base.topics[0], slots: [slot] }],
+      displayed: { topicId: 'Q04', promptId: 'Q04a', targetPaths: [slot.id] } };
+    const outcome = interpretIntakeResponse(empty, ctx);
+    const dialogue = selectAdaptiveDialogue(ctx, outcome);
+    expect(outcome.acknowledgement).toBe(disclosureAcknowledgement.text);
+    expect(outcome.updates).toEqual([]);
+    expect(dialogue.status).toBe('review-available');
+    expect(dialogue.prompt).toBeUndefined();
+    expect(answers(outcome, 'Q04')[slot.id]).toBeUndefined();
+  });
+
+  it('does not dispatch extraction after a discard while the safety gate is pending, and retains the safety verdict', async () => {
+    let finishReview!: (value: Awaited<ReturnType<SafetyReviewer['review']>>) => void;
+    const review = vi.fn(() => new Promise<Awaited<ReturnType<SafetyReviewer['review']>>>(resolve => { finishReview = resolve; }));
+    const interpret = vi.fn(async (ctx: AdaptiveContext) => ({ outcome: interpretIntakeResponse(empty, ctx) }));
+    const f = handlerFixture({ interpret }, { safetyReviewer: { review } });
+    await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
+    const session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
+    const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text: hopeless, channel: 'text' });
+    const applying = f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+    await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(1));
+    const discarded = await f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/discard`, { expectedRevision: f.draft().revision });
+    expect(discarded.body.operation.status).toBe('discarded');
+    finishReview({ concern: true, level: 'moderate', categories: ['mental-distress'], rationale: 'Clinician review requested.', model: 'synthetic-reviewer' });
+    const applied = await applying;
+    expect(applied.status).toBe(200);
+    expect(applied.body.operation.status).toBe('discarded');
+    expect(interpret).not.toHaveBeenCalled();
+    expect(f.draft().safetySignals?.[0].review).toEqual({ status: 'needs-human-review', level: 'moderate' });
   });
 });
 

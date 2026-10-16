@@ -33,7 +33,7 @@ async function fixture(reviewer?: SafetyReviewer, interpreter?: IntakeInterprete
     const result = await call('/api/clinic/turns', { requestId: crypto.randomUUID(), expectedRevision: current.revision, promptId: current.currentPrompt!.id, action: 'answer', text, channel: 'text' });
     expect(result.status).toBe(200); current = result.body; return current;
   };
-  /** Natural conversation: accept, then interpret (the gate runs beside the interpreter). */
+  /** Natural conversation: accept, then screen before single-call interpretation. */
   const say = async (text: string) => {
     const accepted = await call<{ session: ClinicSessionView; operation: { id: string } }>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: current.revision, text, channel: 'text' });
     expect(accepted.status).toBe(202);
@@ -116,10 +116,10 @@ describe('safety gate through the clinic handler', () => {
     const review = await f.call<{ session: ClinicSessionView }>('/api/clinic/review', { expectedRevision: f.current().revision });
     expect(review.body.session.topics.some(topic => topic.id === 'SAFETY-REVIEW')).toBe(true);
   });
-  it('natural conversation runs the gate beside the interpreter and pauses before the next question', async () => {
+  it('natural conversation screens before extraction and pauses without dispatching the interpreter', async () => {
     const reviewer = verdict({ level: 'imminent', categories: ['medical-urgent'] }), model = interpreter(), f = await fixture(reviewer, model);
     const done = await f.say('I have chest pain right now and my left arm feels numb.');
-    expect(model.interpret).toHaveBeenCalledTimes(1);
+    expect(model.interpret).not.toHaveBeenCalled();
     expect(reviewer.review).toHaveBeenCalledTimes(1);
     expect(done.session.notice).toMatchObject({ tone: 'urgent' });
     expect(done.session.notice!.text).toContain('911');

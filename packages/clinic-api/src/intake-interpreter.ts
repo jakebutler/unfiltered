@@ -366,8 +366,8 @@ function numberMentioned(value: number, quote: string): boolean {
 /** Authored here, not approved clinical copy: a neutral acknowledgement of words kept for review (rule 14: <= 20 words, no interpretation). */
 export const disclosureAcknowledgement = {
   id: 'ACK-DISCLOSURE', version: 1, wordingStatus: 'proposed-detail',
-  /** The outstanding question is asked again right after this. */
-  text: "Thank you for telling me. I've saved that for your care team to review. Coming back to the question.",
+  /** The unanswered detail stays open while the conversation continues with another authored prompt. */
+  text: "Thank you for telling me. I've saved that for your care team to review. We can continue.",
   /** The same turn also answered something; the next question may be a new one. */
   answeredText: "Thank you for telling me. I've saved that for your care team to review.",
 } as const;
@@ -377,7 +377,7 @@ export const spokenNumberConfirmWording = { version: 'spoken-number-confirm.1', 
 /** PHQ-4 constructs in the patient's own words. They never fill a PHQ item; on their own they answer only a question that asked about them. */
 const moodSource = "\\b(?:hopeless(?:ness)?|depressed|(?:feel(?:ing|s)?|felt|been|so|really|pretty|very|quite|kind of|kinda) (?:down|low|blue)|anxious|nervous|on edge|(?:can't|cant|cannot|couldn't) (?:stop|control) (?:my )?worry(?:ing)?|worr(?:y|ied|ying)|(?:little|no|lost|losing) (?:interest|pleasure)(?: in (?:doing )?(?:things|anything))?)\\b";
 const moodWords = new RegExp(moodSource, 'i'), moodWordsAll = new RegExp(moodSource, 'gi');
-const moodFiller = new Set("honestly honest really just been being feeling feel feels felt i i've ive i'm im me most days day lately recently the a an and or lot all time times every everyday often kind sort of pretty very so quite bit little much more than usual always constantly nearly almost past last few couple weeks week months month these this like um uh well yeah guess tbh frankly to be am is was have has had kinda sorta too super extremely somewhat everything things stuff anything about it that you know since now overall generally mostly sometimes".split(' '));
+const moodFiller = new Set("honestly honest really just been being feeling feel feels felt i i've ive i'm im me my most days day lately recently the a an and or lot all time times every everyday often kind sort of pretty very so quite bit little much more than usual always constantly nearly almost past last few couple weeks week months month these this like um uh well yeah guess tbh frankly to be am is was have has had kinda sorta too super extremely somewhat everything things stuff anything about it that you know since now overall generally mostly sometimes weight thing".split(' '));
 /** A sentence that only describes a PHQ-4 type feeling, with no stressor, event, condition or other detail. */
 function moodOnly(text: string): boolean {
   const lowered = norm(text);
