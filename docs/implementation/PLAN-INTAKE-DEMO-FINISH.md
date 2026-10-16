@@ -219,6 +219,37 @@ The live script never reached PHQ-4. Add a hosted-safe smoke step, used only dur
 re-qualification, that drives straight to Q16 with the buttons. Alternatively, extend the local
 mock walk-through (D-e) to complete PHQ-4 and check scoring in the staff view.
 
+Offline API smoke: `npx tsx scripts/dev/phq4-local-smoke.mts --local` (Node 22).
+The runner uses the native handler, text-channel values corresponding to the displayed PHQ
+choices, disposable in-memory FHIR delivery, and the assigned physician's production staff
+projection. It checks three-item incompleteness/null scores, four-item scores (GAD-2 3,
+PHQ-2 3, PHQ-4 6), source channels, verified anchors, and partial overall intake. It reads no
+credentials, makes no external requests, and rejects hosted targets/live switches.
+Regression coverage: `packages/clinic-api/test/phq4-local-smoke.test.ts`.
+
+The API mode verifies submissions and staff data, not browser clicks or rendering. For the
+actual local UI walk-through, start the **new offline PHQ harness** in a separate terminal:
+`npx tsx scripts/dev/phq4-local-smoke.mts --serve-local`, then `npm run clinic:dev`.
+Open `http://127.0.0.1:5173`, start First intake, confirm the fictional identity, and choose
+“Mood, anxiety and support” (Q16) in the topic outline. For this synthetic walk, choose
+“I don’t know” for depression history, anxiety history, and current care; those details remain
+unknown. Then click and send each of the four PHQ choices (Several days, More than half the days,
+Nearly every day, Not at all), review, and Confirm and send. Open `/staff`, sign in using the
+harness-only synthetic account `synthetic-md@example.invalid` / `local-smoke-only`, and inspect
+the handoff's PHQ-4 scores (GAD-2 3, PHQ-2 3, PHQ-4 6). Other intake topics remain incomplete.
+The backend listens only on 127.0.0.1:8787 and uses a synthetic auth adapter and in-memory FHIR;
+it never validates real credentials or calls providers. This is distinct from
+`scripts/dev/local-mock-clinic.mts`, which requires DigitalOcean credentials and makes real
+provider calls. Do not run that older mock for this offline smoke.
+
+Local browser execution on 2026-10-16 passed against the new harness: real PatientApp
+PHQ buttons, partial review/confirmation, synthetic staff login, and real StaffApp scores
+3/3/6 with clinician-review-required text. Three preceding history/care responses remained
+unknown. Parent screenshots/logs are under `/workspace/scratch/unfiltered-validation/`
+(`phq-browser-{review,staff}.png`, `phq-browser.log`). This is candidate verification;
+completion still requires the task's full gate and verifying commit. Hosted verification
+remains an owner re-qualification step; neither local result is live verification.
+
 ## D-m Pre-/post-visit native guided crash without trusted context (HIGH)
 
 T1.4a found this (`packages/clinic-api/test/guided-workflows.test.ts`, four `it.fails` cases; see
