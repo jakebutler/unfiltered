@@ -673,6 +673,5 @@ secret rotation, live calibration/re-qualification/deployment, readback/invitati
 verification and optional Resend configuration; prior readback for authority-bearing
 `reviewBinding` captures; the separately documented research fake-timer circular wait
 (`research-node22.log`); and D-f's absent frozen q4f runtime module. Their exact commands,
-errors and limitations remain in the task records above. The two transient full-gate
-failures encountered during this continuation are retained with diagnosis/correction and
+errors and limitations remain in the task records above. Earlier failed gate runs remain recorded with their diagnosis or correction and
 successful full reruns; no assertions, historical bytes or deadline settings were weakened.
