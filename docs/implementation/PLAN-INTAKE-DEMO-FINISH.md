@@ -138,7 +138,7 @@ system.
 - an admin membership is still rejected;
 - a stale observation (more than 15 min) is rejected.
 
-**WIP:** uncommitted edits in `deployment-qualification.ts` (agent a42f748).
+**Implementation awaiting verification:** schema 3 observes the runtime `/auth/me` inline at seal time and compares it again on each cold start/token refresh through `observeRuntimeProjection`; schema 2 retains `observeRuntimeIdentity` and its historical contract until expiry. The canonical projection sorts the feature list, preserves absent optional fields, and records `projectVersion: projection-sha256:<hex>`. Projection changes fail with `project-projection-drift`; `checkReferencesOnWrite` is included when returned. No admin feature file is required. The observation must be within 15 minutes of the original proof, without shortening the signed proof's validity. Tests are in `packages/clinic-api/test/deployment-qualification.test.ts`, `infra/cloud/medplum-preflight.test.mjs`, and `infra/aws/test/config.test.ts`. Owner calibration and live re-qualification remain D-h; no live execution is implied by this implementation.
 
 ## D-h Owner steps before 2026-10-21T01:48:12Z (needs owner)
 

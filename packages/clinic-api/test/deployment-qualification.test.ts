@@ -13,12 +13,12 @@ async function report(): Promise<ConditionalQualificationReport> {
   return { schema: 2, deliveryContract: 'conditional-resumable-v1', mode: 'live', runId: 'proof-1', endpoint: medplum.baseUrl, delivery: 'qualified-for-tested-credentials', handoff: 'received', authorization: 'not-qualified', providerInference: 'not-called', retainedSyntheticIdentifiers: ['fixture-1'], checks: Object.fromEntries(conditionalChecks.map(check => [check, true])) as ConditionalQualificationReport['checks'], qualification: { deliveryContract: 'conditional-resumable-v1', baseUrl: medplum.baseUrl, mode: medplum.mode, credentialFingerprint: await digest(medplum.accessToken), qualifiedAt: new Date().toISOString(), conditionalCreate: true, conditionalConcurrency: true, versionConflict: true, versionHistory: true } };
 }
 function fixture(questionnaire?: Record<string, unknown>) {
-  const state = { token: 0, project: 'project-1', profile: 'client-1', membership: 'member-1', version: '5.2.4-build', admin: false, features: undefined as string[] | undefined, strictMode: true as boolean | undefined, name: 'Corvo Clinic', description: 'Synthetic demo', policy: [{ resourceType: 'Patient', interaction: ['read', 'create', 'update'] }] as unknown[] };
+  const state = { token: 0, project: 'project-1', profile: 'client-1', membership: 'member-1', version: '5.2.4-build', admin: false, features: undefined as string[] | undefined, strictMode: true as boolean | undefined, checkReferencesOnWrite: undefined as boolean | undefined, name: 'Corvo Clinic', description: 'Synthetic demo', policy: [{ resourceType: 'Patient', interaction: ['read', 'create', 'update'] }] as unknown[] };
   const calls: { path: string; method: string }[] = [];
   const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const path = new URL(String(input)).pathname; calls.push({ path, method: init?.method ?? 'GET' });
     if (path === '/oauth2/token') return Response.json({ access_token: `refreshed-token-${++state.token}`, expires_in: 3600 });
-    if (path === '/auth/me') return Response.json({ project: { id: state.project, name: state.name, description: state.description, strictMode: state.strictMode, ...(state.features ? { features: state.features } : {}) }, profile: { resourceType: 'ClientApplication', id: state.profile }, membership: { id: state.membership, profile: { reference: `ClientApplication/${state.profile}` }, admin: state.admin }, accessPolicy: { resourceType: 'AccessPolicy', id: crypto.randomUUID(), resource: state.policy, basedOn: [{ reference: 'AccessPolicy/runtime-policy-1' }] } });
+    if (path === '/auth/me') return Response.json({ project: { id: state.project, name: state.name, description: state.description, strictMode: state.strictMode, checkReferencesOnWrite: state.checkReferencesOnWrite, ...(state.features ? { features: state.features } : {}) }, profile: { resourceType: 'ClientApplication', id: state.profile }, membership: { id: state.membership, profile: { reference: `ClientApplication/${state.profile}` }, admin: state.admin }, accessPolicy: { resourceType: 'AccessPolicy', id: crypto.randomUUID(), resource: state.policy, basedOn: [{ reference: 'AccessPolicy/runtime-policy-1' }] } });
     if (path === '/fhir/R4/Questionnaire/native/_history/v2' && questionnaire) return Response.json({ ...questionnaire, id: 'native', meta: { versionId: 'v2' } });
     if (path === '/fhir/R4/metadata') return Response.json({ resourceType: 'CapabilityStatement', software: { version: state.version } });
     throw new Error('unexpected-write-or-read');
@@ -102,9 +102,13 @@ async function sealSchema2(f: ReturnType<typeof fixture>, overrides: Partial<Dep
     projectFeature: { projectId: 'project-1', projectVersion: 'project-version-3', features: [], observedAt: new Date(now).toISOString() }, applicationChecks: Object.fromEntries(applicationChecks.map(check => [check, true])) as DeploymentQualificationPayloadV2['applicationChecks'],
     namedPolicyDigests: {}, staffRosterDigest: await digest(cfg.staff), applicationEvidenceDigest: 'e'.repeat(64), ...(cfg.nativeQuestionnaire ? { nativeQuestionnaire: structuredClone(cfg.nativeQuestionnaire) } : {}), featureDriftContract: 'admin-change-requires-requalification-not-runtime-observed', ...overrides,
   };
+  return signProof({ payload, signature: '' }, cfg);
+}
+
+async function signProof<T extends DeploymentQualification>(proof: T, cfg: ClinicApiConfig = config): Promise<T> {
   const hmac = await crypto.subtle.importKey('raw', new TextEncoder().encode(`corvo-storage-qualification:conditional-v2:${cfg.cookieSecret}`), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const signature = [...new Uint8Array(await crypto.subtle.sign('HMAC', hmac, new TextEncoder().encode(canonicalJson(payload))))].map(value => value.toString(16).padStart(2, '0')).join('');
-  return { payload, signature };
+  proof.signature = [...new Uint8Array(await crypto.subtle.sign('HMAC', hmac, new TextEncoder().encode(canonicalJson(proof.payload))))].map(value => value.toString(16).padStart(2, '0')).join('');
+  return proof;
 }
 
 describe('schema-3 /auth/me Project projection', () => {
@@ -114,8 +118,9 @@ describe('schema-3 /auth/me Project projection', () => {
     expect(proof.payload.schema).toBe(3);
     expect(proof.payload.featureDriftContract).toBe('runtime-observed-auth-me-projection');
     expect(proof.payload.projectFeature).toMatchObject({ source: 'auth-me', projectId: 'project-1', features: ['bots', 'websocket-subscriptions'] });
-    expect(proof.payload.projectFeature.projectionDigest).toBe(await digest({ id: 'project-1', name: 'Corvo Clinic', features: ['bots', 'websocket-subscriptions'], strictMode: true, superAdmin: null }));
+    expect(proof.payload.projectFeature.projectionDigest).toBe(await digest({ id: 'project-1', name: 'Corvo Clinic', features: ['bots', 'websocket-subscriptions'], strictMode: true }));
     expect(proof.payload.identity.projectionDigest).toBe(proof.payload.projectFeature.projectionDigest);
+    expect(proof.payload.projectFeature.projectVersion).toBe(`projection-sha256:${proof.payload.projectFeature.projectionDigest}`);
     expect(f.calls.map(call => call.path)).not.toContain('/fhir/R4/Project/project-1');
     expect(f.calls.every(call => call.method === 'GET')).toBe(true);
     await expect(verifyDeploymentQualification(config, { ...medplum, accessToken: 'refreshed' }, proof, f.fetcher)).resolves.toMatchObject({ qualifiedAt: proof.payload.qualifiedAt });
@@ -128,18 +133,44 @@ describe('schema-3 /auth/me Project projection', () => {
     expect(proof.payload.projectFeature.features).toEqual([]);
     await expect(verifyDeploymentQualification(config, medplum, proof, f.fetcher)).resolves.toBeDefined();
   });
+  it('hashes only present approved projection fields and defaults null features to []', async () => {
+    const observed = await authMeProjectFeatureObservation({ id: 'project-1', features: null, description: 'excluded', superAdmin: false }, '5.2.0', 'project-1');
+    expect(observed.features).toEqual([]);
+    expect(observed.projectionDigest).toBe(await digest({ id: 'project-1', features: [] }));
+    const checked = await authMeProjectFeatureObservation({ id: 'project-1', name: 'Clinic', strictMode: false, checkReferencesOnWrite: false }, '5.2.0', 'project-1');
+    expect(checked.projectionDigest).toBe(await digest({ id: 'project-1', name: 'Clinic', features: [], strictMode: false, checkReferencesOnWrite: false }));
+    await expect(authMeProjectFeatureObservation({ id: 'project-1', checkReferencesOnWrite: 'false' }, '5.2.0', 'project-1')).rejects.toThrow();
+  });
+  it('rejects observations older than fifteen minutes without expiring a valid seven-day proof', async () => {
+    await expect(authMeProjectFeatureObservation({ id: 'project-1' }, '5.2.0', 'project-1', new Date(Date.now() - 900001).toISOString())).rejects.toThrow();
+    const f = fixture(), proof = await sealDeploymentQualification(config, medplum, await report(), f.fetcher, app());
+    const stale = structuredClone(proof);
+    stale.payload.projectFeature.observedAt = new Date(Date.parse(stale.payload.qualifiedAt) - 900001).toISOString();
+    await signProof(stale);
+    const before = f.calls.length;
+    await expect(verifyDeploymentQualification(config, medplum, stale, f.fetcher)).rejects.toMatchObject({ code: 'storage-deployment-qualification-invalid' });
+    expect(f.calls).toHaveLength(before);
+    vi.useFakeTimers(); vi.advanceTimersByTime(900001);
+    try { await expect(verifyDeploymentQualification(config, medplum, proof, f.fetcher)).resolves.toBeDefined(); } finally { vi.useRealTimers(); }
+  });
+  it('rejects an admin membership before sealing any proof', async () => {
+    const f = fixture(); f.state.admin = true;
+    await expect(sealDeploymentQualification(config, medplum, await report(), f.fetcher, app())).rejects.toMatchObject({ code: 'storage-deployment-qualification-invalid' });
+    expect(f.calls).toEqual([{ path: '/auth/me', method: 'GET' }]);
+  });
   it.each([
     ['feature added', (s: ReturnType<typeof fixture>['state']) => { s.features = ['transaction-bundles']; }],
     ['feature removed', (s: ReturnType<typeof fixture>['state']) => { s.features = undefined; }, ['transaction-bundles']],
     ['strictMode changed', (s: ReturnType<typeof fixture>['state']) => { s.strictMode = false; }],
     ['strictMode removed', (s: ReturnType<typeof fixture>['state']) => { s.strictMode = undefined; }],
+    ['reference checks enabled', (s: ReturnType<typeof fixture>['state']) => { s.checkReferencesOnWrite = true; }],
     ['project renamed', (s: ReturnType<typeof fixture>['state']) => { s.name = 'Other'; }],
   ] as const)('fails closed on runtime projection drift: %s', async (_name, drift, initial?: readonly string[]) => {
     const f = fixture(); if (initial) f.state.features = [...initial];
     const proof = await sealDeploymentQualification(config, medplum, await report(), f.fetcher, app());
     await expect(verifyDeploymentQualification(config, medplum, proof, f.fetcher)).resolves.toBeDefined();
     drift(f.state);
-    await expect(verifyDeploymentQualification(config, medplum, proof, f.fetcher)).rejects.toMatchObject({ code: 'storage-deployment-qualification-invalid' });
+    await expect(verifyDeploymentQualification(config, medplum, proof, f.fetcher)).rejects.toMatchObject({ code: 'project-projection-drift' });
   });
   it('drift is caught by the runtime refresh path, not only direct verification', async () => {
     const { definition, config: cfg } = await bound();
@@ -148,7 +179,7 @@ describe('schema-3 /auth/me Project projection', () => {
     await expect(runtime()).resolves.toBeDefined();
     f.state.strictMode = false;
     vi.useFakeTimers(); vi.advanceTimersByTime(300001);
-    try { await expect(runtime()).rejects.toMatchObject({ code: 'storage-deployment-qualification-invalid' }); } finally { vi.useRealTimers(); }
+    try { await expect(runtime()).rejects.toMatchObject({ code: 'project-projection-drift' }); } finally { vi.useRealTimers(); }
   });
   it.each(['5.1.3', '4.9.0-abc', 'unknown', ''])('fails closed when server %s may not project features', async version => {
     expect(serverProjectsProjectFeatures(version)).toBe(false);
@@ -172,10 +203,22 @@ describe('schema-3 /auth/me Project projection', () => {
     f.state.policy.pop(); f.state.policy.push({ resourceType: '*' });
     await expect(sealDeploymentQualification(config, medplum, await report(), f.fetcher, app())).rejects.toThrow();
   });
-  it('rejects a v3 proof whose sealed projection fields disagree, even if signed', async () => {
+  it.each(['projectVersion', 'identityDigest'] as const)('rejects signed inconsistent %s before network', async field => {
+    const f = fixture(), proof = await sealDeploymentQualification(config, medplum, await report(), f.fetcher, app());
+    if (field === 'projectVersion') proof.payload.projectFeature.projectVersion = `projection-sha256:${'0'.repeat(64)}`;
+    else proof.payload.identity.projectionDigest = '0'.repeat(64);
+    await signProof(proof);
+    const before = f.calls.length;
+    await expect(verifyDeploymentQualification(config, medplum, proof, f.fetcher)).rejects.toMatchObject({ code: 'storage-deployment-qualification-invalid' });
+    expect(f.calls).toHaveLength(before);
+  });
+  it('rejects a signed v3 proof with the wrong drift contract before network', async () => {
     const f = fixture(); const proof = await sealDeploymentQualification(config, medplum, await report(), f.fetcher, app());
     const edited = structuredClone(proof); edited.payload.featureDriftContract = 'admin-change-requires-requalification-not-runtime-observed' as never;
+    await signProof(edited);
+    const before = f.calls.length;
     await expect(verifyDeploymentQualification(config, medplum, edited, f.fetcher)).rejects.toThrow();
+    expect(f.calls).toHaveLength(before);
   });
 });
 

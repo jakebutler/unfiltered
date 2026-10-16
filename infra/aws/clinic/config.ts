@@ -23,9 +23,9 @@ const payloadV2 = z.object({ ...payloadBase, schema: z.literal(2), identity: z.o
   featureDriftContract: z.literal('admin-change-requires-requalification-not-runtime-observed') }).strict();
 // Schema 3: runtime /auth/me Project projection, re-observed and digest-compared on every refresh.
 const payloadV3 = z.object({ ...payloadBase, schema: z.literal(3), identity: z.object({ ...identityBase, projectionDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
-  projectFeature: z.object({ source: z.literal('auth-me'), projectId: id, features, projectionDigest: z.string().regex(/^[a-f0-9]{64}$/), observedAt: z.string().datetime({ offset: true }) }).strict(),
+  projectFeature: z.object({ source: z.literal('auth-me'), projectId: id, features, projectVersion: z.string().regex(/^projection-sha256:[a-f0-9]{64}$/), projectionDigest: z.string().regex(/^[a-f0-9]{64}$/), observedAt: z.string().datetime({ offset: true }) }).strict(),
   featureDriftContract: z.literal('runtime-observed-auth-me-projection') }).strict()
-  .refine(payload => payload.identity.projectionDigest === payload.projectFeature.projectionDigest);
+  .refine(payload => payload.identity.projectionDigest === payload.projectFeature.projectionDigest && payload.projectFeature.projectVersion === `projection-sha256:${payload.projectFeature.projectionDigest}`);
 const schema = z.object({
   origin: z.string(), medplumBaseUrl: z.string(), projectId: id, clientId: id,
   nativeQuestionnaire: z.object({ canonical: z.literal(NATIVE_QUESTIONNAIRE_CANONICAL), version: z.literal(NATIVE_QUESTIONNAIRE_VERSION), digest: z.string().regex(/^[a-f0-9]{64}$/), reference: z.string().regex(/^Questionnaire\/[A-Za-z0-9.-]{1,64}\/_history\/[A-Za-z0-9.-]{1,64}$/) }).strict().optional(),

@@ -81,6 +81,15 @@ test('observe-features reads only token, auth/me and metadata as the demoted run
   assert(!state.calls.some(call => call.url.includes('/Project/')));
   assert(!JSON.stringify(result).includes('private-test'));
 });
+test('observe-features defaults absent and null feature lists to empty without a Project read', async () => {
+  for (const meFeatures of [undefined, null]) {
+    const state = featureMock({ meFeatures, admin: false });
+    const observed = await observeProjectFeatures({ clientId, clientSecret: 'private-test-secret', fetcher: state.fetcher });
+    assert.deepEqual(observed.authMeFeatures, []);
+    assert.equal(observed.requests, 3);
+    assert(!state.calls.some(call => call.url.includes('/Project/')));
+  }
+});
 test('--calibrate with temporary admin passes only when admin Project.features equals auth/me features', async () => {
   const ok = await observeProjectFeatures({ clientId, clientSecret: 'private-test-secret', fetcher: featureMock({ meFeatures: ['transaction-bundles'] }).fetcher, calibrate: true });
   assert.equal(ok.calibration.featuresMatch, true); assert.equal(ok.membershipAdmin, true); assert.equal(ok.adminProjectVersion, 'v9');

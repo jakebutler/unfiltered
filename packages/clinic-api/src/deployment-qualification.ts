@@ -38,6 +38,7 @@ export interface AuthMeProjectFeatureObservation {
   projectId: string;
   features: string[];
   projectionDigest: string;
+  projectVersion: `projection-sha256:${string}`;
   observedAt: string;
 }
 export type ProjectFeatureObservation = AdminProjectFeatureObservation | AuthMeProjectFeatureObservation;
@@ -72,6 +73,7 @@ export interface DeploymentQualification<Payload extends DeploymentQualification
 }
 export type QualifiedClinicConfig = ClinicApiConfig & { storageQualification?: DeploymentQualification };
 const failure = () => new ApiFailure('storage-deployment-qualification-invalid', 503);
+const projectionDrift = () => new ApiFailure('project-projection-drift', 503);
 const hex = (bytes: ArrayBuffer) => [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join('');
 // The key is shared by schemas 2 and 3; the schema number is inside the signed payload.
 async function key(secret: string) {
@@ -91,17 +93,20 @@ export function serverProjectsProjectFeatures(serverVersion: string): boolean {
 /**
  * Builds the schema-3 Project observation from an `/auth/me` `project` value. An absent `features`
  * key means "no features" only on servers known to project it; anything else fails closed.
- * `description` is deliberately excluded from the digest; every other projected field is bound.
+ * Only the approved identity/configuration projection is hashed; optional fields remain absent.
  */
 export async function authMeProjectFeatureObservation(project: unknown, serverVersion: string, projectId: string, observedAt = new Date().toISOString()): Promise<AuthMeProjectFeatureObservation> {
   const value = object(project);
-  if (value.id !== projectId || !serverProjectsProjectFeatures(serverVersion) || !Number.isFinite(Date.parse(observedAt))) throw failure();
-  const features = value.features === undefined ? [] : value.features;
+  if (value.id !== projectId || !serverProjectsProjectFeatures(serverVersion) || !Number.isFinite(Date.parse(observedAt)) || Math.abs(Date.now() - Date.parse(observedAt)) > 900000) throw failure();
+  const features = value.features ?? [];
   if (!Array.isArray(features) || features.length > 64 || features.some(feature => typeof feature !== 'string' || !feature || feature.length > 128)) throw failure();
-  if ((value.name !== undefined && (typeof value.name !== 'string' || value.name.length > 1024)) || (value.strictMode !== undefined && typeof value.strictMode !== 'boolean') || (value.superAdmin !== undefined && typeof value.superAdmin !== 'boolean') || value.superAdmin === true) throw failure();
+  if ((value.name !== undefined && (typeof value.name !== 'string' || value.name.length > 1024)) || (value.strictMode !== undefined && typeof value.strictMode !== 'boolean') || (value.superAdmin !== undefined && typeof value.superAdmin !== 'boolean') || (value.checkReferencesOnWrite !== undefined && typeof value.checkReferencesOnWrite !== 'boolean') || value.superAdmin === true) throw failure();
   const sorted = [...features as string[]].sort();
-  const projection = { id: projectId, name: value.name ?? null, features: sorted, strictMode: value.strictMode ?? null, superAdmin: value.superAdmin ?? null };
-  return { source: 'auth-me', projectId, features: sorted, projectionDigest: await digest(projection), observedAt };
+  const projection = { id: projectId, ...(value.name !== undefined ? { name: value.name } : {}), features: sorted,
+    ...(value.strictMode !== undefined ? { strictMode: value.strictMode } : {}),
+    ...(value.checkReferencesOnWrite !== undefined ? { checkReferencesOnWrite: value.checkReferencesOnWrite } : {}) };
+  const projectionDigest = await digest(projection);
+  return { source: 'auth-me', projectId, features: sorted, projectionDigest, projectVersion: `projection-sha256:${projectionDigest}`, observedAt };
 }
 
 async function observeRuntime(config: ClinicApiConfig, medplum: MedplumConfig, fetcher: Fetch) {
@@ -172,11 +177,15 @@ export async function verifyDeploymentQualification(config: ClinicApiConfig, med
       if (canonicalJson(current) !== canonicalJson(payload.identity)) throw failure();
     } else {
       const sealed = payload.projectFeature;
-      if (payload.featureDriftContract !== SCHEMA_3_FEATURE_DRIFT_CONTRACT || sealed.source !== 'auth-me' || !/^[a-f0-9]{64}$/.test(sealed.projectionDigest) || payload.identity.projectionDigest !== sealed.projectionDigest || !Number.isFinite(Date.parse(sealed.observedAt)) || Date.parse(sealed.observedAt) > now + 30000) throw failure();
+      if (payload.featureDriftContract !== SCHEMA_3_FEATURE_DRIFT_CONTRACT || sealed.source !== 'auth-me' || !/^[a-f0-9]{64}$/.test(sealed.projectionDigest) || payload.identity.projectionDigest !== sealed.projectionDigest || sealed.projectVersion !== `projection-sha256:${sealed.projectionDigest}` || !Number.isFinite(Date.parse(sealed.observedAt)) || Date.parse(sealed.observedAt) > now + 30000 || Math.abs(Date.parse(sealed.observedAt) - Date.parse(payload.qualifiedAt)) > 900000) throw failure();
       const current = await observeRuntimeProjection(config, medplum, fetcher);
-      // Any change to identity, effective policy, server version, Project features, strictMode, name or superAdmin.
-      if (canonicalJson(current.identity) !== canonicalJson(payload.identity) || current.projectFeature.projectionDigest !== sealed.projectionDigest || canonicalJson(current.projectFeature.features) !== canonicalJson(sealed.features)) throw failure();
+      if (current.projectFeature.projectionDigest !== sealed.projectionDigest || canonicalJson(current.projectFeature.features) !== canonicalJson(sealed.features)) throw projectionDrift();
+      // Identity, effective policy and server version must still match independently.
+      if (canonicalJson(current.identity) !== canonicalJson(payload.identity)) throw failure();
     }
     return { baseUrl: medplum.baseUrl, mode: medplum.mode, credentialFingerprint: await digest(medplum.accessToken), qualifiedAt: payload.qualifiedAt, deliveryContract: 'conditional-resumable-v1', conditionalCreate: true, conditionalConcurrency: true, versionConflict: true, versionHistory: true };
-  } catch { throw failure(); }
+  } catch (error) {
+    if (error instanceof ApiFailure && error.code === 'project-projection-drift') throw error;
+    throw failure();
+  }
 }

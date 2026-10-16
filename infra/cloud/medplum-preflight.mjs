@@ -107,7 +107,7 @@ export function serverProjectsProjectFeatures(serverVersion) {
   return true;
 }
 const featureList = (value, code) => {
-  const features = value === undefined ? [] : value;
+  const features = value ?? [];
   if (!Array.isArray(features) || features.length > 64 || features.some(feature => typeof feature !== 'string' || !feature || feature.length > 128)) fail(code);
   return [...features].sort();
 };

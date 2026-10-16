@@ -5,14 +5,15 @@ import { constants, writeFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { prepareSealingBundle, verifySealingBundle } from './sealing-bundle.mjs';
+export { sealingModules } from './sealing-bundle.mjs';
 const require = createRequire(import.meta.url);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const runtime = join(root, '.factory/private/native-questionnaire-integration/runtime-2026-10-10-q4f');
 // The frozen q4f runtime only contains the schema-2 (admin-file) sealer. Schema-3 sealing and its
-// runtime verifier come from the current source build, pinned by the reviewed preparation receipt.
+// runtime verifier are bundled with their full dependency closure in the reviewed preparation.
 export const sealingBuild = join(root, '.qualification-build');
-export const sealingModules = Object.freeze(['packages/clinic-api/src/deployment-qualification.js', 'packages/clinic-api/src/runtime.js']);
-async function sealingPins() { const pins = {}; for (const path of sealingModules) pins[path] = sha(await readFile(join(sealingBuild, path))); return pins; }
+const sealingHelperPath = fileURLToPath(new URL('./sealing-bundle.mjs', import.meta.url));
 export const artifact = join(root, 'infra/cloud/.private/clinic-q4f-continuation-20261010-a2');
 const manifestPin = 'e0212437c9f6923e7d4cc2fe3b630a63baa26712c728db763181213840db3996';
 const originalQualifierPin = '9f117c7dbec7ff2255cd282d5911b810dbd500b5736df2053e7abc93e1c3648a';
@@ -57,7 +58,8 @@ export async function prepare() {
   await writeFile(join(artifact, 'clinic-native-mapping.cjs'), mappingBytes, { flag: 'wx', mode: 0o600 });
   const bytes = Buffer.from(successor(original.toString(), join(artifact, 'clinic-native-mapping.cjs')));
   await writeFile(join(artifact, 'conditional-clinic.cjs'), bytes, { flag: 'wx', mode: 0o600 });
-  const receipt = { schema: 1, state: 'source-only-successor-awaiting-independent-review', runtimeManifestSha256: manifestPin, originalQualifierSha256: originalQualifierPin, continuationHelperSha256: sha(await readFile(fileURLToPath(import.meta.url))), sealingModuleSha256: await sealingPins(), mappingSha256: sha(mappingBytes), qualifierSuccessorSha256: sha(bytes), priorEvidenceSha256: priorPin, frozenFilesChanged: 0, providerCalls: 0, cloudCalls: 0 };
+  const sealingBundle = await prepareSealingBundle(sealingBuild, artifact);
+  const receipt = { schema: 1, state: 'source-only-successor-awaiting-independent-review', runtimeManifestSha256: manifestPin, originalQualifierSha256: originalQualifierPin, continuationHelperSha256: sha(await readFile(fileURLToPath(import.meta.url))), sealingHelperSha256: sha(await readFile(sealingHelperPath)), sealingBundle, mappingSha256: sha(mappingBytes), qualifierSuccessorSha256: sha(bytes), priorEvidenceSha256: priorPin, frozenFilesChanged: 0, providerCalls: 0, cloudCalls: 0 };
   await writeFile(join(artifact, 'preparation.json'), JSON.stringify(receipt, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
   return receipt;
 }
@@ -132,7 +134,8 @@ export async function run(planPath) {
   const prep = JSON.parse(prepBytes);
   for (const [file, pin] of [['conditional-clinic.cjs', prep.qualifierSuccessorSha256], ['clinic-native-mapping.cjs', prep.mappingSha256]]) if (sha(await readFile(join(artifact, file))) !== pin) failure('reviewed-successor-diff');
   if (sha(await readFile(fileURLToPath(import.meta.url))) !== prep.continuationHelperSha256) failure('reviewed-continuation-helper-diff');
-  const sealingPinned = await sealingPins(); if (sealingModules.some(path => !/^[a-f0-9]{64}$/.test(prep.sealingModuleSha256?.[path] ?? '') || prep.sealingModuleSha256[path] !== sealingPinned[path])) failure('reviewed-sealing-module-diff');
+  if (sha(await readFile(sealingHelperPath)) !== prep.sealingHelperSha256) failure('reviewed-sealing-helper-diff');
+  const sealingBundlePath = await verifySealingBundle(prep.sealingBundle, artifact);
   const inputs = {};
   for (const name of ['priorEvidence', 'config', 'users']) { const bytes = await privateBytes(plan.paths[name]); if (sha(bytes) !== plan.pins[name]) failure('private-input-diff'); inputs[name] = JSON.parse(bytes); }
   validatePrior(inputs.priorEvidence);
@@ -140,8 +143,7 @@ export async function run(planPath) {
   if (config.medplumBaseUrl !== target.origin + '/' || config.projectId !== target.projectId || config.clientId !== target.clientId || config.storageQualification || !config.nativeQuestionnaire) failure('exact-native-config-required');
   const emitted = join(runtime, '.qualification-build'), load = path => require(join(emitted, path));
   const { digest } = load('packages/clinical-core/src/domain.js'), { qualifyConditionalMedplum } = load('packages/clinical-core/src/qualification.js'), { MedplumClient } = load('packages/clinical-core/src/medplum.js');
-  const sealing = path => require(join(sealingBuild, path));
-  const { observeRuntimeProjection, sealDeploymentQualification } = sealing('packages/clinic-api/src/deployment-qualification.js'), { runtimeProvider } = sealing('packages/clinic-api/src/runtime.js');
+  const { observeRuntimeProjection, sealDeploymentQualification, runtimeProvider } = require(sealingBundlePath);
   const { staffAuthentication } = load('packages/clinic-api/src/auth.js'), { cookies } = load('packages/clinic-api/src/cookies.js');
   load('packages/clinic-api/src/deployment-probes.js').assertDeploymentStaffRoster(config, users);
   const output = resolve(root, plan.output); if (!output.startsWith(artifact + '/') || await realpath(dirname(output)) !== dirname(output)) failure('exclusive-private-output-required');
