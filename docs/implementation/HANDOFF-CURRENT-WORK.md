@@ -115,7 +115,7 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | D-g | Mobile layout check | not started |
 | D-h | Secret rotation + one-time calibration + re-qualify before 2026-10-21 | blocked: needs local/owner; no live calls authorized for this continuation |
 | D-i | Docs: OPUS-HANDOFF, DEMO-TESTING-GUIDE, CLOUD-CLINIC | not started |
-| D-j | Free text at a guided choice repeats the choice | not started (start after D-b lands; both may touch conversation flow) |
+| D-j | Free text at a guided choice repeats the choice | done `6dbc672`: explicit choice confirmation, retained source/question, PHQ buttons-only; all six gates pass. |
 | D-k | Crisis phrasing coverage **[digest]** | blocked: needs local/owner; hold for bundled re-qualification and owner phrase review |
 | D-l | PHQ-4 live/mock coverage | not started |
 | D-m | **Pre-/post-visit native guided crash without context** (see bug table) | done `63a1483`: runtime-only active prompt routing; four original regressions pass with unchanged expectations; all six gates pass. |
@@ -156,8 +156,8 @@ overview file.
 | T1.4a | same | Post-visit with no context: `W04.followup.1` fails the same way (`native-questionnaire.ts:930`). Fix: D-m. | fixed `63a1483`. |
 | T1.4a | same | Pre-visit with context: the W02 `logistics` slot lists `S01a` first, which throws `context-fallback-inactive` (`scenarios.ts:26`, guard `native-questionnaire.ts:1065`). Fix: D-m. | fixed `63a1483`. |
 | T1.4a | same | Pre-visit with context: `W02.followup.1` shows unfilled `[previously reported item]` / `[date]` to the patient (`content.ts:958`). Fix: T3.9 (D-m may hide the prompt in the meantime). | fixed `63a1483`; unavailable prior-item prompt remains hidden pending T3.9. |
-| T1.4b | `packages/clinic-api/test/workflow-voice.test.ts` | Billing and scheduling accept a confirmed-transcript choice without explicit choice confirmation (two expected failures). Fix: D-j. | — |
-| T1.4b / independent review | same | Q16 MH01–MH04 accept speech with a valid voice or control confirmation payload despite buttons-only D4 (eight expected failures). Fix: D-j; retain exact PHQ wording and direct button scoring. | — |
+| T1.4b | `packages/clinic-api/test/workflow-voice.test.ts` | Billing and scheduling accept a confirmed-transcript choice without explicit choice confirmation (two expected failures). Fix: D-j. | fixed `6dbc672`; original expectations unchanged. |
+| T1.4b / independent review | same | Q16 MH01–MH04 accept speech with a valid voice or control confirmation payload despite buttons-only D4 (eight expected failures). Fix: D-j; retain exact PHQ wording and direct button scoring. | fixed `6dbc672`; original expectations unchanged. |
 
 Additional defects found by the bounded D-d static review (regression tests still needed):
 
@@ -546,3 +546,24 @@ install; the documented structural validator fallback checks emitted R4 invarian
 This is a new-pack draft authoring export, not a standalone clinical form: trusted
 Corvo evidence/routing controls and completeness assessment remain required. Adult
 intake export is explicitly rejected; native publisher/digest/count pins are unchanged.
+
+D-j `6dbc672` passed fresh GPT-6.1 Sol xhigh review and the final full six-command
+run: foundation **139 / 2148**, clinic **17 / 333**, hosting **1 / 29**, all three
+typechecks. Logs: `/workspace/scratch/unfiltered-validation/dj-rerun-{0..6}.log`.
+All ten T1.4b expected failures are ordinary passes with their expectations unchanged.
+Unmatched sources retain the displayed authored question without a duplicate assistant
+turn; typed or button recovery retains original speech and screens it for safety. PHQ
+rejects speech/control bypasses throughout the browser voice lifecycle and API. Legacy
+voice-provenance tests now exercise a non-PHQ choice; direct PHQ button scoring/replay
+assertions remain. Real local browser choice confirmation and render timing evidence
+was recorded in `choice-browser*`; no live-provider result is claimed.
+
+The first D-j full run failed one existing real-deadline transport case: the mock's
+headers arrived about 663 ms after dispatch against a 500 ms adaptive budget, returning
+`extraction-outcome-unknown`/partial despite completed provider execution. Its mock
+dynamically imports AJV and compiles the request schema inside that timed callback.
+No competing agent checks were running. The unchanged three-mode isolated diagnostic
+passed, then the unchanged candidate passed all six full checks. No assertion, deadline,
+worker setting or historical fixture changed. Logs `dj-1.log` and
+`dj-transport-diagnostic.log` preserve the failed run and diagnosis; this is not labelled
+flaky or erased by the successful rerun.
