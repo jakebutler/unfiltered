@@ -277,12 +277,12 @@ describe('native questionnaire integration and recovery boundaries', () => {
       draft = c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: prompt.id, action: 'answer', text });
     }
     expect(c.view(draft).completeness).toBe('complete');
-    draft = c.select(draft, 'Q16', 'MH01');
+    draft = c.select(draft, 'Q06', 'conditions.diabetes');
     draft = c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: c.view(draft).currentPrompt!.id, action: 'answer', text: 'I am fine', choiceTranscriptOnly: true, channel: 'unreviewed-transcript' });
     const raw = draft.turns.at(-1)!; expect(c.view(draft).completeness).toBe('partial');
-    draft = c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: c.view(draft).currentPrompt!.id, action: 'answer', text: '1', channel: 'confirmed-transcript', choiceConfirmation: { optionTranscript: 'Several days.', confirmationTranscript: 'Yes.', confirmationMethod: 'voice' } });
+    draft = c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: c.view(draft).currentPrompt!.id, action: 'answer', text: '__negative', channel: 'confirmed-transcript', choiceConfirmation: { optionTranscript: 'None / no', confirmationTranscript: 'Yes.', confirmationMethod: 'voice' } });
     expect(c.view(draft).completeness).toBe('complete');
-    const preview = await c.preview(draft); expect(preview.confirmation.submission.sources).toEqual(expect.arrayContaining([expect.objectContaining({ id: raw.id, channel: 'unreviewed-transcript', displayedPromptId: 'Q16:MH01' })]));
+    const preview = await c.preview(draft); expect(preview.confirmation.submission.sources).toEqual(expect.arrayContaining([expect.objectContaining({ id: raw.id, channel: 'unreviewed-transcript', displayedPromptId: 'Q06:conditions.diabetes' })]));
     expect(preview.confirmation.submission.questionnaireCapture!.unreviewedSourceIds).not.toContain(raw.id);
     expect((await planHandoff(preview.confirmation)).components[1].resource.status).toBe('completed');
   }, 15000);

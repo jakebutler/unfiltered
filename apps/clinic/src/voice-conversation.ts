@@ -1,5 +1,6 @@
 import type { AdaptiveOperationView, AdaptiveTurnResult, ClinicSessionView, PromptView } from '../../../packages/clinic-contract/src/index';
 import { exactChoiceConfirmation, exactSpokenChoice, type VoiceChoiceCandidate } from './choice-voice';
+import { isScreeningChoicePrompt } from '../../../packages/clinic-contract/src/guided-choice';
 import type { RecognitionSegment } from '../../../packages/speech/src/index';
 import type { CaptureScope } from './voice-capture';
 
@@ -77,14 +78,16 @@ export class VoiceConversation {
   constructor(private ports: ConversationVoicePorts, private clock = browserClock) {}
   private set(status: ConversationVoiceState['status'], message = '') { this.state = { active: !['off', 'paused'].includes(status), status, message, ...(this.choice ? { choice: this.choice.candidate } : {}) }; this.ports.changed(this.state); }
   private clearTimers() { this.clock.clear(this.grace); this.clock.clear(this.idle); this.grace = undefined; this.idle = undefined; }
+  private screening(context: ConversationVoiceContext) { return Boolean(context.choicePrompt && isScreeningChoicePrompt(context.choicePrompt) || context.scope && isScreeningChoicePrompt({ id: context.scope.promptId })); }
   start() {
     if (this.state.active) return;
     const context = this.ports.context();
-    if (!context.eligible || context.blocked || !context.scope) { this.set('paused', context.pauseReason || 'Check the current question and saved status before resuming voice.'); return; }
+    if (!context.eligible || context.blocked || !context.scope || this.screening(context)) { this.set('paused', context.pauseReason || 'Check the current question and saved status before resuming voice.'); return; }
     if (this.submitted.has(context.scope.requestId)) { this.set('paused', 'Review or clear the unsent answer before starting another conversation turn.'); return; }
     this.generation++; this.awaiting = undefined; this.interpretation = undefined; this.begin(context);
   }
   private begin(context: ConversationVoiceContext) {
+    if (this.screening(context)) { this.stop('Choose an answer with the buttons for this screening question.'); return; }
     this.clearTimers(); this.scope = context.scope; this.finals.clear(); this.latestFinalEnd = -1; this.latestFinalText = ''; this.endpointEnd = undefined; this.heardVoice = false; this.startingSpeech = false;
     this.set('connecting', 'Connecting the microphone…'); this.ports.startCapture();
   }
@@ -128,6 +131,7 @@ export class VoiceConversation {
   private finalText() { return [...this.finals.values()].sort((a, b) => a.start - b.start).map(segment => segment.text.trim()).filter(Boolean).join(' '); }
   private valid(scope: CaptureScope) { return this.state.active && sameScope(scope, this.scope) && sameScope(scope, this.ports.context().scope); }
   event(event: CaptureEvent) {
+    if (this.state.active && this.screening(this.ports.context())) { this.stop('Choose an answer with the buttons for this screening question.'); return; }
     if (!this.valid(event.scope)) return;
     if (event.type === 'interrupted') { this.stop(event.reason); return; }
     if (event.type === 'ready') {
@@ -220,6 +224,7 @@ export class VoiceConversation {
   }
   async confirmChoice(method: 'voice' | 'control', transcript = '') {
     const selected = this.choice, context = this.ports.context();
+    if (this.screening(context)) { if (this.state.active) this.stop('Choose an answer with the buttons for this screening question.'); return; }
     if (!selected || !this.state.active || this.state.status === 'saving' || context.blocked || !context.eligible
       || context.scope?.sessionId !== selected.scope.sessionId || context.scope.promptId !== selected.scope.promptId || context.scope.expectedRevision !== selected.scope.expectedRevision
       || this.submitted.has(selected.scope.requestId) || method === 'voice' && exactChoiceConfirmation(transcript) !== 'confirm') return;
@@ -263,7 +268,7 @@ export class VoiceConversation {
   reconcile() {
     if (!this.state.active) return;
     const context = this.ports.context();
-    if (!context.eligible) { this.stop(context.pauseReason || 'Voice is paused. Review your answers or use the choices for this question.'); return; }
+    if (!context.eligible || this.screening(context)) { this.stop(context.pauseReason || 'Voice is paused. Review your answers or use the choices for this question.'); return; }
     if (this.choiceCapturePending) {
       if (context.blocked) return;
       if (!context.scope || !this.scope || context.scope.sessionId !== this.scope.sessionId || context.scope.promptId !== this.scope.promptId || context.scope.expectedRevision !== this.scope.expectedRevision) { this.stop('The question changed. This choice remains unsaved.'); return; }

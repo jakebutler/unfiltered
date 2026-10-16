@@ -231,13 +231,19 @@ export function createClinicHandler(config: ClinicApiConfig, options: {
                 const next = timing.measure('dialogue', () => adaptive.dialogue(content.turn(guidedDraft, input as TurnInput)));
                 next.requests[input.requestId] = { fingerprint, revision: d.revision + 1 };
                 // Guided free text gets the same synchronous safety gate before the next question is shown.
-                const source = next.turns.find(turn => turn.role === 'patient' && !d.turns.some(prior => prior.id === turn.id));
+                const newSources = next.turns.filter(turn => turn.role === 'patient' && !d.turns.some(prior => prior.id === turn.id));
                 // A spoken reply that could not fill a choice is still the patient's own words, so it is reviewed too.
                 // Structured field answers are the patient's words too; bare numbers need no review.
+                const recoveredSpeech = input.channel === 'text' ? input.priorChoiceTranscript : undefined;
+                const source = newSources.find(turn => !recoveredSpeech || turn.channel !== 'unreviewed-transcript');
                 const typed = input.text ?? Object.values(input.fields ?? {}).join(' ');
                 const freeText = input.action === 'answer' && /\p{L}/u.test(typed) && !typed.startsWith('__') && !content.view(guidedDraft).currentPrompt?.choices?.some(choice => choice.value === input.text);
-                const gated = source && freeText && !next.safety?.paused ? await timing.phase('safety', () => safety.gate(p.r.client, next, source.id)).catch(() => undefined) : undefined;
-                if (gated) applyGateOutcome(next, gated.entry, gated.signal, gated.unsaved);
+                const gateSources = [...(recoveredSpeech ? newSources.filter(turn => turn.channel === 'unreviewed-transcript') : []), ...(source && freeText ? [source] : [])];
+                for (const candidate of gateSources) {
+                    if (next.safety?.paused) break;
+                    const gated = await timing.phase('safety', () => safety.gate(p.r.client, next, candidate.id)).catch(() => undefined);
+                    if (gated) applyGateOutcome(next, gated.entry, gated.signal, gated.unsaved);
+                }
                 return reply(view(await timing.phase('store', () => persist(p.r, p.stored, next))));
             }
             if (path === '/api/clinic/topics' && request.method === 'POST') {

@@ -17,6 +17,7 @@ const sourceSchema = z.object({
   channel: z.enum(['text', 'confirmed-transcript', 'unreviewed-transcript']).optional(),
   corrects: id.optional(),
   displayedPromptId: z.string().min(1).max(400).optional(),
+  displayedPromptText: z.string().min(1).max(8000).optional(),
   recording: z.object({ reference: reference('DocumentReference'), startMs: z.number().int().nonnegative(), endMs: z.number().int().positive() }).strict().optional(),
 }).strict();
 const answerSchema = z.object({

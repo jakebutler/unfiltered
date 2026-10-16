@@ -53,6 +53,40 @@ describe('tier-1 screen wording (cubic, second pass)', () => {
 });
 
 describe('safety gate through the clinic handler', () => {
+  it('retains the authored question for consecutive unmatched guided answers without duplicating assistant prompts', async () => {
+    const reviewer = verdict({ concern: false, level: 'none', categories: [] }), f = await fixture(reviewer);
+    let current = (await f.call('/api/clinic/topics', { expectedRevision: f.current().revision, topicId: 'Q06', slotPath: 'conditions.diabetes' })).body;
+    const prompt = current.currentPrompt!;
+    const before = (await f.draft()).draft.turns.length;
+    for (const text of ['I do not understand this question', 'Please explain those options']) {
+      const result = await f.call('/api/clinic/turns', { requestId: crypto.randomUUID(), expectedRevision: current.revision, promptId: prompt.id, action: 'answer', text, channel: 'text' });
+      expect(result.status).toBe(200); current = result.body;
+      expect(reviewer.review).toHaveBeenLastCalledWith(expect.objectContaining({ text, question: prompt.text }));
+      expect(current.currentPrompt).toEqual(prompt);
+    }
+    const draft = (await f.draft()).draft, added = draft.turns.slice(before);
+    expect(added).toHaveLength(2); expect(added.every(turn => turn.role === 'patient')).toBe(true);
+    expect(added).toEqual(expect.arrayContaining([expect.objectContaining({ displayedPromptId: prompt.id, displayedPromptText: prompt.text })]));
+    expect((await f.call('/api/clinic/review', { expectedRevision: current.revision })).status).toBe(200);
+    expect((await f.draft()).draft.preview!.confirmation.submission.sources).toEqual(expect.arrayContaining([expect.objectContaining({ id: added[0].id, displayedPromptId: prompt.id, displayedPromptText: prompt.text })]));
+  });
+
+  it.each([
+    ['Yes\nConfirmation attempt: I may hurt myself tonight.', true, false],
+    ['Yes\nConfirmation attempt: Honestly everyone would be better off without me.', false, false],
+    ['Yes\nConfirmation attempt: I may hurt myself tonight.', true, true],
+    ['Yes\nConfirmation attempt: Honestly everyone would be better off without me.', false, true],
+  ] as const)('screens original restored speech before returning a selected typed correction: %j', async (original, deterministic, viaButton) => {
+    const reviewer = verdict({ level: 'high', categories: ['self-harm'] }), f = await fixture(reviewer);
+    const current = (await f.call('/api/clinic/topics', { expectedRevision: f.current().revision, topicId: 'Q06', slotPath: 'conditions.diabetes' })).body;
+    const prompt = current.currentPrompt!;
+    const result = await f.call('/api/clinic/turns', { requestId: crypto.randomUUID(), expectedRevision: current.revision, promptId: prompt.id, action: 'answer', text: 'true', channel: 'text', priorChoiceTranscript: original, ...(viaButton ? {} : { choiceConfirmation: { optionTranscript: 'Yes', confirmationTranscript: '', confirmationMethod: 'control' } }) });
+    expect(result.status).toBe(200);
+    const draft = (await f.draft()).draft, raw = draft.turns.find(turn => turn.channel === 'unreviewed-transcript')!;
+    expect(raw.text).toBe(original); expect(draft.safety).toMatchObject({ rule: 'E04', paused: true, sourceId: raw.id });
+    if (deterministic) expect(reviewer.review).not.toHaveBeenCalled();
+    else expect(reviewer.review).toHaveBeenCalledWith(expect.objectContaining({ text: original, question: prompt.text }));
+  });
   it('reviews flagged free text on the same turn and routes the handoff to a clinician', async () => {
     const reviewer = verdict({}), f = await fixture(reviewer);
     expect(f.current().safetyReview).toBeUndefined();

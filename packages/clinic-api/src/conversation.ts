@@ -7,6 +7,7 @@ import { nativeCaptureComplete, nativeTopics, nativeScenarioTopics, nativeRoutin
 import { administrativeLogisticsSchema, type AdministrativeLogistics } from '../../clinical-core/src/domain.js';
 import { streamSpeechScopeDigest } from './adaptive-stream-session.js';
 import { choiceConfirmationSpeech, exactSpokenChoice, exactChoiceConfirmation } from '../../clinic-contract/src/choice-voice.js';
+import { chooseOptionInstruction, isGuidedChoicePrompt } from '../../clinic-contract/src/guided-choice.js';
 import { scorePhq4, scenarioTopics, guidedFieldForPath, aggregateTargets, applyGuidedAnswer, addCollectionItem, finishCollection, createClinicContent, diabetesBranchApplicability, evaluateTopic, nextGuidedField, parseGuidedValue, mentalHealthOptions, type GuidedField, type TopicDefinition, type TopicResponse, type SlotAnswer, type SlotAnswers, type SlotDefinition } from '../../clinic-content/src/index.js';
 import { canonicalJson, digest, confirmSubmission, unresolvedRecognitionSourceIds, type ContentContract, type Submission, type SufficiencyAssessment } from '../../clinical-core/src/domain.js';
 import { administrativeChoiceLabels, conversationSpeech } from '../../clinic-contract/src/index.js';
@@ -293,7 +294,7 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
             throw new ApiFailure('stale-prompt', 409, true);
         const speech = input.channel === 'confirmed-transcript' || input.channel === 'unreviewed-transcript';
         if (input.expectedRevision !== d.revision) throw new ApiFailure('stale-session', 409);
-        if (speech && input.action === 'answer' && /^MH0[1-4]$/.test(c.field.path) && !input.choiceConfirmation && !input.choiceTranscriptOnly) throw new ApiFailure('explicit-screening-choice-required', 409);
+        if ((speech || input.choiceConfirmation) && input.action === 'answer' && /^MH0[1-4]$/.test(c.field.path) && !input.choiceTranscriptOnly) throw new ApiFailure('explicit-screening-choice-required', 409);
         const p = prompt(n)!, id = crypto.randomUUID(), last = n.turns.at(-1), now = new Date(Math.max(Date.now(), last ? Date.parse(last.at) + 1 : 0)).toISOString();
         let text = input.text?.trim() ?? input.fields?.value?.trim() ?? '';
         const normalListing = c.field.kind === 'collection' && input.action === 'answer' && ['__add', '__done'].includes(text);
@@ -303,23 +304,32 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
           ? n.turns.filter(t => t.role === 'patient' && t.channel === 'unreviewed-transcript' && t.displayedPromptId === c.topic.id + ':' + c.field.path && t.text.trim() !== input.text!.trim() && !n.turns.some(later => later.channel === 'confirmed-transcript' && later.displayedPromptId === t.displayedPromptId && Date.parse(later.at) > Date.parse(t.at))).at(-1)?.id : undefined;
         const prior = normalListing || input.choiceTranscriptOnly ? undefined : rows(c.topic.slots, effective(n).responses[c.topic.id]?.answers ?? {}).find(r => r.id === c.field.path)?.sourceIds.at(-1) ?? unreviewedRaw;
         const selected = p.choices?.find(x => x.value === text);
+        const choiceOnly = isGuidedChoicePrompt(p);
+        if (choiceOnly && input.action === 'answer' && input.channel === 'confirmed-transcript' && !input.choiceConfirmation && !input.choiceTranscriptOnly) throw new ApiFailure('explicit-choice-confirmation-required', 409);
         if (input.choiceTranscriptOnly && (input.action !== 'answer' || input.channel !== 'unreviewed-transcript' || !p.choices?.length || !input.text?.trim() || input.choiceConfirmation || input.fields)) throw new ApiFailure('invalid-choice-transcript');
-        if (input.priorChoiceTranscript && (!input.choiceTranscriptOnly || !exactSpokenChoice(p, input.priorChoiceTranscript))) throw new ApiFailure('invalid-choice-transcript');
         const confirmation = input.choiceConfirmation;
-        if (confirmation && (input.action !== 'answer' || input.channel !== 'confirmed-transcript' || !selected
+        const typedCorrection = choiceOnly && input.channel === 'text' && input.action === 'answer' && Boolean(input.priorChoiceTranscript);
+        if (input.priorChoiceTranscript && !(input.choiceTranscriptOnly && exactSpokenChoice(p, input.priorChoiceTranscript) || typedCorrection)) throw new ApiFailure('invalid-choice-transcript');
+        if (confirmation && (input.action !== 'answer' || !(input.channel === 'confirmed-transcript' || input.channel === 'text' && confirmation.confirmationMethod === 'control') || !selected
           || exactSpokenChoice(p, confirmation.optionTranscript)?.value !== selected.value
           || confirmation.confirmationMethod === 'voice' && exactChoiceConfirmation(confirmation.confirmationTranscript) !== 'confirm'
           || confirmation.confirmationMethod === 'control' && confirmation.confirmationTranscript !== '')) throw new ApiFailure('explicit-choice-confirmation-required', 409);
         const confirmationId = confirmation ? `confirmation-${id}` : undefined;
+        const answerSourceIds = confirmationId ? [id, confirmationId] : [id];
+        const safetyCandidates = [...(typedCorrection ? [{ sourceId: `initial-${id}`, text: input.priorChoiceTranscript! }] : []), { sourceId: id, text }];
         // Speech source text stays verbatim; interpreted field values remain separate below.
-        const sourceText = speech && input.action === 'answer' && input.text !== undefined ? confirmation?.optionTranscript ?? input.text : input.action === 'answer' ? `${c.field.label}: ${selected?.label ?? text}${input.fields?.feet ? ` (${input.fields.feet} ft ${input.fields.inches ?? ''} in)` : ''}` : `${c.field.label}: ${input.action === 'move-on' ? 'Move on from this topic' : input.action === 'unknown' ? "I don't know" : 'Prefer not to answer'}`;
-        n.turns.push({ id: `p-${id}`, role: 'assistant', text: speech && p.choices?.length ? conversationSpeech({ currentPrompt: p })!.text : p.text, at: now }, { id, role: 'patient', text: sourceText, at: now, channel: input.channel ?? 'text', ...(speech ? { displayedPromptId: p.id } : {}), ...(prior ? { corrects: prior } : {}) });
+        const unselectedChoice = choiceOnly && input.action === 'answer' && !selected;
+        const sourceText = confirmation?.optionTranscript ?? (speech && input.action === 'answer' && input.text !== undefined ? input.text : unselectedChoice ? input.text ?? text : input.action === 'answer' ? `${c.field.label}: ${selected?.label ?? text}${input.fields?.feet ? ` (${input.fields.feet} ft ${input.fields.inches ?? ''} in)` : ''}` : `${c.field.label}: ${input.action === 'move-on' ? 'Move on from this topic' : input.action === 'unknown' ? "I don't know" : 'Prefer not to answer'}`);
+        if (!unselectedChoice) n.turns.push({ id: `p-${id}`, role: 'assistant', text: speech && p.choices?.length ? conversationSpeech({ currentPrompt: p })!.text : p.text, at: now });
+        if (typedCorrection && input.priorChoiceTranscript) n.turns.push({ id: `initial-${id}`, role: 'patient', text: input.priorChoiceTranscript, at: now, channel: 'unreviewed-transcript', displayedPromptId: p.id, displayedPromptText: p.text });
+        n.turns.push({ id, role: 'patient', text: sourceText, at: now, channel: input.channel ?? 'text', ...(speech || confirmation || unselectedChoice ? { displayedPromptId: p.id } : {}), ...(unselectedChoice ? { displayedPromptText: p.text } : {}), ...(prior ? { corrects: prior } : {}) });
         if (confirmation && confirmationId) n.turns.push(
-          { id: `prompt-${confirmationId}`, role: 'assistant', text: choiceConfirmationSpeech(p, selected!.value)!, at: now },
+          { id: `prompt-${confirmationId}`, role: 'assistant', text: speech ? choiceConfirmationSpeech(p, selected!.value)! : `You chose: ${selected!.label}. Confirm this choice to save it.`, at: now },
           { id: confirmationId, role: 'patient', text: confirmation.confirmationMethod === 'voice' ? confirmation.confirmationTranscript : 'Confirmed the displayed choice using Confirm choice.', at: now, channel: confirmation.confirmationMethod === 'voice' ? 'confirmed-transcript' : 'text', displayedPromptId: p.id });
         const ev = evidence(n);
         let r = { ...(n.topics[c.topic.id] ?? { presented: false, answers: {} }), presented: true };
-        const rule = input.action === 'answer' ? escalation(text) : undefined;
+        const ruleSource = input.action === 'answer' ? safetyCandidates.find(candidate => escalation(candidate.text)) : undefined;
+        const rule = ruleSource ? escalation(ruleSource.text) : undefined;
         if (input.choiceTranscriptOnly) {
             if (input.priorChoiceTranscript) n.turns.push({ id: `initial-${id}`, role: 'patient', text: input.priorChoiceTranscript, at: now, channel: 'unreviewed-transcript', displayedPromptId: p.id });
             const candidateRule = escalation(input.text!);
@@ -332,18 +342,30 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
             return synchronize(n);
         }
         // Tier 1 and scoped floor hits on free text (never a selected choice) become a signal for the model gate.
-        const screen = !rule && input.action === 'answer' && !selected && !text.startsWith('__') ? safetySignalSeed(input.text ?? text) : undefined;
-        if (screen) n.safetySignals = [...(n.safetySignals ?? []), { id: crypto.randomUUID(), sourceId: id, categories: screen.categories, terms: screen.terms, at: now, version: screen.version, ...(screen.floor ? { floor: screen.floor } : {}) }];
+        for (const candidate of safetyCandidates) {
+            const screen = !rule && input.action === 'answer' && (!selected || candidate.sourceId !== id) && !candidate.text.startsWith('__') ? safetySignalSeed(candidate.text) : undefined;
+            if (screen) n.safetySignals = [...(n.safetySignals ?? []), { id: crypto.randomUUID(), sourceId: candidate.sourceId, categories: screen.categories, terms: screen.terms, at: now, version: screen.version, ...(screen.floor ? { floor: screen.floor } : {}) }];
+        }
+        if (unselectedChoice || choiceOnly && input.action === 'answer' && input.channel === 'unreviewed-transcript') {
+            if (rule) {
+                n.safety = { rule, version: safetyVersion, sourceId: ruleSource!.sourceId, text: escalationCopy[rule], at: now, paused: true };
+                r = { ...r, stopped: 'safety-interruption' };
+            } else n.notice = { tone: 'info', text: chooseOptionInstruction };
+            n.topics[c.topic.id] = r;
+            delete n.preview; n.phase = 'conversation';
+            return synchronize(n);
+        }
+        if (n.notice?.text === chooseOptionInstruction) delete n.notice;
         if (rule)
             r = { ...r, stopped: 'safety-interruption' };
         else if (c.field.path === '__applicability')
-            r = { ...r, applicability: input.action === 'answer' && text === '__applicable' ? 'applicable' : input.action === 'answer' && text === '__topic-not-applicable' ? 'not-applicable' : 'unknown', applicabilitySourceIds: [id] };
+            r = { ...r, applicability: input.action === 'answer' && text === '__applicable' ? 'applicable' : input.action === 'answer' && text === '__topic-not-applicable' ? 'not-applicable' : 'unknown', applicabilitySourceIds: answerSourceIds };
         else if (input.action === 'move-on')
             r = { ...r, stopped: 'patient-moves-on' };
         else if (input.action === 'answer' && c.field.kind === 'collection' && text === '__add')
-            r = addCollectionItem(c.topic, r, { path: c.field.path, itemId: `i${id.replaceAll('-', '').slice(0, 12)}`, sourceIds: [id] }, ev);
+            r = addCollectionItem(c.topic, r, { path: c.field.path, itemId: `i${id.replaceAll('-', '').slice(0, 12)}`, sourceIds: answerSourceIds }, ev);
         else if (input.action === 'answer' && c.field.kind === 'collection' && text === '__done')
-            r = finishCollection(c.topic, r, { path: c.field.path, sourceIds: [id] }, ev);
+            r = finishCollection(c.topic, r, { path: c.field.path, sourceIds: answerSourceIds }, ev);
         else {
             if (input.action === 'answer' && scenarioForWorkflowTopic(c.topic.id)?.behaviour?.dateSlotIds?.includes(c.field.path) && (!/^\d{4}-\d{2}-\d{2}$/.test(text) || !Number.isFinite(Date.parse(text)) || new Date(text).toISOString().slice(0, 10) !== text))
                 throw new ApiFailure('invalid-logistics-date');
@@ -351,11 +373,11 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
             if (input.action === 'unknown' || input.action === 'decline')
                 a = { state: input.action === 'unknown' ? 'unknown' : 'declined', sourceIds: [id] };
             else if (text === '__uncertain')
-                a = { state: 'uncertain', sourceIds: [id], note: 'Patient is uncertain; not a confirmed diagnosis.' };
+                a = { state: 'uncertain', sourceIds: answerSourceIds, note: 'Patient is uncertain; not a confirmed diagnosis.' };
             else if (text === '__negative' || text === '__not-applicable')
-                a = { state: text === '__negative' ? 'negative' : 'not-applicable', sourceIds: [id], note: selected?.label };
+                a = { state: text === '__negative' ? 'negative' : 'not-applicable', sourceIds: answerSourceIds, note: selected?.label };
             else
-                a = { state: 'known', value: parseGuidedValue(c.field, c.field.kind === 'height-value' && input.fields?.feet ? { feet: input.fields.feet, inches: input.fields.inches ?? '' } : text), sourceIds: confirmationId ? [id, confirmationId] : [id] };
+                a = { state: 'known', value: parseGuidedValue(c.field, c.field.kind === 'height-value' && input.fields?.feet ? { feet: input.fields.feet, inches: input.fields.inches ?? '' } : text), sourceIds: answerSourceIds };
             r = applyGuidedAnswer(c.topic, r, { path: c.field.path, answer: a }, ev);
             if (c.field.path === 'currentWeightEstimate.value' && a.state === 'known')
                 r = { ...r, answers: { ...r.answers, 'currentWeightEstimate.statedAt': { state: 'known', value: now, sourceIds: [id] } } };
@@ -363,7 +385,7 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         if (input.action === 'decline')
             r = { ...r, stopped: 'patient-declines' };
         if (rule) {
-            n.safety = { rule, version: safetyVersion, sourceId: id, text: escalationCopy[rule], at: now, paused: true };
+            n.safety = { rule, version: safetyVersion, sourceId: ruleSource!.sourceId, text: escalationCopy[rule], at: now, paused: true };
             n.notice = { tone: rule === 'E05' ? 'attention' : 'urgent', text: escalationCopy[rule] + ' Your draft has not been sent. You can review and send a partial handoff, or leave now.' };
             r = { ...r, stopped: 'safety-interruption' };
         }
@@ -382,7 +404,7 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         return synchronize(n);
     }
     async function preview(d: Draft, confirmedAt = new Date().toISOString()) { requireNoPendingInterpretation(d); if (!d.turns.some(t => t.role === 'patient'))
-        throw new ApiFailure('answer-required-before-review'); const prepared = native ? await prepareFinalRepresentation(d, captureDefinitions(d), options.provisionalQualification, options.finalRepresentationQualification) : undefined; let representationAuthority: TrustedRepresentationAuthority | undefined; const tv = topics(d), requiredDefs = definitions(d), defs = [...requiredDefs, ...captureDefinitions(d).filter(topic => tv.some(view => view.id === topic.id) && !requiredDefs.some(required => required.id === topic.id))], scenario = register.scenarios[d.scenario]; const owners = [...new Set([...scenario.owners, ...(scenario.missingContextOwner ? [scenario.missingContextOwner] : []), ...(scenario.behaviour?.alwaysOwners ?? []), ...(d.safety || safetyReviewTopics(d).length ? ['medical' as const] : []), ...(d.safety?.rule === 'E05' ? ['nutrition' as const] : [])])]; const lg = scenario.behaviour?.logistics; const logistics: AdministrativeLogistics = { kind: lg?.kind ?? 'other' }; for (const detail of lg ? tv.find(topic => topic.id === scenario.workflowId)?.details ?? [] : []) { if (detail.state !== 'answered') continue; const candidate = administrativeLogisticsSchema.safeParse({ ...logistics, [detail.id]: detail.text }); if (candidate.success) Object.assign(logistics, candidate.data); } const s: Submission = { submissionId: d.id, version: d.version, patient: d.patient, scenario: d.scenario, contentVersion: `${register.provenance.version}.${register.mentalHealth}`, questionnaire: native ? `${NATIVE_QUESTIONNAIRE_CANONICAL}|${NATIVE_QUESTIONNAIRE_VERSION}` : `https://corvo.example/Questionnaire/clinic/${register.provenance.version}/${d.scenario}/${register.mentalHealth}`, confirmedAt, completeness: complete(d) ? 'complete' : 'partial', ...(d.prior ? { previous: { submissionId: d.id, ...d.prior } } : {}), sources: d.turns.filter(t => t.role === 'patient').map(t => ({ id: t.id, patient: d.patient, kind: t.corrects ? 'patient-correction' : 'patient-statement', text: t.text, capturedAt: t.at, ...(t.channel !== undefined ? { channel: t.channel } : {}), ...(t.corrects ? { corrects: t.corrects } : {}), ...(t.displayedPromptId ? { displayedPromptId: t.displayedPromptId } : {}) })), ...(owners.includes('admin') ? { administrativeLogistics: logistics } : {}), answers: tv.map(t => ({ questionId: t.id, state: t.answer?.state ?? 'not-asked', ...(t.answer ? { text: t.answer.text } : {}), sourceIds: t.answer?.sourceIds ?? [] })), work: owners.map(owner => { const responsibility = owner === 'admin' ? 'administrative' : owner; return { id: responsibility, kind: responsibility === 'administrative' ? 'administrative' : 'clinical', responsibility, owner: config.patients[d.scenario].careTeams[responsibility] }; }) }; if (native) s.questionnaireCapture = await buildNativeQuestionnaireCapture({ scenario: d.scenario, relevantTopicIds: effectiveRelevantTopicIds(d), topics: effective(d, true).responses, validSourceIds: evidence(d).validSourceIds, unreviewedSourceIds: [...new Set([...unresolvedRecognitionSourceIds(s.sources, effective(d, true).responses), ...unresolvedSources(d).map(source => source.sourceId)])], context: prepared ? deriveNativeRoutingContext(prepared.projection.responses, { validSourceIds: new Set(s.sources.filter(source => source.channel !== 'unreviewed-transcript').map(source => source.id)), reviewedFact: prepared.preparingAuthority.reviewedFact }, config.patients[d.scenario].nativeContext) : nativeContext(d), ...(prepared ? { representationAuthority: prepared.preparingAuthority } : {}), inactiveHistory: d.questionnaireHistory ?? d.confirmed?.confirmation.submission.questionnaireCapture?.inactiveHistory });
+        throw new ApiFailure('answer-required-before-review'); const prepared = native ? await prepareFinalRepresentation(d, captureDefinitions(d), options.provisionalQualification, options.finalRepresentationQualification) : undefined; let representationAuthority: TrustedRepresentationAuthority | undefined; const tv = topics(d), requiredDefs = definitions(d), defs = [...requiredDefs, ...captureDefinitions(d).filter(topic => tv.some(view => view.id === topic.id) && !requiredDefs.some(required => required.id === topic.id))], scenario = register.scenarios[d.scenario]; const owners = [...new Set([...scenario.owners, ...(scenario.missingContextOwner ? [scenario.missingContextOwner] : []), ...(scenario.behaviour?.alwaysOwners ?? []), ...(d.safety || safetyReviewTopics(d).length ? ['medical' as const] : []), ...(d.safety?.rule === 'E05' ? ['nutrition' as const] : [])])]; const lg = scenario.behaviour?.logistics; const logistics: AdministrativeLogistics = { kind: lg?.kind ?? 'other' }; for (const detail of lg ? tv.find(topic => topic.id === scenario.workflowId)?.details ?? [] : []) { if (detail.state !== 'answered') continue; const candidate = administrativeLogisticsSchema.safeParse({ ...logistics, [detail.id]: detail.text }); if (candidate.success) Object.assign(logistics, candidate.data); } const s: Submission = { submissionId: d.id, version: d.version, patient: d.patient, scenario: d.scenario, contentVersion: `${register.provenance.version}.${register.mentalHealth}`, questionnaire: native ? `${NATIVE_QUESTIONNAIRE_CANONICAL}|${NATIVE_QUESTIONNAIRE_VERSION}` : `https://corvo.example/Questionnaire/clinic/${register.provenance.version}/${d.scenario}/${register.mentalHealth}`, confirmedAt, completeness: complete(d) ? 'complete' : 'partial', ...(d.prior ? { previous: { submissionId: d.id, ...d.prior } } : {}), sources: d.turns.filter(t => t.role === 'patient').map(t => ({ id: t.id, patient: d.patient, kind: t.corrects ? 'patient-correction' : 'patient-statement', text: t.text, capturedAt: t.at, ...(t.channel !== undefined ? { channel: t.channel } : {}), ...(t.corrects ? { corrects: t.corrects } : {}), ...(t.displayedPromptId ? { displayedPromptId: t.displayedPromptId } : {}), ...(t.displayedPromptText ? { displayedPromptText: t.displayedPromptText } : {}) })), ...(owners.includes('admin') ? { administrativeLogistics: logistics } : {}), answers: tv.map(t => ({ questionId: t.id, state: t.answer?.state ?? 'not-asked', ...(t.answer ? { text: t.answer.text } : {}), sourceIds: t.answer?.sourceIds ?? [] })), work: owners.map(owner => { const responsibility = owner === 'admin' ? 'administrative' : owner; return { id: responsibility, kind: responsibility === 'administrative' ? 'administrative' : 'clinical', responsibility, owner: config.patients[d.scenario].careTeams[responsibility] }; }) }; if (native) s.questionnaireCapture = await buildNativeQuestionnaireCapture({ scenario: d.scenario, relevantTopicIds: effectiveRelevantTopicIds(d), topics: effective(d, true).responses, validSourceIds: evidence(d).validSourceIds, unreviewedSourceIds: [...new Set([...unresolvedRecognitionSourceIds(s.sources, effective(d, true).responses), ...unresolvedSources(d).map(source => source.sourceId)])], context: prepared ? deriveNativeRoutingContext(prepared.projection.responses, { validSourceIds: new Set(s.sources.filter(source => source.channel !== 'unreviewed-transcript').map(source => source.id)), reviewedFact: prepared.preparingAuthority.reviewedFact }, config.patients[d.scenario].nativeContext) : nativeContext(d), ...(prepared ? { representationAuthority: prepared.preparingAuthority } : {}), inactiveHistory: d.questionnaireHistory ?? d.confirmed?.confirmation.submission.questionnaireCapture?.inactiveHistory });
         if (prepared && s.questionnaireCapture) {
             representationAuthority = await prepared.bind(s.contentVersion, s.questionnaireCapture);
             if (!representationAuthority) s.questionnaireCapture = await buildNativeQuestionnaireCapture({ scenario: d.scenario, relevantTopicIds: effectiveRelevantTopicIds(d), topics: effective(d, true).responses, validSourceIds: evidence(d).validSourceIds, unreviewedSourceIds: [...new Set([...unresolvedRecognitionSourceIds(s.sources, effective(d, true).responses), ...unresolvedSources(d).map(source => source.sourceId)])], context: nativeContext(d), inactiveHistory: d.questionnaireHistory });

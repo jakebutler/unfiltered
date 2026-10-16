@@ -155,8 +155,7 @@ describe('W05 billing and W06 scheduling choice slots by voice', () => {
     expect(before.turns).toEqual([]);
   });
 
-  it.fails('a spoken answer without an explicit confirmation does not store a choice value on W06 preferredDay', async () => {
-    // BUG: the missing-confirmation guard applies only to PHQ items, so scheduling also accepts an unconfirmed raw choice value.
+  it('a spoken answer without an explicit confirmation does not store a choice value on W06 preferredDay', async () => {
     const f = await fixture('scheduling', select('scheduling', 'W06', 'preferredDay')), prompt = f.current();
     expect(() => content.turn(f.draft(), {
       requestId: crypto.randomUUID(), expectedRevision: f.draft().revision, promptId: prompt.id,
@@ -164,8 +163,7 @@ describe('W05 billing and W06 scheduling choice slots by voice', () => {
     })).toThrow('explicit-choice-confirmation-required');
   });
 
-  // BUG: a confirmed-transcript answer whose text is the raw stored value ("bill-question") is accepted and saved as a known choice with no explicit confirmation; PHQ items throw explicit-choice-confirmation-required for the same channel.
-  it.fails('a spoken answer without an explicit confirmation does not store a choice value on W05 issueType', async () => {
+  it('a spoken answer without an explicit confirmation does not store a choice value on W05 issueType', async () => {
     const f = await fixture('billing', d => select('billing', 'W05', 'issueType')(d));
     const prompt = content.view(f.draft(), true, true).currentPrompt!;
     const input = { requestId: crypto.randomUUID(), expectedRevision: f.draft().revision, promptId: prompt.id, action: 'answer' as const, text: 'bill-question', channel: 'confirmed-transcript' as const };
@@ -202,8 +200,7 @@ describe('PHQ-4 items remain buttons-only in every scenario that reaches them', 
     }
   });
 
-  it.fails.each(['MH01', 'MH02', 'MH03', 'MH04'])('non-visit %s rejects a spoken PHQ label even with a separate voice confirmation', async item => {
-    // BUG: choiceConfirmation bypasses the PHQ speech guard, so a spoken label plus Yes records a numeric screening answer despite buttons-only policy.
+  it.each(['MH01', 'MH02', 'MH03', 'MH04'])('non-visit %s rejects a spoken PHQ label even with a separate voice confirmation', async item => {
     const f = await fixture('non-visit', nonVisitPhq(item)), before = f.draft(), prompt = f.current();
     expect(() => content.turn(before, {
       requestId: crypto.randomUUID(), expectedRevision: before.revision, promptId: prompt.id,
@@ -213,8 +210,7 @@ describe('PHQ-4 items remain buttons-only in every scenario that reaches them', 
     expect(before.topics.Q16.answers[item]).toBeUndefined();
   });
 
-  it.fails.each(['MH01', 'MH02', 'MH03', 'MH04'])('non-visit %s rejects a spoken PHQ label confirmed through a control', async item => {
-    // BUG: control confirmation also bypasses the PHQ speech guard; confirming speech must not satisfy a buttons-only screening item.
+  it.each(['MH01', 'MH02', 'MH03', 'MH04'])('non-visit %s rejects a spoken PHQ label confirmed through a control', async item => {
     const f = await fixture('non-visit', nonVisitPhq(item)), before = f.draft(), prompt = f.current();
     expect(() => content.turn(before, {
       requestId: crypto.randomUUID(), expectedRevision: before.revision, promptId: prompt.id,

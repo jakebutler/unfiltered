@@ -117,9 +117,9 @@ export async function updateSafetyRecord(client: MedplumClient, scope: RecordSco
 
 const busyCodes = new Set(['provider-busy', 'provider-session-busy']);
 const at = () => new Date().toISOString();
-const question = (draft: Draft, sourceId: string) => {
-  const index = draft.turns.findIndex(turn => turn.id === sourceId);
-  return index > 0 && draft.turns[index - 1].role === 'assistant' ? draft.turns[index - 1].text : undefined;
+const question = (turns: Draft['turns'], sourceId: string) => {
+  const index = turns.findIndex(turn => turn.id === sourceId);
+  return turns[index]?.displayedPromptText ?? (index > 0 && turns[index - 1].role === 'assistant' ? turns[index - 1].text : undefined);
 };
 const failClosed = (signal: NonNullable<Draft['safetySignals']>[number], failure: string): SafetyReviewEntry => ({
   signalId: signal.id, sourceId: signal.sourceId, screened: signal.categories, status: 'needs-human-review', level: 'moderate', concern: true,
@@ -168,7 +168,7 @@ export function safetyReviews(options: { reviewer?: SafetyReviewer }) {
     else {
       const text = draft.turns.find(turn => turn.id === signal.sourceId && turn.role === 'patient')?.text ?? '';
       try {
-        const result = await options.reviewer.review({ sessionId: draft.id, signalId, text, question: question(draft, signal.sourceId), screened: signal.categories });
+        const result = await options.reviewer.review({ sessionId: draft.id, signalId, text, question: question(draft.turns, signal.sourceId), screened: signal.categories });
         const status = reviewStatus(result), escalated = escalationFor(result, signal.categories);
         entry = { signalId, sourceId: signal.sourceId, screened: signal.categories, status, level: result.level, concern: result.concern, categories: result.categories, rationale: result.rationale, reviewer: `${safetyReviewProtocol}:${result.model}`.slice(0, 120), reviewedAt: at(), ...(escalated ? { escalated } : {}) };
       } catch (error) {
@@ -225,7 +225,7 @@ export function safetyReviews(options: { reviewer?: SafetyReviewer }) {
       if (!options.reviewer || !text?.trim()) return;
       const signalId = crypto.randomUUID();
       let result: Awaited<ReturnType<SafetyReviewer['review']>>;
-      try { result = await options.reviewer.review({ sessionId: draft.id, signalId, text, question: question(draft, sourceId), screened: [] }); }
+      try { result = await options.reviewer.review({ sessionId: draft.id, signalId, text, question: question(draft.turns, sourceId), screened: [] }); }
       catch (error) { return await failed(error instanceof AdmissionError ? error.code : error instanceof z.ZodError || error instanceof SyntaxError ? 'invalid-review-output' : 'review-unavailable'); }
       const status = reviewStatus(result);
       if (status === 'cleared') return;
@@ -287,7 +287,7 @@ export function staffSafety(patientName: (patient: string) => string | undefined
     const pending = new Set(open(record).map(entry => entry.signalId));
     return { sessionId, patientName: patientName(patient) ?? 'Patient', scenario: record.scenario,
       reviews: (Object.values(record.reviews) as SafetyReviewEntry[]).sort((a, b) => a.reviewedAt.localeCompare(b.reviewedAt)).map(entry => {
-        const index = turns.findIndex(turn => turn.id === entry.sourceId), prior = index > 0 && turns[index - 1].role === 'assistant' ? turns[index - 1].text : undefined;
+        const index = turns.findIndex(turn => turn.id === entry.sourceId), prior = question(turns, entry.sourceId);
         return { ...entry, open: pending.has(entry.signalId), message: index >= 0 ? turns[index].text : undefined, question: prior, messageAt: index >= 0 ? turns[index].at : undefined };
       }), actions: record.actions };
   }

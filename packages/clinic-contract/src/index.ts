@@ -13,7 +13,7 @@ export interface ClinicConfig {
   voice: { available: boolean; explanation?: string; input?: 'stream' | 'upload' | 'direct'; output?: 'provider' | 'browser' };
 }
 /** Channel records how these original words entered the draft; summary confirmation never relabels it. */
-export interface SourceTurn { id: string; role: 'patient' | 'assistant'; text: string; at: string; corrects?: string; channel?: SourceChannel; displayedPromptId?: string; }
+export interface SourceTurn { id: string; role: 'patient' | 'assistant'; text: string; at: string; corrects?: string; channel?: SourceChannel; displayedPromptId?: string; displayedPromptText?: string; }
 export interface SourceSpan { sourceId: string; start: number; end: number; transform: string; role?: 'value' | 'support'; evidenceProtocol?: 'contextual-values-v5'; }
 export interface AdaptiveOperationView {
   id: string; requestId: string; sourceId: string;
@@ -84,11 +84,11 @@ export interface TurnInput {
   action: 'answer' | 'unknown' | 'decline' | 'move-on';
   text?: string; fields?: Record<string, string>;
   channel?: SourceChannel;
-  /** An explicit confirmation of the choice for this exact displayed prompt/revision. */
+  /** An explicit confirmation for this exact prompt/revision. Typed choices use text + control; PHQ uses buttons without this payload. */
   choiceConfirmation?: { optionTranscript: string; confirmationTranscript: string; confirmationMethod: 'voice' | 'control' };
   /** Retain recognized choice-attempt words without interpreting or filling any answer. */
   choiceTranscriptOnly?: true;
-  /** Separate initial words when a confirmation attempt remains unscored. */
+  /** Separate original speech for an unscored attempt or a typed choice correction. */
   priorChoiceTranscript?: string;
 }
 
