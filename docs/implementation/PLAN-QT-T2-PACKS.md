@@ -207,30 +207,49 @@ writes the `.json` and also this `.ts` mirror. A test asserts the two are identi
 `packages/clinic-content/src/pack-fhir.ts`:
 
 ```ts
-export function packToFhirQuestionnaire(pack: QuestionnairePack, workflowId: string): Questionnaire // @medplum/fhirtypes
+export function packToFhirQuestionnaire(pack: QuestionnairePack, workflowId: string): PackFhirQuestionnaire
+// Local R4 structural subset while @medplum/fhirtypes is unavailable offline.
 ```
 
 Mapping:
 
 | Pack | FHIR `Questionnaire.item` |
 |---|---|
-| topic | `type: 'group'`, `linkId = topic.linkId`, `text` = opening prompt text |
+| topic | `type: 'group'`, `linkId = topic.linkId`, `text` = opening prompt text; optional (`O`) topics have `required: false`; topic/slot metadata and authored prompt statuses retained in Corvo extensions |
 | `type: 'text'` | `string` |
 | `positive-number` | `decimal` with `minValue` extension `0` (exclusive is noted in `corvo` ext) |
-| `height-value` | `group` of `decimal` feet/inches/cm per today's native builder (mirror `native-questionnaire.ts`) |
-| `choice` | `choice` + `answerOption.valueString` / `valueInteger` / `valueBoolean` |
+| `height-value` | Mirror the native `height.value`/`height.unit` layout: scalar decimal for cm/m/in/ft, integer feet plus decimal inches for ft-in, with scoped unit conditions; reject unsupported layouts explicitly |
+| `choice` | `choice` + `answerOption.valueString` / R4-range `valueInteger`; boolean, fractional and out-of-range integer options use `valueCoding` under `urn:corvo:pack-scalar`, retaining the exact typed scalar in a `typed-scalar` Corvo extension |
 | `presence` | `boolean` |
 | `collection` | `group` + `repeats: true` |
 | `configuration` | omitted |
-| `required` | `required` |
-| `enableWhen` | `enableWhen` with `operator: 'exists'` or `'='` as the condition requires; `enableBehavior: 'any'` when `orQuestions` |
-| locked instrument | `item.code = [{ system: 'http://loinc.org', code: '69724-3' }]` (believed to be the PHQ-4 panel; **verify against loinc.org before use**) on the group, and `readOnly` wording via the `corvo` extension; `answerOption.valueCoding.system = 'urn:corvo:phq4-response'` |
+| `required` | `required`, defaulting absent to true to match Corvo's inverse `optional` semantics; explicit false remains false |
+| `enableWhen` | Standard R4 `=` against a read-only, app-owned tri-state applicability control. Its rule extension retains scoped anchor references and the exact Corvo predicate. An uncertain anchor set uses OR; estimate-needed uses its evidenced alternate trigger as OR. A missing answer/control remains unresolved, never equivalent to uncertainty. Unsupported modifier combinations fail explicitly |
+| locked instrument | `item.code = [{ system: 'http://loinc.org', code: '69724-3' }]` on the group; this active PHQ-4 panel was verified against [LOINC](https://loinc.org/69724-3/) on 2026-10-16. Exact intro/stem/items/labels and attribution remain retained. Lock wording through Corvo extensions, while answers remain enabled for explicit buttons; `answerOption.valueCoding.system = 'urn:corvo:phq4-response'` only for the exact locked PHQ items |
 | `corvo.*` | `extension: [{ url: 'https://corvo.example/fhir/StructureDefinition/<name>', value… }]` |
 
 - `Questionnaire.url = pack.url + '/' + workflowId`, `version = pack.version`,
-  `status = 'draft'`, `title`.
+  `status = 'draft'`, `title`. Select exactly one workflow by its id or workflowId, rejecting
+  missing/ambiguous selections. Materialize its additional topics and reusable candidates;
+  reusable candidates require an explicit relevance decision. Branch candidates are included
+  only when Q06 is a candidate, with named/manual rule metadata and app-owned applicability.
+  Relevance and applicability are an **AND**, never an OR.
+- Nested linkIds use collision-free length-framed scope segments and are at most 255
+  characters. Repeated field names in different collections/topics never alias. Conditions
+  reference their sibling scope; references to omitted configuration items fail explicitly.
+- **R4 correction verified 2026-10-16:** [HL7's answerOption definition](https://hl7.org/fhir/R4/questionnaire-definitions.html#Questionnaire.item.answerOption.value_x_)
+  permits integer/date/time/string/Coding/Reference, **not boolean or decimal**. The earlier
+  `valueBoolean` sketch was invalid. The coded scalar representation above preserves type
+  and precision without generating invalid R4 elements or changing the native adapter.
+- This is a **draft authoring export**, with `standalone-supported = false`. The trusted
+  Corvo adapter must populate evidence-qualified tri-state controls, preserve verified context,
+  enforce PHQ buttons-only, and assess clinical completeness. R4 disabled/missing controls do
+  not establish clinical completeness. These controls and extensions follow the native
+  adapter's separation of authored structure from evidence/routing; a generic form renderer
+  alone cannot implement those semantics. No adapter/runtime activation is part of T2.7.
 - **Do not** use this for adult-intake. The published native questionnaire keeps
-  `native-questionnaire.ts` until a planned re-qualification.
+  `native-questionnaire.ts` until a planned re-qualification. The new exporter explicitly
+  rejects `pack.id === 'adult-intake'`; native digest, version and item-count pins stay intact.
 
 Tests (`packages/clinic-content/test/pack-fhir.test.ts`):
 - structural validity via Medplum's validator. Check

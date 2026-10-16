@@ -16,3 +16,4 @@ export * from './pack.js';
 export * from './pack-rules.js';
 export * from './pack-compile.js';
 export * from './packs/adult-intake.js';
+export * from './pack-fhir.js';
