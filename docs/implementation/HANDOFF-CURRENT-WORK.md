@@ -137,7 +137,7 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 | T2.7 | FHIR Questionnaire export for new packs | T2.6 | done `2702415`: governed R4 draft exporter, scoped controls and PHQ locks; all six gates pass. |
 | T3.8 | Between-visit check-in pack | T2.6, T1.3 | blocked: protected native digest window. Standalone proposed pack `7e4fd07` is reviewed and passes six gates; runtime registration/integration remains owner-gated. |
 | T3.9 | Prior-submission readback | T1.2 | done `ef96f47` (local): validated/frozen readback and scoped staff audit; all six gates pass. Deployment permissions remain owner-only. |
-| T3.10 | Clinic-initiated link (Resend) | T3.9 recommended | not started |
+| T3.10 | Clinic-initiated link (Resend) | T3.9 recommended | done `9a09a7c` (local): single-use scoped invitations and offline browser flow; all six gates pass. Live policy/email setup remains owner-only. |
 
 ### Track 3: Unfiltered as an async mass-feedback platform
 
@@ -627,3 +627,26 @@ and is forbidden during the protected window through 2026-10-21T01:48:12Z. An el
 date alone is not permission. Runtime/contract/manifest registration, guided/adaptive/voice
 and staff integration, browser acceptance and owner-bundled re-qualification remain.
 The reviewed authoring artifact is useful preparation, not a claim that those steps ran.
+
+T3.10 `9a09a7c` passed fresh GPT-6.1 Sol xhigh review and all six checks:
+foundation **149 / 2266**, clinic **19 / 345**, hosting **1 / 31**, all three
+typechecks. Logs: `/workspace/scratch/unfiltered-validation/t310-{0..6}.log`.
+Additional focused AWS entry regression/typecheck passed; AWS remains provider-off.
+Staff creates invitations through its named assigned-patient client. Only capability
+hashes persist; 72-hour expiry, conditional creation, one-use versioned consumption
+and uncertain-outcome no-retry behavior are covered. Invited actual-patient/workflow
+binding is signed and matches the saved draft; legacy scenario/patient checks remain.
+The join page clears its fragment before async work, requires synthetic acknowledgment
+before redemption and identity confirmation before answers. Email is server-only,
+allowlisted and bounded with no retry; default is copy-link only.
+
+Actual offline StaffApp → JoinApp → PatientApp browser flow passed with exact patient
+and pre-visit workflow, acknowledgment/identity gates and repeat redemption returning
+410. Evidence: `/workspace/scratch/unfiltered-validation/invitations-browser.log`,
+`.json` and `invitations-browser-{staff,ack,identity}.png`; no capability is saved in
+these outputs. The scratch runner's initial post-navigation response-body race was
+corrected before the passing run; application code was unchanged for that adjustment.
+Review fixes cover context load-completion timestamps and live Location mutation during
+query rejection. No live email/provider call, deployment, policy/admin or qualification
+change was made. Owner must authorize/verify invitation Task permissions and decide
+copy-only versus Resend account/from/allowlist/recipient configuration before live use.
