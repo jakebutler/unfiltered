@@ -11,7 +11,7 @@ this file is the single entry point. It holds:
 Update the status tables **as soon as** a task lands: a commit hash plus a one-line result. Do
 not batch the updates. The next agent trusts this file over chat history.
 
-Last updated: 2026-10-15 (Codex cloud continuation; baseline gate blocked).
+Last updated: 2026-10-16 (Codex cloud continuation; hosting gate repair, historical fixtures pending).
 
 ## Workspace
 
@@ -29,13 +29,18 @@ Last updated: 2026-10-15 (Codex cloud continuation; baseline gate blocked).
 
 ### Commands (run from the worktree)
 
+Install root dependencies with `npm ci`. Hosting also needs the separately locked dependency:
+`npm ci --prefix infra/cloud/vercel/research --ignore-scripts --omit=dev --omit=optional --legacy-peer-deps`.
+Before foundation tests, run `npm run foundation:build` for seed-upgrade's local module import.
+Neither installation nor the build requires provider credentials.
+
 ```bash
 npx vitest run -c vitest.foundation.config.mts   # packages/{clinical-core,clinic-content,clinic-api,speech}/test (~1,900 tests)
 npx vitest run -c apps/clinic/vitest.config.mts   # apps/clinic/test
 npx vitest run -c vitest.hosting.config.mts       # infra/cloud/vercel/test
 npx tsc -p tsconfig.foundation.json --noEmit      # CommonJS-style NodeNext build: no import.meta
 npx tsc -p tsconfig.clinic.json --noEmit          # browser app; includes only apps/clinic/src and packages/clinic-contract/src
-npx tsc -p tsconfig.hosting.json --noEmit         # infra/cloud/vercel
+npm run hosting:typecheck                       # clinic NodeNext + research Bundler, including research tests
 npx tsx scripts/dev/local-mock-clinic.mts         # local mock API on :8787 (no provider calls by default)
 npm run clinic:dev                                # clinic web on 127.0.0.1:5173, proxies to the mock
 # Optional real-model mock (spends DO credits, capped): LOCAL_ENV_FILE=/Volumes/rexy/GitHub/unfiltered/.env.local LOCAL_DO_CALL_CAP=20 npx tsx scripts/dev/local-mock-clinic.mts
@@ -300,9 +305,42 @@ full command, nor resolve missing historical evidence.
 
 ### Next resumption
 
-1. Resolve the missing-input gate with the owner/local environment and repair hosting compiler
-   coverage without weakening acceptance. Keep unavailable evidence/private files out of Git.
+1. Resolve the missing-input gate with the owner/local environment. The hosting compiler
+   repair below preserves coverage; use the aggregate command. Keep unavailable evidence/private
+   files out of Git.
 2. Finish T1.4a's spec coverage, then run all six commands and make a verifying commit before
    marking it done. Continue the original priority order; no snapshot task was discarded.
 3. Resolve the bounded T1.3/D-d findings above when those tasks reach the front of the queue.
 4. Phase 5 planning is delivered in `4b11c24`; Track 3 implementation remains not started.
+
+
+## Hosting typecheck repair (2026-10-16)
+
+Committed `84d392f`; independently reviewed by GPT-6.1 Sol at xhigh with no findings.
+
+The owner explicitly authorized repairing the compiler configuration and continuing development
+while historical fixtures are obtained. The complete hosting gate is now
+`npm run hosting:typecheck`; running the clinic tsconfig alone is insufficient.
+
+- Clinic hosting retains NodeNext. Research hosting uses its existing ESNext/Bundler mode and
+  now includes all four research hosting test files. Compiler-API comparison against the old
+  configuration found the same union of **13 root files and 194 repository source files**,
+  with none removed. No Convex source or generated declarations changed.
+- Installed the documented nested research dependency from its existing lock. Its transitive
+  Zod 4 shadows root Zod 3 for the research config; explicit `zod/v3` preserves the authored
+  default parsing semantics. A regression assertion checks all three default interview bounds.
+- The denied-header fixture is explicitly typed as `Record<string, string>[]`; its values and
+  assertions are unchanged. Nested installed dependencies are ignored by Git.
+- Validation: aggregate hosting typecheck **PASS**, clinic hosting suite **29 PASS**. The focused
+  research-package test file reports **7 PASS / 1 FAIL**: the unknown-interview fake-timer case
+  times out after 5000 ms. That exact timeout was reproduced with the unchanged HEAD test in
+  isolation under the same installed environment (Node 24.19.0; deployment package targets
+  Node 22). Its fixture bypasses the changed runtime config parser. Do not label it flaky or
+  weaken it; diagnosing that pre-existing async/fake-timer interaction is separate work.
+  Full foundation remains blocked by the previously documented historical fixture inputs.
+- The environment now reports `MEDPLUM_CLIENT_ID` and `MEDPLUM_CLIENT_SECRET` **ready**. These
+  are injected environment variables, not permission to perform live qualification or writes.
+  No live provider calls were made. Vercel credentials are unnecessary for these local checks.
+
+The historical baseline failure table above is retained as evidence of the original run, not
+as the current hosting compiler result. No intake WIP task is newly marked done by this repair.
