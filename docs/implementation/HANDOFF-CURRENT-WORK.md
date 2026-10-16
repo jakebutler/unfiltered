@@ -109,7 +109,7 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | D-a | Tier-0 safety false positive on negated statements | done (pre-cb0bfe8); docs still list it as open, which D-i fixes |
 | D-b | "Hopeless" free-text turn handling | WIP in `0fd34e3`, unverified (agent stopped at "now the interpreter changes": tests written in `packages/clinic-api/test/intake-interpreter.test.ts`, source edits in `intake-interpreter.ts` / `dialogue.ts` may be partial) |
 | D-c | Spoken weight/number confirmation | WIP in `0fd34e3`, unverified (same agent as D-b; check whether any source exists yet) |
-| D-d | Turn latency instrumentation + reductions | WIP in `0fd34e3`; independent GPT-6.1 Sol xhigh review found timing/logging gaps; gate blocked (see below). Files: `apps/clinic/src/{api.ts,turn-timing.ts}`, `packages/clinic-api/src/{handler.ts,request-timing.ts}`, `scripts/dev/latency-report.mts`, tests `apps/clinic/test/turn-timing.test.ts`, `packages/clinic-api/test/request-timing{,-handler}.test.ts` |
+| D-d | Turn latency instrumentation + reductions | done `b6a1761`: submit-to-React-commit timing, safe metadata and fixture report verified; all six gates pass. Reductions remain measured follow-ups, not claimed. |
 | D-e | Staff safety screen visual check | not started |
 | D-f | Re-qualification without an admin grant (`/auth/me` observer) | WIP in `0fd34e3`, unverified, code believed complete (agent stopped at "now the docs, then full suites"). Files (attributed by timestamp, verify by diff): `packages/clinic-api/src/deployment-qualification.ts` + test, `infra/cloud/{clinic-manifest,medplum-preflight,seed-clinic}.mjs`, `infra/cloud/medplum-preflight.test.mjs`, `infra/cloud/vercel/{hosted-config.ts,test/hosting.test.ts}`, `infra/aws/clinic/config.ts`, `infra/aws/test/{config.test,fixtures}.ts`, `scripts/qualification/*`, `docs/implementation/CLOUD-CLINIC.md` |
 | D-g | Mobile layout check | not started |
@@ -161,8 +161,8 @@ Additional defects found by the bounded D-d static review (regression tests stil
 
 | Found by | Location | Description | Fixed in |
 |---|---|---|---|
-| D-d independent review | `packages/clinic-api/src/request-timing.ts` | Arbitrary non-UUID route segments and caller request-ID text can enter request logs, contrary to the module's no-patient-text metadata contract. | — |
-| D-d independent review | `apps/clinic/src/api.ts` | `clientMs` ends before render and separates adaptive accept/interpret, so it is not submit-to-rendered-turn latency. | — |
+| D-d independent review | `packages/clinic-api/src/request-timing.ts` | Arbitrary non-UUID route segments and caller request-ID text can enter request logs, contrary to the module's no-patient-text metadata contract. | `b6a1761` |
+| D-d independent review | `apps/clinic/src/api.ts` | `clientMs` ends before render and separates adaptive accept/interpret, so it is not submit-to-rendered-turn latency. | `b6a1761` |
 
 ## Open owner decisions
 
@@ -386,3 +386,15 @@ The spec now explicitly uses `valueInteger` for integer-only option sets and `va
 for a scale with any fractional option (including an integral selection on that scale). No
 rounding, existing-assertion edit, questionnaire/export/digest change or runtime change was
 needed. Synthetic slot tests do not claim native export support for a new numeric scale.
+
+D-d `b6a1761` passed fresh GPT-6.1 Sol xhigh review after fixes for reused authored
+prompt IDs and same-operation manual status recovery. All six checks pass sequentially:
+foundation **133 / 2010**, clinic **16 / 315**, hosting **1 / 29**, all three typechecks.
+Logs: `/workspace/scratch/unfiltered-validation/dd-{0..6}.log`. Server request metadata now
+uses opaque UUID/hex IDs and fixed route templates. Successful guided/adaptive and deferred
+safety tests preserve safety-before-visible-reply ordering. The real report CLI runs on a
+committed synthetic fixture, filtering malformed and negative metrics. Request timing remains
+fetch-to-parsed-response; `window.__corvoRenderedTurnTimings` separately records submit-to-React
+commit, with no patient wording in either output. Tests cover lifecycle primitives and request
+wiring; a mounted PatientApp/browser timing exercise was not performed. No latency reduction
+or live-provider performance result is claimed.
