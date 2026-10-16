@@ -304,6 +304,9 @@ const declinedWords = /\b(?:prefer not|rather not|(?:don't|do not) want to|not c
 const negativeWords = /\b(?:no|none|not|never|nothing|without|nope|neither|nor)\b|n't\b/i;
 const uncertainWords = /\b(?:might|maybe|may (?:have|be)|possibly|possible|not sure|unsure|uncertain|think|thought|suspect(?:ed)?|borderline|yet|probably|perhaps|unconfirmed|not confirmed|could (?:be|have)|told i might)\b/i;
 const approximateWords = /\b(?:around|about|approximately|approx|roughly|or so|give or take|somewhere (?:around|near))\b|~|\b\d+(?:\.\d+)?ish\b/i;
+function estimatedMeasurement(text: string): boolean {
+  return approximateWords.test(text) || /\b(?:maybe|probably|perhaps|possibly|think|thought|guess(?:ing)?|estimat(?:e|ed|ing)|not sure|unsure|uncertain)\b/i.test(text);
+}
 const relativeWords = /\b(?:mother|mom|mum|father|dad|parents?|sister|brother|siblings?|grandmother|grandfather|grandma|grandpa|grandparents?|aunt|uncle|cousin|son|daughter|children|kids?|family|husband|wife|partner)\b/i;
 const thirdPerson = /\b(?:she|he|they)\b/i;
 const firstPerson = /\b(?:i|i'm|i've|i'd|i was|me)\b/i;
@@ -350,8 +353,8 @@ const stopWords = new Set(['the', 'and', 'with', 'that', 'this', 'have', 'from',
 
 function digitsMentioned(value: number, quote: string): boolean {
   const digits = quote.replace(/(\d),(\d{3})/g, '$1$2');
-  if (new RegExp(`(?:^|[^\\d.])${String(value).replace('.', '\\.')}(?![\\d])`).test(digits)) return true;
-  return Number.isInteger(value) && new RegExp(`(?:^|[^\\d.])${value}\\.0+(?!\\d)`).test(digits);
+  if (new RegExp(`(?:^|[^\\d.+-])${String(value).replace('.', '\\.')}(?![\\d.])`).test(digits)) return true;
+  return Number.isInteger(value) && new RegExp(`(?:^|[^\\d.+-])${value}\\.0+(?![\\d.])`).test(digits);
 }
 function numberMentioned(value: number, quote: string): boolean {
   if (digitsMentioned(value, quote)) return true;
@@ -394,8 +397,8 @@ function numberTokens(text: string) {
   const adjacent = (i: number) => i + 1 < tokens.length && /^[\s-]+$/.test(text.slice(tokens[i].end, tokens[i + 1].start));
   return { tokens, adjacent };
 }
-/** Multi-word or colloquial spoken numbers ("two twelve" = 212, "one eighty five" = 185, "two oh five", "two hundred and five", "eighty five").
- * Single small words ("five") are left to numberMentioned. Interpretation only: callers must ask the patient to confirm. */
+/** Spoken numbers, including colloquial forms ("two twelve", "one eighty five", "two oh five").
+ * Interpretation only: callers must ask the patient to confirm. */
 function spokenNumbers(text: string): SpokenNumber[] {
   const { tokens, adjacent } = numberTokens(text), found: SpokenNumber[] = [];
   const twoDigit = (i: number): [number, number] | undefined => {
@@ -418,7 +421,7 @@ function spokenNumbers(text: string): SpokenNumber[] {
       if (rest && rest[0] >= 10) parsed = [onesWords[word] * 100 + rest[0], rest[1]];
       else if (tokens[i + 1].word === 'oh' && adjacent(i + 1) && onesWords[tokens[i + 2].word]) parsed = [onesWords[word] * 100 + onesWords[tokens[i + 2].word], i + 3];
     }
-    if (!parsed) { const pair = twoDigit(i); if (pair && (pair[1] - i > 1 || pair[0] >= 12)) parsed = pair; }
+    if (!parsed) parsed = twoDigit(i) ?? (onesWords[word] !== undefined ? [onesWords[word], i + 1] : undefined);
     if (!parsed) { i++; continue; }
     found.push({ value: parsed[0], start: tokens[i].start, end: tokens[parsed[1] - 1].end });
     i = parsed[1];
@@ -449,7 +452,7 @@ function spokenOutcome(values: readonly (number | { feet: number; inches: number
   const distinct = [...new Map(values.map(value => [JSON.stringify(value), value])).values()];
   const agrees = (value: number | { feet: number; inches: number }) => proposed === undefined || proposed === null || (typeof proposed === 'number' && Number.isNaN(proposed))
     || (typeof value === 'object' ? typeof proposed === 'object' && (proposed as { feet: number; inches: number }).feet === value.feet && (proposed as { feet: number; inches: number }).inches === value.inches : proposed === value);
-  return distinct.length === 1 && agrees(distinct[0]) ? { problem: 'spoken-number-unconfirmed', patientFacing: true, confirm: distinct[0] } : { problem: 'ambiguous-spoken-number', patientFacing: true };
+  return distinct.length === 1 && (typeof distinct[0] !== 'number' || Number.isFinite(distinct[0]) && distinct[0] > 0) && agrees(distinct[0]) ? { problem: 'spoken-number-unconfirmed', patientFacing: true, confirm: distinct[0] } : { problem: 'ambiguous-spoken-number', patientFacing: true };
 }
 
 function textSupported(value: string, source: string): boolean {
@@ -459,7 +462,7 @@ function textSupported(value: string, source: string): boolean {
   const hits = words.filter(word => lowered.includes(word) || word.length >= 6 && lowered.includes(word.slice(0, word.length - 3))).length;
   return hits / words.length >= 0.6;
 }
-function parseHeightValue(raw: unknown): { value: Scalar; unit?: string } | undefined {
+function parseHeightValue(raw: unknown): { value: SpokenNumberConfirm['value']; unit?: string } | undefined {
   if (raw && typeof raw === 'object' && 'feet' in raw && 'inches' in raw) {
     const { feet, inches } = raw as { feet: unknown; inches: unknown };
     if (typeof feet === 'number' && typeof inches === 'number' && Number.isSafeInteger(feet) && feet >= 0 && inches >= 0 && inches < 12 && feet * 12 + inches > 0) return { value: { feet, inches }, unit: 'ft-in' };
@@ -484,6 +487,38 @@ function parseHeightValue(raw: unknown): { value: Scalar; unit?: string } | unde
   if (scalar[2] && (!unit || !['cm', 'm', 'in'].includes(unit))) return;
   const value = Number(scalar[1]);
   return Number.isFinite(value) && value > 0 ? { value, ...(unit ? { unit } : {}) } : undefined;
+}
+/** Explicit feet/inches anywhere in the quoted words, without trusting the model's normalized value. */
+function explicitHeightPairs(text: string): { feet: number; inches: number }[] {
+  const number = '(?:\\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven)';
+  const pattern = new RegExp(`\\b${number}\\s*(?:feet|foot|ft\\.?|['’′])\\s*(?:${number}(?:\\.\\d+)?\\s*(?:inches|inch|in\\.?|["”″])?)?`, 'gi');
+  return [...text.matchAll(pattern)].flatMap(match => {
+    const parsed = parseHeightValue(match[0]);
+    return parsed && typeof parsed.value === 'object' ? [parsed.value] : [];
+  });
+}
+const timingAfterNumber = /^[\s-]*(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|wks?|months?|mos?|years?|yrs?)\b/i;
+/** Timing quantities in a measurement quote do not compete with its weight, height or result. */
+function measurementSpokenNumbers(text: string, measurementRole: boolean): SpokenNumber[] {
+  return spokenNumbers(text).filter(entry => !measurementRole || !timingAfterNumber.test(text.slice(entry.end)));
+}
+/** Check all cited numeric alternatives, separating explicit timing from measurement roles. */
+function numericEvidenceValues(text: string, measurementRole: boolean): number[] {
+  const normalized = text.replace(/(\d),(\d{3})/g, '$1$2');
+  return [...measurementSpokenNumbers(normalized, measurementRole).map(entry => entry.value),
+    ...[...normalized.matchAll(/[+-]?\d+(?:\.\d+)?/g)]
+      .filter(match => !measurementRole || !timingAfterNumber.test(normalized.slice(match.index! + match[0].length)))
+      .map(match => Number(match[0]))];
+}
+function numericConfirmationUnit(context: AdaptiveContext, t: TopicDefinition, path: string, words: string): string | undefined {
+  const unitPath = path.replace(/\.value$/, '.unit');
+  if (unitPath === path) return;
+  let slot: ReturnType<typeof adaptiveSlot>;
+  try { slot = adaptiveSlot(t, context.responses[t.id] ?? emptyResponse(), unitPath); } catch { return; }
+  const choices = (slot.definition.choices ?? []).filter((choice): choice is string => typeof choice === 'string' && choice !== 'ft-in');
+  const inTurn = choices.filter(choice => unitInQuote(choice, context.source.text));
+  return choices.find(choice => unitInQuote(choice, words)) ?? (inTurn.length === 1 ? inTurn[0] : undefined)
+    ?? (slot.answer?.state === 'known' && typeof slot.answer.value === 'string' && choices.includes(slot.answer.value) ? slot.answer.value : undefined);
 }
 function unitInQuote(unit: string, quote: string): boolean {
   const q = norm(quote);
@@ -519,6 +554,7 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
   const wire = (confirmReply ? {} : raw) as Record<string, unknown>;
   const list = (value: unknown, limit: number) => Array.isArray(value) ? value.slice(0, limit) : [];
   const sourceText = context.source.text, sourceId = context.source.id;
+  const spokenSource = context.source.channel === 'unreviewed-transcript' || context.source.channel === 'confirmed-transcript';
   const responses = structuredClone(context.responses) as Record<string, TopicResponse | undefined>;
   const outcome: AdaptiveOutcome = { responses, updates: [], provenance: [], clarifications: [], acts: [], sourceId, hasUnresolvedInterpretation: false };
   const rejected: AdaptiveRejectedCandidate[] = [];
@@ -568,7 +604,10 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     if (!parsed.success) { reject({ kind: 'fact', reason: 'malformed' }); continue; }
     facts.push({ topicId: parsed.data.topic.trim().toUpperCase(), path: canonicalPath(parsed.data.topic.trim().toUpperCase(), parsed.data.field), state: parsed.data.state, value: parsed.data.value, quote: parsed.data.quote, corrects: parsed.data.corrects ?? null });
   }
-  if (pending && confirmReply === 'yes') facts.push({ topicId: pending.topicId, path: pending.path, state: 'known', value: pending.confirm.value, quote: sourceText.trim(), corrects: null, confirmed: pending.confirm });
+  if (pending && confirmReply === 'yes') {
+    if (context.source.channel === 'unreviewed-transcript') outcome.clarifications.push({ topicId: pending.topicId, path: pending.path, reason: 'ambiguous-value', evidence: pending.confirm.evidence, confirm: pending.confirm });
+    else facts.push({ topicId: pending.topicId, path: pending.path, state: 'known', value: pending.confirm.value, quote: sourceText.trim(), corrects: null, confirmed: pending.confirm });
+  }
   /** Tolerate case/spacing/separator slips in a field name, never a different field. */
   function canonicalPath(topicId: string, field: string): string {
     const t = topic(topicId), trimmed = field.trim();
@@ -647,7 +686,9 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
     if (candidate.confirmed) {
       const value = candidate.confirmed.value;
       if ((typeof value === 'object') !== (definition.kind === 'height-value' && typeof value === 'object') || !['positive-number', 'height-value'].includes(definition.kind)) return { problem: 'invalid-confirmation', patientFacing: false };
-      return { answer: { state: 'known', value, sourceIds: [candidate.confirmed.sourceId, sourceId] }, transform: 'spoken-number-confirmed', ...(candidate.confirmed.unit ? { impliedUnit: candidate.confirmed.unit } : {}) };
+      // Retain the raw recognition in provenance, while only reviewed evidence earns slot readiness.
+      const original = context.sources.find(source => source.id === candidate.confirmed!.sourceId);
+      return { answer: { state: 'known', value, sourceIds: original?.channel === 'unreviewed-transcript' ? [sourceId] : [candidate.confirmed.sourceId, sourceId] }, transform: 'spoken-number-confirmed', ...(candidate.confirmed.unit ? { impliedUnit: candidate.confirmed.unit } : {}) };
     }
     if (candidate.state !== 'known') {
       return { answer: { state: candidate.state, sourceIds, note: quote.slice(0, 400) }, transform: intakeInterpreterTransform };
@@ -663,25 +704,36 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
         return { problem: 'unsupported-text-value', patientFacing: false };
       }
       case 'positive-number': {
+        if (candidate.path !== 'currentWeightEstimate.value' && estimatedMeasurement(covering(sourceText, spans, true))) return { problem: 'estimate-not-accepted', patientFacing: true };
         const match = typeof candidate.value === 'number' ? [String(candidate.value), String(candidate.value)] : typeof candidate.value === 'string' ? /^\s*(\d+(?:\.\d+)?)\s*([a-z]+)?\.?\s*$/i.exec(candidate.value.replace(/(\d),(\d{3})/g, '$1$2')) : null;
         const value = match ? Number(match[1]) : NaN;
         // Spoken words ("two twelve") are only ever proposed for confirmation, never recorded as said.
-        const spoken = Number.isFinite(value) && value > 0 && digitsMentioned(value, quote) ? [] : spokenNumbers(quote);
-        if (spoken.length) return spokenOutcome(spoken.map(entry => entry.value), match ? value : NaN);
+        const measurementRole = candidate.path.endsWith('.value');
+        const spoken = measurementSpokenNumbers(quote, measurementRole);
+        const numbers = numericEvidenceValues(quote, measurementRole);
+        if (spoken.length || spokenSource || new Set(numbers).size > 1) return spokenOutcome(numbers, match ? value : NaN);
         if (!Number.isFinite(value) || value <= 0) return { problem: 'invalid-number', patientFacing: true };
-        if (!numberMentioned(value, quote)) return { problem: 'number-not-in-quote', patientFacing: false };
+        if (!numbers.includes(value)) return { problem: 'number-not-in-quote', patientFacing: false };
         const unit = match?.[2] ? unitAliases[match[2].toLowerCase()] : undefined;
         return { answer: { state: 'known', value, sourceIds }, transform: intakeInterpreterTransform, ...(unit ? { impliedUnit: unit } : {}) };
       }
       case 'height-value': {
+        if (estimatedMeasurement(covering(sourceText, spans, true))) return { problem: 'estimate-not-accepted', patientFacing: true };
         const parsed = parseHeightValue(candidate.value) ?? parseHeightValue(quote);
-        const pairs = spokenHeightPairs(quote);
-        if (pairs.length) return spokenOutcome(pairs, parsed ? parsed.value : undefined);
-        const scalarSpoken = parsed && typeof parsed.value === 'number' && digitsMentioned(parsed.value, quote) ? [] : spokenNumbers(quote);
-        if (scalarSpoken.length && (!parsed || typeof parsed.value === 'number')) return spokenOutcome(scalarSpoken.map(entry => entry.value), parsed ? parsed.value : undefined);
+        const explicit = explicitHeightPairs(quote);
+        const pairs = [...spokenHeightPairs(quote), ...explicit];
+        if (pairs.length && (measurementSpokenNumbers(quote, true).length > 0 || spokenSource || new Set(pairs.map(pair => JSON.stringify(pair))).size > 1)) return spokenOutcome(pairs, parsed ? parsed.value : undefined);
+        const scalarSpoken = parsed && typeof parsed.value === 'number' && digitsMentioned(parsed.value, quote) ? [] : measurementSpokenNumbers(quote, true);
+        const numbers = numericEvidenceValues(quote, true);
+        if ((scalarSpoken.length || spokenSource || new Set(numbers).size > 1) && (!parsed || typeof parsed.value === 'number')) return spokenOutcome(numbers, parsed ? parsed.value : undefined);
         if (!parsed) return { problem: 'invalid-height', patientFacing: true };
-        const numbers = typeof parsed.value === 'object' ? [parsed.value.feet, ...(parsed.value.inches ? [parsed.value.inches] : [])] : [parsed.value as number];
-        if (!numbers.every(number => numberMentioned(number, quote.replace(/[’']/g, ' ').replace(/["”]/g, ' ')))) return { problem: 'number-not-in-quote', patientFacing: false };
+        if (typeof parsed.value === 'number') {
+          if (!numbers.includes(parsed.value)) return { problem: 'number-not-in-quote', patientFacing: false };
+        } else {
+          const value = parsed.value;
+          if (!pairs.some(pair => pair.feet === value.feet && pair.inches === value.inches)) return { problem: 'number-not-in-quote', patientFacing: false };
+          if (![value.feet, ...(value.inches ? [value.inches] : [])].every(number => numberMentioned(number, quote.replace(/[’']/g, ' ').replace(/["”]/g, ' ')))) return { problem: 'number-not-in-quote', patientFacing: false };
+        }
         return { answer: { state: 'known', value: parsed.value, sourceIds }, transform: intakeInterpreterTransform, ...(parsed.unit ? { impliedUnit: parsed.unit } : {}) };
       }
       case 'choice': {
@@ -708,14 +760,7 @@ export function interpretIntakeResponse(raw: unknown, context: AdaptiveContext):
   const spanText = (span: EvidenceSpan) => (context.sources.find(entry => entry.id === span.sourceId)?.text ?? '').slice(span.start, span.end);
   /** The unit the patient used with a spoken number: in its words, else the only one in the turn, else the one already recorded. */
   function confirmUnit(t: TopicDefinition, path: string, spans: EvidenceSpan[]): string | undefined {
-    const unitPath = path.replace(/\.value$/, '.unit');
-    if (unitPath === path) return;
-    let slot: ReturnType<typeof adaptiveSlot>;
-    try { slot = adaptiveSlot(t, response(t.id), unitPath); } catch { return; }
-    const choices = (slot.definition.choices ?? []).filter((choice): choice is string => typeof choice === 'string' && choice !== 'ft-in');
-    const quote = quoteOf(spans).join(' '), inTurn = choices.filter(choice => unitInQuote(choice, sourceText));
-    return choices.find(choice => unitInQuote(choice, quote)) ?? (inTurn.length === 1 ? inTurn[0] : undefined)
-      ?? (slot.answer?.state === 'known' && typeof slot.answer.value === 'string' && choices.includes(slot.answer.value) ? slot.answer.value : undefined);
+    return numericConfirmationUnit({ ...context, responses }, t, path, quoteOf(spans).join(' '));
   }
   /** Apply one validated candidate at an exact resolved path. Never throws for model content. */
   function applyFact(candidate: Candidate, spans: EvidenceSpan[]): boolean {
@@ -1010,9 +1055,14 @@ function pendingSpokenConfirm(context: AdaptiveContext): { topicId: string; path
   if (!confirm || !source || source.id === context.source.id || !confirm.evidence?.length || confirm.evidence.some(span => span.sourceId !== source.id || !Number.isInteger(span.start) || !Number.isInteger(span.end) || span.start < 0 || span.end <= span.start || span.end > source.text.length)) return;
   const words = confirm.evidence.map(span => source.text.slice(span.start, span.end)).join(' ');
   const value = confirm.value;
-  const heard = typeof value === 'object' ? spokenHeightPairs(words) : spokenNumbers(words).map(entry => entry.value);
-  if (heard.length !== 1 || JSON.stringify(heard[0]) !== JSON.stringify(value) || typeof value === 'object' && displayed.targetPaths[0] !== 'height.value') return;
-  if (confirm.unit !== undefined && (typeof value === 'object' ? confirm.unit !== 'ft-in' : !unitWords[confirm.unit])) return;
+  const heard = typeof value === 'object' ? [...spokenHeightPairs(words), ...explicitHeightPairs(words)] : numericEvidenceValues(words, displayed.targetPaths[0].endsWith('.value'));
+  const distinct = [...new Map(heard.map(value => [JSON.stringify(value), value])).values()];
+  if (distinct.length !== 1 || JSON.stringify(distinct[0]) !== JSON.stringify(value) || typeof value === 'object' && displayed.targetPaths[0] !== 'height.value') return;
+  const t = context.topics.find(topic => topic.id === displayed.topicId);
+  if (!t) return;
+  if (displayed.targetPaths[0] !== 'currentWeightEstimate.value' && estimatedMeasurement(covering(source.text, confirm.evidence, true))) return;
+  const unit = typeof value === 'object' ? 'ft-in' : numericConfirmationUnit({ ...context, source }, t, displayed.targetPaths[0], words);
+  if (confirm.unit !== unit) return;
   return { topicId: displayed.topicId, path: displayed.targetPaths[0], confirm: { value, ...(confirm.unit ? { unit: confirm.unit } : {}), sourceId: source.id, evidence: confirm.evidence.map(span => ({ sourceId: span.sourceId, start: span.start, end: span.end })), text: confirmText(value, confirm.unit) } };
 }
 

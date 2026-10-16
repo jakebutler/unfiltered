@@ -60,6 +60,22 @@ satisfies the slot.
   - ambiguous forms ("one fifty or so") are recorded as an estimate only when the slot accepts
     an estimate, and otherwise trigger clarification.
 
+**Continuation correction to snapshot WIP assertions.** The WIP expected "five foot ten" to
+record directly; require the exact 5 ft 10 in readback and no recorded height until explicit
+confirmation. Typed numeric text remains direct. The WIP's "About two oh five pounds" example
+previously asked for an exact actual reading; cover the exact spoken form separately, and
+require clarification for an approximate actual reading. An estimate is permitted only in the
+estimate slot and still requires confirmation when spoken or unreviewed. Digits such as "205"
+from `unreviewed-transcript` follow the same readback rule. An unreviewed "yes" cannot confirm
+them. Revalidate the proposed number and unit against retained evidence; keep original speech
+immutable and both sources in provenance, while unreviewed sources earn no slot readiness.
+Timing quantities ("205 pounds one week ago") must not become competing measurement values.
+Competing reading alternatives still require clarification. "Maybe", "I think", "probably"
+and "I guess" about an actual reading or height require clarification even if the proposed
+quote omits the hedge; confirming a number does not establish an actual measurement.
+Direct typed values must also match the cited number without dropping a sign or decimal
+precision; a positive-number slot must not turn `-205` or `205.5` into `205`.
+
 ## D-d Turn latency
 
 **Goal.** Measure, then reduce, the time from patient submit to rendered reply.

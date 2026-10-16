@@ -896,7 +896,7 @@ describe('intake-interpreter-v1 spoken numbers need explicit confirmation', () =
   it('interprets other colloquial forms, always as a confirmation: "one eighty five", "two hundred and five", "five ten" for height', () => {
     for (const [text, quote, value, expected] of [
       ['Scale said one eighty five.', 'one eighty five', 185, 'Just to confirm, is that 185?'],
-      ['About two oh five pounds on the scale.', 'two oh five pounds', '205', 'Just to confirm, is that 205 pounds?'],
+      ['The scale said two oh five pounds.', 'two oh five pounds', '205', 'Just to confirm, is that 205 pounds?'],
       ['It was two hundred and five kilos.', 'two hundred and five kilos', 205, 'Just to confirm, is that 205 kilograms?'],
     ] as const) {
       const ctx = { ...context(text, ['Q04']), displayed: weightAsked };
@@ -914,11 +914,13 @@ describe('intake-interpreter-v1 spoken numbers need explicit confirmation', () =
     expect(answers(confirmed, 'Q04')['height.unit']).toMatchObject({ state: 'known', value: 'ft-in' });
   });
 
-  it('keeps explicit units and digits as they were: "five foot ten" and "212 pounds" are recorded directly', () => {
+  it('requires readback even with explicit spoken height units, while typed digits remain direct', () => {
     const height = context('I am five foot ten.', ['Q04']);
     const direct = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'height.value', state: 'known', value: '5 ft 10 in', quote: 'five foot ten' }] }, height);
-    expect(answers(direct, 'Q04')['height.value']).toMatchObject({ state: 'known', value: { feet: 5, inches: 10 } });
-    expect(direct.clarifications).toEqual([]);
+    expect(answers(direct, 'Q04')['height.value']).toBeUndefined();
+    expect(direct.clarifications[0]?.confirm).toMatchObject({ value: { feet: 5, inches: 10 }, unit: 'ft-in', text: 'Just to confirm, is that 5 ft 10 in?' });
+    const yes = reply(height, direct, 'Yes.').ctx;
+    expect(answers(interpretIntakeResponse(empty, yes), 'Q04')['height.value']).toMatchObject({ state: 'known', value: { feet: 5, inches: 10 } });
     const weight = { ...context('It was 212 pounds.', ['Q04']), displayed: weightAsked };
     const digits = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: '212 pounds' }] }, weight);
     expect(answers(digits, 'Q04')['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 212 });
@@ -985,5 +987,159 @@ describe('intake-interpreter-v1 spoken numbers need explicit confirmation', () =
     await say('Yes.');
     expect(f.draft().topics.Q04?.answers['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 212 });
     expect(session.currentPrompt?.text).not.toBe('Just to confirm, is that 212 pounds?');
+  });
+
+  it.each(['two oh five', '205', 'two hundred five', 'two-hundred and five'])(
+    'reads back unreviewed recognition "%s" exactly before recording 205', spoken => {
+      const base = context(`The scale said ${spoken} pounds.`, ['Q04']);
+      const raw = { ...base.source, channel: 'unreviewed-transcript' as const };
+      const ctx = { ...base, source: raw, sources: [raw], displayed: weightAsked };
+      const first = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 205, quote: `${spoken} pounds` }] }, ctx);
+      expect(answers(first, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+      expect(first.clarifications[0]?.confirm).toMatchObject({ value: 205, unit: 'lb', text: 'Just to confirm, is that 205 pounds?' });
+      const next = reply(ctx, first, 'Yes.').ctx;
+      const confirmed = interpretIntakeResponse(empty, next);
+      expect(answers(confirmed, 'Q04')['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 205, sourceIds: ['turn-2'] });
+      expect(confirmed.provenance.find(entry => entry.path === 'lastMeasuredWeight.value')?.sourceText).toEqual([`${spoken} pounds`, 'Yes.']);
+      expect(next.sources.find(source => source.id === raw.id)).toEqual(raw);
+    },
+  );
+
+  it.each(['confirmed-transcript', 'unreviewed-transcript'] as const)(
+    'requires a numeric readback for digit height from %s', channel => {
+      const base = context('My height is 173 cm.', ['Q04']);
+      const speech = { ...base.source, channel };
+      const ctx = { ...base, source: speech, sources: [speech],
+        displayed: { topicId: 'Q04', promptId: 'Q04', targetPaths: ['height.value', 'height.unit'] } };
+      const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'height.value', state: 'known', value: 173, quote: '173 cm' }] }, ctx);
+      expect(answers(outcome, 'Q04')['height.value']).toBeUndefined();
+      expect(outcome.clarifications[0]?.confirm).toMatchObject({ value: 173, unit: 'cm', text: 'Just to confirm, is that 173 cm?' });
+      const next = reply(ctx, outcome, 'Yes.').ctx;
+      expect(answers(interpretIntakeResponse(empty, next), 'Q04')['height.value']).toMatchObject({ state: 'known', value: 173 });
+    },
+  );
+
+  it('does not accept an unreviewed yes as confirmation of a spoken number', () => {
+    const ctx = { ...context('It was two twelve pounds.', ['Q04']), displayed: weightAsked };
+    const proposed = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'two twelve pounds' }] }, ctx);
+    const next = reply(ctx, proposed, 'Yes.').ctx;
+    const heard = { ...next.source, channel: 'unreviewed-transcript' as const };
+    const outcome = interpretIntakeResponse(empty, { ...next, source: heard, sources: [...ctx.sources, heard] });
+    expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    expect(selectAdaptiveDialogue(next, outcome).prompt?.text).toBe('Just to confirm, is that 212 pounds?');
+  });
+
+  it('rejects a pending unit that disagrees with the saved spoken evidence', () => {
+    const ctx = { ...context('It was two twelve pounds.', ['Q04']), displayed: weightAsked };
+    const proposed = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'two twelve pounds' }] }, ctx);
+    const next = reply(ctx, proposed, 'Yes.').ctx;
+    const wording = next.displayed!.wording;
+    if (wording?.version !== 'spoken-number-confirm.1') throw new Error('Missing numeric readback');
+    wording.confirm.unit = 'kg';
+    expect(answers(interpretIntakeResponse(empty, next), 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    expect(answers(interpretIntakeResponse(empty, next), 'Q04')['lastMeasuredWeight.unit']).toBeUndefined();
+  });
+
+  it('clarifies an approximate actual reading while allowing a confirmed estimate in the estimate slot', () => {
+    const ctx = { ...context('One fifty or so pounds.', ['Q04']), displayed: weightAsked };
+    const proposal = { ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 150, quote: 'One fifty or so pounds' }] };
+    const actual = interpretIntakeResponse(proposal, ctx);
+    expect(answers(actual, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    expect(actual.clarifications).toEqual([expect.objectContaining({ path: 'lastMeasuredWeight.value', reason: 'ambiguous-value' })]);
+    expect(actual.clarifications[0].confirm).toBeUndefined();
+    const estimateCtx = { ...ctx, responses: { Q04: { presented: true, answers: { 'lastMeasuredWeight.representsCurrent': { state: 'known' as const, value: false, sourceIds: [ctx.source.id] } } } },
+      displayed: { topicId: 'Q04', promptId: 'Q04.estimate', targetPaths: ['currentWeightEstimate.value'] } };
+    const estimate = interpretIntakeResponse({ ...empty, facts: [{ ...proposal.facts[0], field: 'currentWeightEstimate.value' }] }, estimateCtx);
+    expect(answers(estimate, 'Q04')['currentWeightEstimate.value']).toBeUndefined();
+    expect(estimate.clarifications[0]?.confirm).toMatchObject({ value: 150, unit: 'lb' });
+    const next = reply(estimateCtx, estimate, 'Yes.').ctx;
+    expect(answers(interpretIntakeResponse(empty, next), 'Q04')['currentWeightEstimate.value']).toMatchObject({ state: 'known', value: 150 });
+  });
+
+  it('keeps raw recognition immutable and satisfies the numeric slot only after a reviewed handler confirmation', async () => {
+    const interpret: IntakeInterpreter['interpret'] = async ctx => ({ outcome: interpretIntakeResponse(ctx.source.text === 'Yes.' ? empty : { ...empty,
+      facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 205, quote: '205 pounds' }],
+    }, ctx) });
+    const f = handlerFixture({ interpret });
+    await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
+    let session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
+    const say = async (text: string, channel: 'text' | 'unreviewed-transcript') => {
+      const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text, channel });
+      expect(accepted.status).toBe(202);
+      const applied = await f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+      expect(applied.status).toBe(200);
+      session = applied.body.session;
+      return applied.body;
+    };
+    const raw = await say('My weight was 205 pounds.', 'unreviewed-transcript');
+    expect(f.draft().topics.Q04?.answers['lastMeasuredWeight.value']).toBeUndefined();
+    expect(session.currentPrompt?.text).toBe('Just to confirm, is that 205 pounds?');
+    const confirmed = await say('Yes.', 'text');
+    expect(f.draft().topics.Q04?.answers['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 205, sourceIds: [confirmed.operation.sourceId] });
+    expect(f.draft().topics.Q04?.answers['lastMeasuredWeight.unit']).toMatchObject({ state: 'known', value: 'lb' });
+    expect(f.draft().turns.find(turn => turn.id === raw.operation.sourceId)).toMatchObject({ text: 'My weight was 205 pounds.', channel: 'unreviewed-transcript' });
+    expect(f.draft().adaptive!.operations[confirmed.operation.id].provenance?.find(entry => entry.path === 'lastMeasuredWeight.value')?.evidence.map(span => span.sourceId)).toEqual([raw.operation.sourceId, confirmed.operation.sourceId]);
+  });
+
+  it.each(['one week ago', '2 weeks ago'])(
+    'keeps typed digits direct when the measurement quote includes timing: %s', timing => {
+      const text = `I weighed 205 pounds ${timing}.`;
+      const ctx = { ...context(text, ['Q04']), displayed: weightAsked };
+      const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 205, quote: `205 pounds ${timing}` }] }, ctx);
+      expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 205 });
+      expect(outcome.clarifications).toEqual([]);
+    },
+  );
+
+  it('reads back only the measurement number from a spoken quote that also includes timing', () => {
+    const ctx = { ...context('I weighed two oh five pounds one week ago.', ['Q04']), displayed: weightAsked };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 205, quote: 'two oh five pounds one week ago' }] }, ctx);
+    expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    expect(outcome.clarifications[0]?.confirm?.text).toBe('Just to confirm, is that 205 pounds?');
+    const next = reply(ctx, outcome, 'Yes.').ctx;
+    expect(answers(interpretIntakeResponse(empty, next), 'Q04')['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 205 });
+  });
+
+  it.each(['205 or 206 pounds one week ago', 'two oh five or two hundred six pounds one week ago'])(
+    'does not discard competing reading alternatives while separating timing: %s', quote => {
+      const ctx = { ...context(`It was ${quote}.`, ['Q04']), displayed: weightAsked };
+      const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 205, quote }] }, ctx);
+      expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+      expect(outcome.clarifications[0]).toMatchObject({ path: 'lastMeasuredWeight.value', reason: 'ambiguous-value' });
+      expect(outcome.clarifications[0].confirm).toBeUndefined();
+    },
+  );
+
+  it.each(['I think it was', 'Maybe it was', 'It was probably', 'I guess it was'])(
+    'clarifies an uncertain actual reading even when the quote omits the uncertainty cue: %s', lead => {
+      const ctx = { ...context(`${lead} two oh five pounds.`, ['Q04']), displayed: weightAsked };
+      const first = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 205, quote: 'two oh five pounds' }] }, ctx);
+      expect(answers(first, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+      expect(first.clarifications[0]).toMatchObject({ path: 'lastMeasuredWeight.value', reason: 'ambiguous-value' });
+      expect(first.clarifications[0].confirm).toBeUndefined();
+      const next = reply(ctx, first, 'Yes.').ctx;
+      expect(answers(interpretIntakeResponse(empty, next), 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    },
+  );
+
+  it('clarifies uncertain height wording instead of treating a yes as confirmation of a measurement', () => {
+    const ctx = { ...context('I think I am five foot ten.', ['Q04']),
+      displayed: { topicId: 'Q04', promptId: 'Q04', targetPaths: ['height.value', 'height.unit'] } };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'height.value', state: 'known', value: '5 ft 10 in', quote: 'five foot ten' }] }, ctx);
+    expect(answers(outcome, 'Q04')['height.value']).toBeUndefined();
+    expect(outcome.clarifications[0]).toMatchObject({ path: 'height.value', reason: 'ambiguous-value' });
+    expect(outcome.clarifications[0].confirm).toBeUndefined();
+  });
+
+  it.each([
+    { path: 'lastMeasuredWeight.value', value: 205, quote: '205.5 pounds' },
+    { path: 'lastMeasuredWeight.value', value: 205, quote: '-205 pounds' },
+    { path: 'height.value', value: 173, quote: '173.5 cm' },
+    { path: 'height.value', value: 173, quote: '-173 cm' },
+  ])('rejects precision or sign changes to $path from "$quote"', ({ path, value, quote }) => {
+    const ctx = context(`The reading was ${quote}.`, ['Q04']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: path, state: 'known', value, quote }] }, ctx);
+    expect(answers(outcome, 'Q04')[path]).toBeUndefined();
+    expect(outcome.rejectedCandidates?.map(entry => entry.reason)).toContain('number-not-in-quote');
   });
 });
