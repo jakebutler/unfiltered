@@ -128,7 +128,7 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 | ID | Task | Depends on | Status |
 |---|---|---|---|
 | T1.1 | Workflow registry (one `scenarioIds` source) | D-d landed (it touches `handler.ts`) | done `1dd2ff3`: shared registry/labels, patient copy preserved; six gates plus AWS typecheck pass. |
-| T1.2 | Declarative workflow behaviour fields | T1.1 | not started |
+| T1.2 | Declarative workflow behaviour fields | T1.1 | done `e432e9a`: runtime reads workflow metadata; staff sees collapsed guidance; all six gates pass. |
 | T1.3 | PHQ-4 coding only for the locked block | — | done `a811bd4`: strict topic/item scope and numeric decoding verified; fractional option sets explicitly use FHIR decimals; all six gates pass, golden/digest/count pins unchanged. |
 | T1.4a | Guided walk tests W02–W07 | — | done `7e46cde`: review details, confirmed owners and complete billing/scheduling logistics asserted; all six gates pass on Node 22. Four documented D-m expected failures remain. |
 | T1.4b | Voice-mode tests, non-intake workflows | — | done `46a1a3b`: provenance/unreviewed/PHQ coverage verified; all six gates pass with ten documented expected failures awaiting D-j. |
@@ -484,3 +484,13 @@ wait, with frozen timers, explains the saved Node 22 timeout; it is not diagnose
 flakiness. A test sequencing repair should start body consumption, assert the lease
 is held, resolve the provider, then await the unchanged body/finish/release assertions.
 No research files or allowances were changed and no new reproduction is claimed.
+
+T1.2 `e432e9a` passed fresh GPT-6.1 Sol xhigh review and all six checks:
+foundation **135 / 2090**, clinic **16 / 318**, hosting **1 / 29**, all three
+typechecks. Logs: `/workspace/scratch/unfiltered-validation/t12-{0..6}.log`.
+Workflow date slots, owner additions, logistics and extraction blocks now come from
+scenario metadata. D-m context alternatives read that metadata at their current
+helper location; authored guards and fills are unchanged. Staff sees optional,
+collapsed completion/context guidance, including compatibility with older responses.
+The persisted logistics schema, questionnaire digest/count pins and prior test
+expectations remain unchanged. T2's prerequisite is now satisfied.
