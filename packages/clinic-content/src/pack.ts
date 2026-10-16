@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { PHQ4_ITEM_IDS, PHQ4_TOPIC_ID } from './mental-health.js';
-import { mentalHealthOptions, promptsById } from './register.js';
+import { mentalHealthOptions, promptsById } from './content-constants.js';
 import { mentalHealthSlots } from './slots.js';
 import { branchRuleIds } from './pack-rules.js';
 
@@ -217,6 +217,11 @@ function checkPhq4(value: UncheckedPack, declarations: { item: PackItem; topicId
     if (JSON.stringify(value.mentalHealth.options.phq4[key]) !== JSON.stringify(mentalHealthOptions.phq4[key])) issue(['mentalHealth', 'options', 'phq4', key], 'PHQ-4 options are locked');
   }
   if (value.mentalHealth.slots.phq4 && JSON.stringify(value.mentalHealth.slots.phq4.map(item => item.linkId)) !== JSON.stringify(ids)) issue(['mentalHealth', 'slots', 'phq4'], 'PHQ-4 variant requires exactly the ordered locked items');
+  const baseTopicIndex = value.topics.findIndex(topic => topic.linkId === lock.topicLinkId);
+  const baseItemIds = value.topics[baseTopicIndex]?.item.filter(item => ids.includes(item.linkId)).map(item => item.linkId) ?? [];
+  if (baseItemIds.length && JSON.stringify(baseItemIds) !== JSON.stringify(ids)) {
+    issue(['topics', baseTopicIndex, 'item'], 'PHQ-4 base items require the exact ordered locked item ids');
+  }
   declarations.forEach(({ item, path }) => item.corvo.promptIds.forEach((reference, index) => {
     if (ids.includes(reference) && item.linkId !== reference) issue([...path, 'corvo', 'promptIds', index], 'PHQ-4 item prompts may only bind their locked item');
   }));
