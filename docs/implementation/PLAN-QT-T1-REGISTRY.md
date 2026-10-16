@@ -291,9 +291,12 @@ unfilled brackets without `nativeContext`?
 - If it does, mark it `it.fails` with `// BUG: unfilled placeholder in W02.followup.1` and add it
   to the bug table. T3.9 owns the fix.
 
-### T1.4b Voice-mode tests: `packages/clinic-api/test/workflow-voice.test.ts`
+### T1.4b Voice-mode tests: `packages/clinic-api/test/workflow-voice.test.ts` and `apps/clinic/test/workflow-choice-voice.test.ts`
 
-Follow the existing first-intake voice tests (`grep -ln "confirmed-transcript" packages/clinic-api/test`). For billing and scheduling:
+Follow the existing first-intake voice tests (`grep -ln "confirmed-transcript" packages/clinic-api/test`).
+Use the API conversation/speech-access fixtures for recorded values and source provenance, and
+the browser `VoiceConversation` harness for option/confirmation capture and save dispatch.
+For billing and scheduling:
 - a spoken exact choice ("a bill question", "Tuesday") produces the choice confirmation flow
   (`exactSpokenChoice` / `exactChoiceConfirmation` from `clinic-contract/src/choice-voice.ts`);
 - confirming records the choice with `channel: 'confirmed-transcript'`;

@@ -53,13 +53,16 @@ describe('W05 and W06 choice slots by voice: exact label to value', () => {
     ['W06 intent', 'scheduling', 'W06', 'intent', 'cancel', 'cancel'],
     ['W06 visitCategory', 'scheduling', 'W06', 'visitCategory', 'First visit', 'first-visit'],
     ['W06 preferredDay', 'scheduling', 'W06', 'preferredDay', 'Wednesday', 'Wednesday'],
+    ['W06 preferredDay Tuesday', 'scheduling', 'W06', 'preferredDay', 'Tuesday', 'Tuesday'],
     ['W06 preferredWindow', 'scheduling', 'W06', 'preferredWindow', 'Flexible', 'Flexible'],
     ['W06 timezone', 'scheduling', 'W06', 'timezone', 'Pacific time', 'America/Los_Angeles'],
   ] as const)('%s: spoken "%s" then Yes saves value %s only after confirmation', async (_name, scenario, topic, slot, spoken, value) => {
     const prompt = promptFor(scenario, topic, slot), h = harness(prompt);
     h.controller.start(); h.utterance(spoken);
     expect(h.ports.saveChoice).not.toHaveBeenCalled(); expect(h.controller.state.choice?.value).toBe(value);
-    h.controller.reconcile(); h.utterance('Yes.'); await flush();
+    h.controller.reconcile();
+    h.utterance('Yes.'); await flush();
+    expect(h.ports.speakChoiceConfirmation).toHaveBeenCalledExactlyOnceWith(value);
     expect(h.ports.saveChoice).toHaveBeenCalledExactlyOnceWith({ value, label: spoken, optionTranscript: spoken }, expect.objectContaining({ promptId: prompt.id }), { method: 'voice', transcript: 'Yes.' });
     expect(h.ports.save).not.toHaveBeenCalled(); expect(h.ports.interpret).not.toHaveBeenCalled();
   });
