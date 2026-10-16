@@ -111,7 +111,7 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | D-c | Spoken weight/number confirmation | WIP in `0fd34e3`, unverified (same agent as D-b; check whether any source exists yet) |
 | D-d | Turn latency instrumentation + reductions | done `b6a1761`: submit-to-React-commit timing, safe metadata and fixture report verified; all six gates pass. Reductions remain measured follow-ups, not claimed. |
 | D-e | Staff safety screen visual check | not started |
-| D-f | Re-qualification without an admin grant (`/auth/me` observer) | WIP in `0fd34e3`, unverified, code believed complete (agent stopped at "now the docs, then full suites"). Files (attributed by timestamp, verify by diff): `packages/clinic-api/src/deployment-qualification.ts` + test, `infra/cloud/{clinic-manifest,medplum-preflight,seed-clinic}.mjs`, `infra/cloud/medplum-preflight.test.mjs`, `infra/cloud/vercel/{hosted-config.ts,test/hosting.test.ts}`, `infra/aws/clinic/config.ts`, `infra/aws/test/{config.test,fixtures}.ts`, `scripts/qualification/*`, `docs/implementation/CLOUD-CLINIC.md` |
+| D-f | Re-qualification without an admin grant (`/auth/me` observer) | done `07da259` (local implementation): projection/drift/freshness and complete sealing dependency pins verified; all six gates pass. Frozen private continuation smoke and live calibration remain owner steps. |
 | D-g | Mobile layout check | not started |
 | D-h | Secret rotation + one-time calibration + re-qualify before 2026-10-21 | blocked: needs local/owner; no live calls authorized for this continuation |
 | D-i | Docs: OPUS-HANDOFF, DEMO-TESTING-GUIDE, CLOUD-CLINIC | not started |
@@ -398,3 +398,27 @@ fetch-to-parsed-response; `window.__corvoRenderedTurnTimings` separately records
 commit, with no patient wording in either output. Tests cover lifecycle primitives and request
 wiring; a mounted PatientApp/browser timing exercise was not performed. No latency reduction
 or live-provider performance result is claimed.
+
+D-f `07da259` passed fresh GPT-6.1 Sol xhigh review (including repair of incomplete
+sealing-dependency pins) and all six checks with no competing test processes: foundation
+**133 / 2016**, clinic **16 / 315**, hosting **1 / 29**, all three typechecks. Logs:
+`/workspace/scratch/unfiltered-validation/df-isolated-{0..6}.log`. Additional local checks:
+36 projection tests, 32 AWS config tests, 11 preflight tests, 7 standalone sealing-bundle
+tests; reviewer verified the actual build closure (116 inputs, only node:crypto external).
+
+The first D-f gate overlapped several subagent targeted/typecheck processes and failed
+5 timing/deadline tests in 4 foundation files (grouped sessions, sparse route and AF94 replay);
+all other gates passed. Its unchanged candidate then passed the full six-command rerun with
+those processes stopped. No assertions, deadlines, fixtures, worker settings or test inclusion
+were changed. Both run logs remain under `df-*` and `df-isolated-*`; this is a diagnosed
+resource-contention constraint, not a claim that failures are flaky. Subagents now hold test
+commands while the parent runs full gates.
+
+**Exact remaining D-f auxiliary verification blocker:**
+`node --test infra/cloud/medplum-preflight.test.mjs scripts/qualification/continue-clinic-deployment.test.mjs scripts/qualification/continue-clinic-mapping-suffix.test.mjs`
+under Node 22 exits 1 because both continuation test modules import the absent frozen file
+`/workspace/unfiltered/.factory/private/native-questionnaire-integration/runtime-2026-10-10-q4f/.qualification-build/packages/clinical-core/src/domain.js`
+(`MODULE_NOT_FOUND`, via `clinic-native-mapping.cjs` / `clinic-native-mapping-v2.cjs`). This
+separate private runtime is not part of the 109-file release. It was not regenerated or
+changed; standalone bundle tests cover the new dependency-pin rejection offline. No live
+re-qualification, admin grant, policy change, deployment or Medplum write was performed.
