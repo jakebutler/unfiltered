@@ -32,6 +32,13 @@ const syntheticDecimal: SlotDefinition = {
   promptIds: ["SYN-2"],
   choices: [0.5, 1.5],
 };
+const syntheticMixedNumeric: SlotDefinition = {
+  id: "mixed.scale",
+  label: "Synthetic mixed numeric scale",
+  kind: "choice",
+  promptIds: ["SYN-3"],
+  choices: [0, 0.5, 1],
+};
 
 const known = (value: number) => ({
   state: "known" as const,
@@ -132,4 +139,112 @@ describe("PHQ-4 response coding is scoped to the locked PHQ-4 block", () => {
         expect(decoded).toEqual({ [slot.id]: known(value) });
       }
   });
+
+  it("serialises the specified ZZ.score integer choice without PHQ coding", () => {
+    const slot = { ...syntheticInteger, id: "score", choices: [0, 1, 2] };
+    const { items, decoded } = roundTrip("ZZ", [slot], { score: known(1) });
+    expect(items.find((item) => item.linkId === "ZZ.score")!.answer).toEqual([
+      { valueInteger: 1 },
+    ]);
+    expect(JSON.stringify(items)).not.toContain("urn:corvo:phq4-response");
+    expect(decoded).toEqual({ score: known(1) });
+  });
+
+  it.each([0, 0.5, 1])(
+    "uses valueDecimal for selection %s when the numeric option set includes fractions",
+    (value) => {
+      const { items, decoded } = roundTrip("X99", [syntheticMixedNumeric], {
+        [syntheticMixedNumeric.id]: known(value),
+      });
+      expect(items.find((item) => item.linkId === "X99.mixed.scale")!.answer).toEqual([
+        { valueDecimal: value },
+      ]);
+      expect(decoded).toEqual({ [syntheticMixedNumeric.id]: known(value) });
+    },
+  );
+
+  it.each([
+    { topicId: "Q15", slotId: "MH01" },
+    { topicId: "Q16", slotId: "severity" },
+  ])(
+    "requires both topic and slot identity for PHQ coding ($topicId.$slotId)",
+    ({ topicId, slotId }) => {
+      const slot = { ...syntheticInteger, id: slotId };
+      const { items, decoded } = roundTrip(topicId, [slot], {
+        [slotId]: known(2),
+      });
+      const field = items.find((item) => item.linkId === `${topicId}.${slotId}`)!;
+      expect(field.answer).toEqual([{ valueInteger: 2 }]);
+      expect(decoded).toEqual({ [slotId]: known(2) });
+      field.answer = [{
+        valueCoding: {
+          system: "urn:corvo:phq4-response",
+          code: "2",
+          display: PHQ_LABELS[2],
+        },
+      }];
+      expect(() => deserializeSlots(topicId, [slot], items)).toThrow(
+        "invalid-response-coding",
+      );
+    },
+  );
+
+  it.each([
+    { slot: syntheticInteger, answer: { valueDecimal: 2 }, selected: 2 },
+    { slot: syntheticMixedNumeric, answer: { valueInteger: 1 }, selected: 1 },
+  ])(
+    "rejects the wrong numeric representation for $slot.id",
+    ({ slot, answer, selected }) => {
+      const items = serializeSlots("X99", [slot], { [slot.id]: known(selected) }, []);
+      items.find((item) => item.linkId === `X99.${slot.id}`)!.answer = [answer];
+      expect(() => deserializeSlots("X99", [slot], items)).toThrow(
+        "response-value-type-mismatch",
+      );
+    },
+  );
+
+  it.each([
+    { slot: syntheticInteger, answer: { valueInteger: 4 }, selected: 2 },
+    { slot: syntheticDecimal, answer: { valueDecimal: 2 }, selected: 1.5 },
+  ])(
+    "rejects an out-of-option numeric value for $slot.id",
+    ({ slot, answer, selected }) => {
+      const items = serializeSlots("X99", [slot], { [slot.id]: known(selected) }, []);
+      items.find((item) => item.linkId === `X99.${slot.id}`)!.answer = [answer];
+      expect(() => deserializeSlots("X99", [slot], items)).toThrow(
+        "invalid-response-choice",
+      );
+    },
+  );
+
+  it.each([
+    { answer: { valueInteger: 2 }, error: "response-value-type-mismatch" },
+    { answer: { valueDecimal: 2 }, error: "response-value-type-mismatch" },
+    {
+      answer: { valueCoding: {
+        system: "urn:synthetic:scale", code: "2", display: PHQ_LABELS[2],
+      } },
+      error: "invalid-response-coding",
+    },
+    {
+      answer: { valueCoding: {
+        system: "urn:corvo:phq4-response", code: "4", display: PHQ_LABELS[2],
+      } },
+      error: "invalid-response-coding",
+    },
+    {
+      answer: { valueCoding: {
+        system: "urn:corvo:phq4-response", code: "2", display: "Synthetic label",
+      } },
+      error: "invalid-response-choice-label",
+    },
+  ])(
+    "rejects a malformed or uncoded PHQ response ($answer)",
+    ({ answer, error }) => {
+      const slot = mentalHealthSlots.phq4[0];
+      const items = serializeSlots("Q16", [slot], { [slot.id]: known(2) }, []);
+      items.find((item) => item.linkId === `Q16.${slot.id}`)!.answer = [answer];
+      expect(() => deserializeSlots("Q16", [slot], items)).toThrow(error);
+    },
+  );
 });

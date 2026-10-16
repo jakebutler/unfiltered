@@ -216,20 +216,40 @@ Implement it as a lookup over `scenarios` where `additionalTopics.some(t => t.id
 `choice` slot. The first non-PHQ numeric choice item would be mislabeled in FHIR.
 
 **Fix.**
-- Emit the PHQ coding only when the slot id matches `/^MH0[1-4]$/` and the topic is `Q16`. Use
-  the same predicate as `conversation.ts:157`, exported as
-  `isPhq4ItemSlot(topicId, slotId)` from `packages/clinic-content/src/mental-health.ts` (already added by the T1.3 WIP, with `PHQ4_TOPIC_ID`, `PHQ4_ITEM_IDS` and `PHQ4_RESPONSE_SYSTEM`).
-- Any other numeric choice gets `{ valueInteger: value }`.
+- Emit the PHQ coding only when the slot id matches `/^MH0[1-4]$/` and the topic is `Q16`.
+  Export this explicit topic-and-slot predicate as `isPhq4ItemSlot(topicId, slotId)` from
+  `packages/clinic-content/src/mental-health.ts` (already added by the T1.3 WIP, with
+  `PHQ4_TOPIC_ID`, `PHQ4_ITEM_IDS` and `PHQ4_RESPONSE_SYSTEM`). Use it in both response
+  serialization and deserialization. The existing conversation slot regex alone is not this
+  predicate; changing conversation behavior is outside this coding-only task.
+- For any other all-numeric choice slot, emit `{ valueInteger: value }` when every authored
+  option is an integer; otherwise emit `{ valueDecimal: value }`. Determine the representation
+  from the full option set, including integral selections on a fractional scale. Never round
+  or truncate. Deserialization requires the same representation and rejects values outside
+  the authored options. This explicitly corrects the original blanket `valueInteger` rule,
+  which cannot represent fractional choices.
 - Do not change string or boolean paths.
 
-**Tests** in `packages/clinical-core/test/questionnaire-response.test.ts`:
+**Tests** in `packages/clinical-core/test/phq4-response-scope.test.ts`, preserving all existing
+assertions, including those in `questionnaire-response.test.ts`:
 1. The existing golden QuestionnaireResponse output is byte-identical (the existing tests pass
    unedited).
-2. A new case: a synthetic topic `ZZ` with a `choice` slot `score` (`choices: [0, 1, 2]`) answered
-   `1` serialises to `valueInteger: 1`, with no `urn:corvo:phq4-response`.
+2. A synthetic topic `ZZ` with a `choice` slot `score` (`choices: [0, 1, 2]`) answered `1`
+   serializes to `valueInteger: 1`, without `urn:corvo:phq4-response`, and round-trips.
+3. Fractional choices use `valueDecimal` and round-trip without changing the value. For mixed
+   options `[0, 0.5, 1]`, each selection, including `0` and `1`, uses `valueDecimal`.
+4. A PHQ item id outside `Q16`, and an unrelated numeric slot inside `Q16`, use plain numeric
+   answers and reject forged PHQ coding.
+5. Non-PHQ numeric choices reject the wrong integer/decimal field and out-of-option values.
+6. All four locked PHQ items retain every exact coding/label for values `0` through `3` and
+   round-trip. Plain numeric PHQ answers and invalid coding systems, codes or labels are rejected.
 
-If the synthetic topic cannot pass the native definition validation, test `scalarAnswer` directly
-by exporting it as `/** @internal */`.
+The existing exported `serializeSlots` and `deserializeSlots` are internal test seams for
+synthetic definitions that cannot pass the locked native definition validation. Production
+paths continue to use the topic-level functions. These tests do not establish native
+Questionnaire export support for new numeric scales, and must not change the questionnaire
+digest. Keep the existing exact wording, buttons-only and incomplete-screen clinical tests
+unchanged.
 
 ---
 
