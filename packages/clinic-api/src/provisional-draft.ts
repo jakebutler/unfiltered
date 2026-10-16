@@ -1,3 +1,4 @@
+import { scenarioForWorkflowTopic } from '../../clinic-content/src/scenarios.js';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '../../clinical-core/src/domain.js';
 import { parseGuidedValue, type Scalar, type TopicResponse, type SlotDefinition } from '../../clinic-content/src/index.js';
@@ -142,7 +143,7 @@ export function prepareProvisionalCapture(context: AdaptiveContext, draft: Reply
       || state === 'declined' && !decline.test(candidate.scope.predicate.quote)) fidelity = 'model-interpreted';
     if (candidate.state === 'known') {
       try { value = normalizeProposedValue(target, candidate.value); } catch { reject('invalid-type'); continue; }
-      if ((target.topicId === 'W05' && target.path === 'serviceDate' || target.topicId === 'W06' && target.path === 'requestedDate') && typeof value === 'string'
+      if (scenarioForWorkflowTopic(target.topicId)?.behaviour?.dateSlotIds?.includes(target.path) && typeof value === 'string'
         && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value)) { reject('invalid-type'); continue; }
       const text = candidate.valueEvidence?.quote ?? '';
       if (target.kind === 'height-value' && !heights.has(text)) heights.set(text,explicitHeightQuantities(text));

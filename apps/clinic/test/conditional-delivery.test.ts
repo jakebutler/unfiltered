@@ -295,3 +295,24 @@ describe('action proof and response scope', () => {
     const scope = new StaffResponseScope(), old = scope.capture(); scope.invalidate(); expect(scope.accepts(old)).toBe(false); expect(scope.accepts(scope.capture())).toBe(true);
   });
 });
+
+it('shows optional workflow guidance in a collapsed staff detail', async () => {
+  await boot();
+  const workflow = { completion: 'Synthetic completion guidance.', contextRequirement: 'Synthetic verified context requirement.' };
+  harness.request.mockResolvedValue(handoff({ workflow }));
+  const tree = await open();
+  const details = nodes(tree, node => node.type === 'details' && text(node.props.children).includes('About this workflow'))[0];
+  expect(details).toBeDefined();
+  expect(details.props.open).toBeUndefined();
+  expect(details.props.className).toBe('metadata');
+  expect(text(details.props.children)).toContain('What counts as done');
+  expect(text(details.props.children)).toContain(workflow.completion);
+  expect(text(details.props.children)).toContain('Context this workflow expects');
+  expect(text(details.props.children)).toContain(workflow.contextRequirement);
+});
+
+it('omits workflow guidance for older handoff responses without metadata', async () => {
+  await boot();
+  const tree = await open();
+  expect(text(tree)).not.toContain('About this workflow');
+});

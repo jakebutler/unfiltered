@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { contractMatches, isScenarioId, scenarioIds, scenarioTitles } from '../src/workflows.js';
-import { scenarios } from '../src/scenarios.js';
+import { scenarios, scenarioForWorkflowTopic } from '../src/scenarios.js';
+import { createClinicContent } from '../src/register.js';
+import { billingLogisticsFields, schedulingLogisticsFields } from '../../clinical-core/src/domain.js';
 import { administrativeChoiceLabels } from '../../clinic-contract/src/index.js';
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -47,5 +49,32 @@ describe('ordered workflow registry', () => {
       visitCategory: { 'first-visit': 'First visit', 'follow-up': 'Follow-up visit', 'not-sure': 'Not sure' },
       timezone: { 'America/New_York': 'Eastern time', 'America/Chicago': 'Central time', 'America/Denver': 'Mountain time', 'America/Los_Angeles': 'Pacific time', 'America/Anchorage': 'Alaska time', 'Pacific/Honolulu': 'Hawaii time' },
     });
+  });
+});
+
+describe('declarative workflow behaviour', () => {
+  it('keeps logistics projections equal to the persisted schema field sets', () => {
+    expect(scenarios.billing.behaviour?.logistics).toEqual({ kind: 'billing', slotIds: billingLogisticsFields });
+    expect(scenarios.scheduling.behaviour?.logistics).toEqual({ kind: 'scheduling', slotIds: schedulingLogisticsFields });
+  });
+
+  it.each(scenarioIds)('%s references existing workflow slots and authored prompts', id => {
+    const scenario = scenarios[id], behaviour = scenario.behaviour;
+    const slotIds = scenario.additionalTopics.flatMap(topic => topic.slots.map(slot => slot.id));
+    for (const slot of [...(behaviour?.dateSlotIds ?? []), ...(behaviour?.extractionBlockedSlotIds ?? []), ...(behaviour?.logistics?.slotIds ?? []), ...(behaviour?.contextPrompts ? [behaviour.contextPrompts.slotId] : [])]) {
+      expect(slotIds).toContain(slot);
+    }
+    const contextPrompts = behaviour?.contextPrompts;
+    if (contextPrompts) {
+      const register = createClinicContent({ mentalHealth: 'phq4' });
+      expect(register.promptsById[contextPrompts.verifiedPromptId]).toBeDefined();
+      expect(register.promptsById[contextPrompts.missingPromptId]).toBeDefined();
+    }
+  });
+
+  it('resolves only workflow-owned additional topics', () => {
+    expect(scenarioForWorkflowTopic('W05')?.id).toBe('billing');
+    expect(scenarioForWorkflowTopic('Q04')).toBeUndefined();
+    expect(scenarioForWorkflowTopic('unknown')).toBeUndefined();
   });
 });

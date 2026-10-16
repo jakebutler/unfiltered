@@ -25,6 +25,8 @@ const answerSchema = z.object({
   text: text.optional(), sourceIds: z.array(id).max(600),
 }).strict();
 const logisticsDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value);
+export const billingLogisticsFields: readonly string[] = ['issueType', 'serviceDate', 'requestedResolution'];
+export const schedulingLogisticsFields: readonly string[] = ['intent', 'visitCategory', 'preferredDay', 'preferredWindow', 'requestedDate', 'timezone'];
 /** Only approved structured logistics. Clinical text is never copied into this projection. */
 export const administrativeLogisticsSchema = z.object({
   kind: z.enum(['billing', 'scheduling', 'other']),
@@ -35,9 +37,7 @@ export const administrativeLogisticsSchema = z.object({
   preferredWindow: z.enum(['Morning', 'Afternoon', 'Evening', 'Flexible', 'Not sure']).optional(), requestedDate: logisticsDate.optional(),
   timezone: z.enum(['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu', 'Other', 'Not sure']).optional(),
 }).strict().superRefine((value, context) => {
-  const billing = ['issueType', 'serviceDate', 'requestedResolution'];
-  const scheduling = ['intent', 'visitCategory', 'preferredDay', 'preferredWindow', 'requestedDate', 'timezone'];
-  for (const field of Object.keys(value).filter(field => field !== 'kind')) if (!(value.kind === 'billing' ? billing : value.kind === 'scheduling' ? scheduling : []).includes(field)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'logistics-kind-mismatch', path: [field] });
+  for (const field of Object.keys(value).filter(field => field !== 'kind')) if (!(value.kind === 'billing' ? billingLogisticsFields : value.kind === 'scheduling' ? schedulingLogisticsFields : []).includes(field)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'logistics-kind-mismatch', path: [field] });
 });
 export type AdministrativeLogistics = z.infer<typeof administrativeLogisticsSchema>;
 export const submissionSchema = z.object({

@@ -10,7 +10,7 @@ import { assessSpecificity, specificityContracts, specificityDefinition } from "
 import { lookupReference, referenceRelease } from "../../clinic-reference/src/index.js";
 /** Answer specificity contracts with the exact offline reference releases they consult (D1). */
 const specificityContract = { ...specificityDefinition, reference: referenceRelease };
-import { scenarios } from "./scenarios.js";
+import { scenarios, scenarioForWorkflowTopic } from "./scenarios.js";
 import { conditionBranches } from "./branches.js";
 import {
   guidedFieldForPath,
@@ -1938,8 +1938,9 @@ export function activeNativeGuidedPrompt(
   authority: NativePromptAuthority & { scenario: ScenarioId },
   evidence: EvidenceContext,
 ): { promptId: string; text: string } | undefined {
+  const contextPrompts = scenarioForWorkflowTopic(topic.id)?.behaviour?.contextPrompts;
   const candidates = field.promptIds.flatMap(id =>
-    id === "S01" ? [id, "S01a"] : id === "S03" ? [id, "S03a"] : [id],
+    contextPrompts && id === contextPrompts.verifiedPromptId ? [id, contextPrompts.missingPromptId] : [id],
   );
   for (const promptId of new Set(candidates)) {
     let text = promptsById[promptId]?.text;
@@ -2011,7 +2012,7 @@ export function nextNativeGuidedField(
       return guidedFieldForPath(topic, response, path);
     }
   }
-  const workflow = Object.values(scenarios).find(scenario => scenario.workflowId === topic.id);
+  const workflow = scenarioForWorkflowTopic(topic.id);
   if (workflow) {
     // Filter navigation metadata only. In particular W02.changes remains unasked
     // and unresolved until its prior item/date can be supplied by trusted context.

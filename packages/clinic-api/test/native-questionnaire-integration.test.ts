@@ -1,3 +1,4 @@
+import { scenarios as workflowTemplates } from '../../clinic-content/src/scenarios.js';
 import { applyValidatedTurn, validateAdaptiveProposal, type AdaptiveContext } from '../src/adaptive-validation.js';
 import { eligibleAdaptiveProbes, selectAdaptiveDialogue } from '../src/dialogue.js';
 import { describe, expect, it } from 'vitest';
@@ -343,3 +344,12 @@ async function billingDraft(f: Fixture): Promise<Draft> {
   draft.preview = await f.c.preview(draft); draft.phase = 'review'; draft.confirmed = await f.c.finalize(draft); draft.preview = undefined; draft.phase = 'confirmed';
   return draft;
 }
+
+it('returns authored workflow completion and context requirements to assigned staff', async () => {
+  const f = await setup('billing');
+  await receive(f, f.draft);
+  for (const assignment of [staff[0], staff[2]]) {
+    const detail = await f.h.view(f.client, f.client, assignment, f.id);
+    expect(detail.workflow).toEqual({ completion: workflowTemplates.billing.completion, contextRequirement: workflowTemplates.billing.contextRequirement });
+  }
+});

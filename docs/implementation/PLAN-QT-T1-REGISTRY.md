@@ -169,7 +169,7 @@ Implement it as a lookup over `scenarios` where `additionalTopics.some(t => t.id
 
 | Site | Replace with |
 |---|---|
-| `clinic-api/src/conversation.ts:152` (S01→S01a / S03→S03a) | `const cp = scenarioForWorkflowTopic(topic.id)?.behaviour?.contextPrompts; const selectedPromptId = native && cp && field.promptIds[0] === cp.verifiedPromptId && !nativeContext(d)?.[cp.requires] ? cp.missingPromptId : field.promptIds[0];` Leave the placeholder fills at `:155-156` as they are; T3.9 generalises them. |
+| `clinic-content/src/native-questionnaire.ts` `activeNativeGuidedPrompt` (D-m moved S01/S03 fallback here) | Read `scenarioForWorkflowTopic(topic.id)?.behaviour?.contextPrompts`; expand a matching `verifiedPromptId` candidate to `[id, missingPromptId]`. Keep D-m's active-prompt guard, trusted-context checks, placeholder fills, and inactive-candidate skipping unchanged. `nextNativeGuidedField` uses the same workflow-topic helper. |
 | `clinic-api/src/conversation.ts:343` (W05 serviceDate / W06 requestedDate validation) | `scenarioForWorkflowTopic(c.topic.id)?.behaviour?.dateSlotIds?.includes(c.field.path)` |
 | `clinic-api/src/provisional-draft.ts:145` | same predicate on `target.topicId` / `target.path` |
 | `clinic-api/src/conversation.ts:380` `['billing','scheduling'].includes(d.scenario) ? ['medical'] : []` | `scenario.behaviour?.alwaysOwners ?? []`, merged into the same `Set` (keep the `d.safety` / `safetyReviewTopics` medical rule as it is) |
