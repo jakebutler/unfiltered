@@ -1,3 +1,4 @@
+import { scenarioIds } from '../../clinic-content/src/workflows.js';
 import { requireFinalRepresentationAuthority } from './final-representation.js';
 import { validateRepresentationDigests } from '../../clinical-core/src/representation-review.js';
 import { z } from 'zod';
@@ -21,7 +22,7 @@ import { applyGateOutcome, safetyActionOutcomes, safetyReviews, staffSafety, typ
 import { createRequestTiming, finishRequest, requestIdFrom, routeName, type RequestTiming } from './request-timing.js';
 const revision = z.number().int().nonnegative();
 const schemas = {
-    sessions: z.object({ scenario: z.enum(['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill']), syntheticAcknowledged: z.literal(true) }).strict(),
+    sessions: z.object({ scenario: z.enum(scenarioIds), syntheticAcknowledged: z.literal(true) }).strict(),
     identity: z.object({ confirmed: z.literal(true) }).strict(),
     turns: z.object({ requestId: z.string().uuid(), expectedRevision: revision, promptId: z.string().min(1).max(300), action: z.enum(['answer', 'unknown', 'decline', 'move-on']), text: z.string().max(8000).optional(), fields: z.record(z.string().max(8000)).refine(x => Object.keys(x).length <= 8).optional(), channel: z.enum(sourceChannels).optional(), choiceConfirmation: z.object({ optionTranscript: z.string().min(1).max(8000), confirmationTranscript: z.string().max(8000), confirmationMethod: z.enum(['voice', 'control']) }).strict().optional(), choiceTranscriptOnly: z.literal(true).optional(), priorChoiceTranscript: z.string().min(1).max(8000).optional() }).strict(),
     adaptiveTurn: z.object({ requestId: z.string().uuid(), expectedRevision: revision, text: z.string().min(1).max(8000), channel: z.enum(sourceChannels) }).strict(),

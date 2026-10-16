@@ -1,4 +1,5 @@
 /** Browser-safe clinic API views. Secrets, FHIR credentials and trusted assessments never cross this boundary. */
+// Kept literal so the browser contract has no runtime dependencies; checked in content/workflows.ts.
 export type ScenarioId = 'first-intake' | 'pre-visit' | 'non-visit' | 'post-visit' | 'billing' | 'scheduling' | 'refill';
 export type TopicStatus = 'not-started' | 'more-detail-needed' | 'ready-for-review' | 'stopped-with-gaps';
 export type AnswerState = 'answered' | 'negative' | 'unknown' | 'declined' | 'uncertain' | 'not-asked' | 'conflicting';
@@ -155,3 +156,12 @@ export interface StaffSafetyReview {
 }
 export interface StaffSafetyAction { actionId: string; signalId?: string; outcome: 'no-concern' | 'contacted-patient' | 'escalated'; note: string; by: string; role: string; at: string; }
 export interface StaffSafetyView { sessionId: string; patientName: string; scenario: string; reviews: StaffSafetyReview[]; actions: StaffSafetyAction[]; }
+
+/** Display labels for structured administrative choices. Unlisted values display as-is. */
+export const administrativeChoiceLabels: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  issueType: { 'bill-question': 'A bill question', 'coverage-question': 'A coverage question', 'payment-question': 'A payment question', 'other-request': 'Another billing request' },
+  requestedResolution: { explanation: 'An explanation', 'review-possible-error': 'Review a possible error', 'payment-options': 'Discuss payment options', 'contact-me': 'Contact me' },
+  intent: { request: 'Request a visit', change: 'Change a visit', cancel: 'Cancel a visit' },
+  visitCategory: { 'first-visit': 'First visit', 'follow-up': 'Follow-up visit', 'not-sure': 'Not sure' },
+  timezone: { 'America/New_York': 'Eastern time', 'America/Chicago': 'Central time', 'America/Denver': 'Mountain time', 'America/Los_Angeles': 'Pacific time', 'America/Anchorage': 'Alaska time', 'Pacific/Honolulu': 'Hawaii time' },
+};

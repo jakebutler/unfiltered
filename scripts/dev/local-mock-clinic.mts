@@ -1,3 +1,4 @@
+import { scenarioIds } from '../../packages/clinic-content/src/workflows.js';
 /**
  * Local browser testing without the shared Medplum project: the real clinic handler over an in-memory FHIR store,
  * with the real DigitalOcean interpreter and safety reviewer. Synthetic data only; everything is lost on exit.
@@ -49,7 +50,7 @@ const capped: typeof fetch = async (input, init) => {
 
 const origin = 'http://127.0.0.1:5173';
 const patient = { reference: 'Patient/local-synthetic', displayName: 'Alex (synthetic)', description: 'Fictional local test patient', careTeams: { medical: 'CareTeam/md', nutrition: 'CareTeam/rd', administrative: 'CareTeam/admin' } };
-const config = { origin, cookieSecret: randomBytes(32).toString('hex'), mentalHealth: 'phq4', patients: Object.fromEntries(['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill'].map(id => [id, patient])) } as ClinicApiConfig;
+const config = { origin, cookieSecret: randomBytes(32).toString('hex'), mentalHealth: 'phq4', patients: Object.fromEntries(scenarioIds.map(id => [id, patient])) } as ClinicApiConfig;
 const client = new MedplumClient({ baseUrl: 'http://localhost:8103/fhir/R4/', accessToken: 'synthetic', mode: 'local', timeoutMs: 5000 }, mockFhir({ atomic: false }).fetcher);
 const model = { endpoint: DO_ENDPOINT, model: defaultInterpreterModel, apiKey } as const;
 const interpreter = createIntakeInterpreter({ ...model, maxOutputTokens: 1500, timeoutMs: 20000 }, capped);

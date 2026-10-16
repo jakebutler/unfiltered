@@ -1,3 +1,4 @@
+import { scenarioIds as scenarios } from '../../clinic-content/src/workflows.js';
 import { z } from 'zod';
 import { representationReviewSchema, validateRepresentationBinding, validateRepresentationDigests, type TrustedRepresentationAuthority } from './representation-review.js';
 import { nativeQuestionnaireCaptureSchema, validateNativeQuestionnaireCaptureShape, validateNativeQuestionnaireCapture } from './questionnaire-response.js';
@@ -5,7 +6,7 @@ import { nativeQuestionnaireCaptureSchema, validateNativeQuestionnaireCaptureSha
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/);
 const reference = (type: string) => z.string().regex(new RegExp(`^${type}/[A-Za-z0-9.-]{1,64}$`));
 const text = z.string().min(1).max(12000);
-export const scenarios = ['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill'] as const;
+export { scenarioIds as scenarios } from '../../clinic-content/src/workflows.js';
 export const clinicalRoles = ['registered-dietitian', 'nurse-practitioner', 'physician-assistant', 'physician'] as const;
 export type StaffRole = typeof clinicalRoles[number] | 'administrative';
 const sourceSchema = z.object({

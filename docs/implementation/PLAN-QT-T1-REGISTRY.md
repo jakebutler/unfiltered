@@ -58,10 +58,10 @@ export const administrativeChoiceLabels: Readonly<Record<string, Readonly<Record
 | `packages/clinical-core/src/questionnaire-response.ts:223-231` | inline `z.enum([...])` | `z.enum(scenarioIds)` |
 | `packages/clinic-api/src/handler.ts:24` | inline `z.enum([...])` | `z.enum(scenarioIds)` |
 | `packages/clinic-api/src/conversation.ts:22` | `scenarioTitles` literal | `export { scenarioTitles } from '../../clinic-content/src/workflows.js'` (keep the export; it is imported elsewhere, so check with grep) |
-| `packages/clinic-api/src/conversation.ts:23` | flat `choiceLabels` literal | `const choiceLabels: Record<string,string> = Object.assign({}, ...Object.values(administrativeChoiceLabels));` imported from clinic-contract |
+| `packages/clinic-api/src/conversation.ts:23` | flat `choiceLabels` literal | `Object.fromEntries(Object.entries(administrativeChoiceLabels).filter(([field]) => field !== 'intent').flatMap(([, labels]) => Object.entries(labels)))` imported from clinic-contract. Exclude staff-only intent labels to preserve patient `request`/`change`/`cancel` choices verbatim |
 | `apps/clinic/src/StaffApp.tsx:289-295` | `administrativeChoiceLabels` literal | import from `'../../../packages/clinic-contract/src/index'` |
 | `infra/cloud/vercel/hosted-config.ts:9` | `const scenarios = [...]` | `import { scenarioIds as scenarios } from '../../../packages/clinic-content/src/workflows.js'` (the file already imports clinic-content) |
-| `infra/aws/clinic/config.ts:9,17` | literal + explicit `z.object` keys | Import `scenarioIds`. Line 17 becomes `z.object(Object.fromEntries(scenarioIds.map(id => [id, patient])) as Record<ScenarioId, typeof patient>).strict()`. Check it is typechecked: if no tsconfig includes it, leave it and add it to the equality test instead. |
+| `infra/aws/clinic/config.ts:9,17` | literal + explicit `z.object` keys | Import `scenarioIds as scenarios` and `ScenarioId`. Build `patients` with `z.object(Object.fromEntries(scenarios.map(id => [id, patient])) as Record<ScenarioId, typeof patient>).strict()`. `infra/aws/tsconfig.json` includes this file; run `npx tsc -p infra/aws/tsconfig.json --noEmit` in addition to the hub gate, whose compiler graph excludes AWS. |
 | `scripts/dev/local-mock-clinic.mts:52` | literal array | import `scenarioIds` |
 
 ### Do not change (record why in the code comment and the test)
@@ -80,13 +80,14 @@ import { describe, expect, it } from 'vitest';
 import { scenarioIds, scenarioTitles, type ScenarioId } from '../src/workflows.js';
 import type { ScenarioId as ContractScenarioId } from '../../clinic-contract/src/index.js';
 import { scenarios } from '../src/scenarios.js';
-// compile-time two-way equality; tsc -p tsconfig.foundation.json fails if they diverge
+// Keep this compile-time assertion in src/workflows.ts and import contractMatches here:
+// foundation tsc excludes tests, so a test-only assertion would not be checked.
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 const contractMatches: Equal<ScenarioId, ContractScenarioId> = true;
 ```
 
 Cases:
-1. `contractMatches` is `true`. This is a type assertion; also `expect(contractMatches).toBe(true)`.
+1. `contractMatches` is `true`. Define/export the type equality assertion in `src/workflows.ts`, which the foundation compiler includes, and assert `expect(contractMatches).toBe(true)` here.
 2. `Object.keys(scenarios)` equals `scenarioIds` in order.
 3. Every `scenarios[id].id === id`, and the `workflowId`s are `W01..W07` in order.
 4. `Object.keys(scenarioTitles)` equals `scenarioIds`.
@@ -97,10 +98,11 @@ Cases:
 6. `infra/local/seed-clinic.mjs` contains the literal `const scenarios=['first-intake',…]` in
    the same order. Use a text match, because the file has top-level side effects and must not be
    imported.
+7. Shared staff choice labels remain verbatim. `packages/clinic-api/test/workflow-registry.test.ts` verifies that scheduling intent patient choices keep their original raw labels and billing choices keep their original display labels.
 
 ### Done when
 
-The shared T1 acceptance holds, and `grep -rn "'first-intake', 'pre-visit'" packages apps/clinic/src infra/cloud/vercel scripts/dev` only matches `workflows.ts` and the clinic-contract union.
+The shared T1 acceptance holds. Search runtime sources for duplicate ordered scenario lists; only `workflows.ts` remains in the migrated runtime paths. Existing test fixtures, the dependency-free contract union, direct-node `.mjs` scripts, and historical qualification scripts retain their documented literals. AWS config shares the registry and is checked separately with `infra/aws/tsconfig.json`.
 
 Commit pathspecs:
 - `packages/clinic-content/src/{workflows,types,index}.ts`
@@ -109,9 +111,12 @@ Commit pathspecs:
 - `packages/clinic-api/src/{handler,conversation}.ts`
 - `apps/clinic/src/StaffApp.tsx`
 - `infra/cloud/vercel/hosted-config.ts`
-- (`infra/aws/clinic/config.ts`)
+- `infra/aws/clinic/config.ts`
 - `scripts/dev/local-mock-clinic.mts`
 - `packages/clinic-content/test/workflows.test.ts`
+- `packages/clinic-api/test/workflow-registry.test.ts`
+
+**AWS compiler follow-through.** Checking the dedicated AWS config revealed D-f's validated `projectVersion` was inferred as plain `string`, while the qualification contract requires the `projection-sha256:${string}` template literal. Narrow only this value with an identity transform after the existing regex validation. Preserve the regex, accepted values and returned string; record this type-only repair in the T1.1 commit notes.
 
 **Coordination:** `handler.ts` and `apps/clinic/src/api.ts` carry uncommitted latency (D-d) work.
 Start T1.1 only after D-d is committed, because interactive hunk staging is not available.

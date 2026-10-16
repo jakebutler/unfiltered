@@ -6,7 +6,7 @@ import type { QualifiedClinicConfig } from '../../../packages/clinic-api/src/dep
 const projectId = '13eaac67-a2c3-4aa1-aa9e-590a083e5fef';
 const clientId = '50db76bd-d099-4305-8ec3-7439ffc38ca1';
 const membershipId = '6e565de2-837d-4618-9578-f6428fbb0be1';
-const scenarios = ['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill'] as const;
+import { scenarioIds as scenarios } from '../../../packages/clinic-content/src/workflows.js';
 const reference = (type: string) => z.string().regex(new RegExp(`^${type}/[A-Za-z0-9.-]{1,64}$`));
 const nativeBinding = z.object({ canonical: z.literal(NATIVE_QUESTIONNAIRE_CANONICAL), version: z.literal(NATIVE_QUESTIONNAIRE_VERSION), digest: z.string().regex(/^[a-f0-9]{64}$/), reference: z.string().regex(/^Questionnaire\/[A-Za-z0-9.-]{1,64}\/_history\/[A-Za-z0-9.-]{1,64}$/) }).strict();
 const patient = z.object({ reference: reference('Patient'), displayName: z.string().min(1).max(200), description: z.string().max(2000), careTeams: z.object({ medical: reference('CareTeam'), nutrition: reference('CareTeam'), administrative: reference('CareTeam') }).strict(), context: z.string().max(8000).optional(), nativeContext: nativeRoutingContextSchema.optional() }).strict();

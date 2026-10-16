@@ -1,3 +1,4 @@
+import { administrativeChoiceLabels } from '../../../packages/clinic-contract/src/index';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, Check, ChevronRight, ClipboardList, LogOut, RefreshCw } from 'lucide-react';
 import type { SafetyCategoryView, SafetyLevelView, StaffHandoffView, StaffIdentity, StaffQueueItem, StaffRecoveryItem, StaffSafetyAction, StaffSafetyItem, StaffSafetyView, TopicView } from '../../../packages/clinic-contract/src/index';
@@ -286,13 +287,6 @@ export function StaffDeliverySummary({ handoff, busy, onResume }: { handoff: Sta
   </section>;
 }
 
-const administrativeChoiceLabels: Record<string, Record<string, string>> = {
-  issueType: { 'bill-question': 'A bill question', 'coverage-question': 'A coverage question', 'payment-question': 'A payment question', 'other-request': 'Another billing request' },
-  requestedResolution: { explanation: 'An explanation', 'review-possible-error': 'Review a possible error', 'payment-options': 'Discuss payment options', 'contact-me': 'Contact me' },
-  intent: { request: 'Request a visit', change: 'Change a visit', cancel: 'Cancel a visit' },
-  visitCategory: { 'first-visit': 'First visit', 'follow-up': 'Follow-up visit', 'not-sure': 'Not sure' },
-  timezone: { 'America/New_York': 'Eastern time', 'America/Chicago': 'Central time', 'America/Denver': 'Mountain time', 'America/Los_Angeles': 'Pacific time', 'America/Anchorage': 'Alaska time', 'Pacific/Honolulu': 'Hawaii time' },
-};
 
 function administrativeDetailText(detail: NonNullable<TopicView['details']>[number]) {
   const value = detail.text;

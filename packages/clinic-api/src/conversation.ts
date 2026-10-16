@@ -8,7 +8,7 @@ import { streamSpeechScopeDigest } from './adaptive-stream-session.js';
 import { choiceConfirmationSpeech, exactSpokenChoice, exactChoiceConfirmation } from '../../clinic-contract/src/choice-voice.js';
 import { scorePhq4, scenarioTopics, guidedFieldForPath, aggregateTargets, applyGuidedAnswer, addCollectionItem, finishCollection, createClinicContent, diabetesBranchApplicability, evaluateTopic, nextGuidedField, parseGuidedValue, mentalHealthOptions, type GuidedField, type TopicDefinition, type TopicResponse, type SlotAnswer, type SlotAnswers, type SlotDefinition } from '../../clinic-content/src/index.js';
 import { canonicalJson, digest, confirmSubmission, unresolvedRecognitionSourceIds, type ContentContract, type Submission, type SufficiencyAssessment } from '../../clinical-core/src/domain.js';
-import { conversationSpeech } from '../../clinic-contract/src/index.js';
+import { administrativeChoiceLabels, conversationSpeech } from '../../clinic-contract/src/index.js';
 import type { ClinicSessionView, PromptView, TopicView, TurnInput, ScenarioId, SourceSpan } from '../../clinic-contract/src/index.js';
 import { escalation, escalationCopy, safetyVersion } from './safety.js';
 import { safetySignalSeed } from './safety-screen.js';
@@ -19,8 +19,11 @@ import { specificityFindings, specificityGaps, specificityNote, specificityTermi
 import { specificityQuote } from '../../clinic-content/src/specificity.js';
 import { interpretationReview } from './interpretation-review.js';
 import { projectProvisional, policyQualified, focusedPolicyRevision, typedPolicyRevision, type ProvisionalQualification } from './provisional-projection.js';
-export const scenarioTitles: Record<ScenarioId, string> = { 'first-intake': 'First visit intake', 'pre-visit': 'Before your visit', 'non-visit': 'Check in with your care team', 'post-visit': 'After your visit', billing: 'Billing help', scheduling: 'Scheduling help', refill: 'Prescription refill request' };
-const choiceLabels: Record<string, string> = { 'bill-question': 'A bill question', 'coverage-question': 'A coverage question', 'payment-question': 'A payment question', 'other-request': 'Another billing request', explanation: 'An explanation', 'review-possible-error': 'Review a possible error', 'payment-options': 'Discuss payment options', 'contact-me': 'Contact me', 'first-visit': 'First visit', 'follow-up': 'Follow-up visit', 'not-sure': 'Not sure', 'America/New_York': 'Eastern time', 'America/Chicago': 'Central time', 'America/Denver': 'Mountain time', 'America/Los_Angeles': 'Pacific time', 'America/Anchorage': 'Alaska time', 'Pacific/Honolulu': 'Hawaii time' };
+import { scenarioTitles } from '../../clinic-content/src/workflows.js';
+export { scenarioTitles } from '../../clinic-content/src/workflows.js';
+// Intent has staff-only display labels; patient choices retain their raw labels.
+const choiceLabels: Record<string, string> = Object.fromEntries(Object.entries(administrativeChoiceLabels).filter(([field]) => field !== 'intent').flatMap(([, labels]) => Object.entries(labels)));
+
 const titles: Record<string, string> = { Q01: 'Your priorities', Q02: 'Current symptoms', Q03: 'Weight through your life', Q04: 'Height and weight', Q05: 'Prior approaches', Q06: 'Medical conditions', Q07: 'Surgery and hospital care', Q08: 'Medicines and supplements', Q09: 'Allergies and reactions', Q10: 'Family history', Q11: 'A day of food and drink', Q12: 'Eating concerns', Q13: 'Access to food', Q14: 'Movement and function', Q15: 'Sleep', Q16: 'Mood, anxiety and support', Q17: 'Substance use', Q18: 'Pregnancy and reproductive context', Q19: 'Care team and records', Q20: 'Access to care', Q21: 'Communication preferences', Q22: 'Other questions', DM: 'Diabetes and prediabetes' };
 function detailProvenance(d: Draft, topicId: string, path: string, sourceIds: string[]): SourceSpan[] {
     return Object.values(d.adaptive?.operations ?? {}).flatMap(op => op.provenance ?? []).filter(p => p.topicId === topicId && p.path === path).flatMap(p => {

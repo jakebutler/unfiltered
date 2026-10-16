@@ -1,3 +1,4 @@
+import { scenarioIds } from '../../clinic-content/src/workflows.js';
 import { z } from "zod";
 import {
   getNativeQuestionnaireDefinition,
@@ -224,15 +225,7 @@ export const nativeQuestionnaireCaptureSchema: z.ZodType<NativeQuestionnaireCapt
           digest: z.string().regex(/^[a-f0-9]{64}$/),
         })
         .strict(),
-      scenario: z.enum([
-        "first-intake",
-        "pre-visit",
-        "non-visit",
-        "post-visit",
-        "billing",
-        "scheduling",
-        "refill",
-      ]),
+      scenario: z.enum(scenarioIds),
       relevantTopicIds: z
         .array(
           z.enum([
