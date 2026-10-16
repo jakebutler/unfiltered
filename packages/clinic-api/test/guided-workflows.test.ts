@@ -183,9 +183,8 @@ describe('guided workflow walks through the clinic handler', () => {
     expect(w.prompts.filter(p => unfilled(p.text))).toEqual([]);
     expectCompletedWorkflow(w, 'post-visit');
   });
-  // The bugs below are real: each test asserts the correct behaviour and is marked it.fails so the suite stays green.
-  it.fails('pre-visit without verified context walks to a handoff', async () => {
-    // BUG: W02.followup.1 is gated on context.pre-visit and has unfilled placeholders, so the changes slot throws prompt-rule-inactive (503) without nativeContext (native-questionnaire.ts:928, guard ~:1062).
+  // D-m regressions: inactive prompts must preserve gaps and allow active prompts to continue.
+  it('pre-visit without verified context walks to a handoff', async () => {
     const w = await walk('pre-visit');
     expect(w.errors).toEqual([]);
     expect(w.confirmed?.status).toBe(200);
@@ -194,8 +193,7 @@ describe('guided workflow walks through the clinic handler', () => {
     expect(w.prompts.some(p => p.text.includes('['))).toBe(false);
     expectCompletedWorkflow(w, 'pre-visit');
   });
-  it.fails('post-visit without verified context walks to a handoff', async () => {
-    // BUG: W04.followup.1 is gated on context.post-visit, so the question slot after S03a throws prompt-rule-inactive (503) without nativeContext (native-questionnaire.ts:930, guard ~:1062).
+  it('post-visit without verified context walks to a handoff', async () => {
     const w = await walk('post-visit');
     expect(w.errors).toEqual([]);
     expect(w.confirmed?.status).toBe(200);
@@ -204,8 +202,7 @@ describe('guided workflow walks through the clinic handler', () => {
     expect(w.prompts.some(p => p.text.includes('['))).toBe(false);
     expectCompletedWorkflow(w, 'post-visit');
   });
-  it.fails('pre-visit with verified context walks to a handoff', async () => {
-    // BUG: the W02 logistics slot lists S01a first (scenarios.ts:26), so with a verified appointment the guard throws context-fallback-inactive (native-questionnaire.ts:1065) and the walk returns 503 at that prompt.
+  it('pre-visit with verified context walks to a handoff', async () => {
     const w = await walk('pre-visit', { context: true });
     expect(w.errors).toEqual([]);
     expect(w.confirmed?.status).toBe(200);
@@ -214,8 +211,7 @@ describe('guided workflow walks through the clinic handler', () => {
     expect(w.prompts.some(p => p.text.includes('['))).toBe(false);
     expectCompletedWorkflow(w, 'pre-visit');
   });
-  it.fails('pre-visit with verified context shows no unfilled placeholder', async () => {
-    // BUG: W02.followup.1 renders "[previously reported item] since [date]" to the patient; only S01/S03 are filled (content.ts:958, conversation.ts prompt()).
+  it('pre-visit with verified context shows no unfilled placeholder', async () => {
     const w = await walk('pre-visit', { context: true });
     expect(w.prompts.filter(p => unfilled(p.text))).toEqual([]);
   });

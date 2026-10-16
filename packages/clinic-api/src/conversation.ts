@@ -2,7 +2,7 @@ import { typedCaptureBound } from './provisional-draft.js';
 import { prepareFinalRepresentation, type FinalRepresentationQualification } from './final-representation.js';
 import { nativeRepresentationAuthority, type TrustedRepresentationAuthority } from '../../clinical-core/src/representation-review.js';
 import { buildNativeQuestionnaireCapture, projectNativeQuestionnaireState } from '../../clinical-core/src/questionnaire-response.js';
-import { nativeCaptureComplete, nativeTopics, nativeScenarioTopics, nativeRoutingDecisions, deriveNativeRoutingContext, nextNativeGuidedField, guardNativePrompt, NATIVE_QUESTIONNAIRE_CANONICAL, NATIVE_QUESTIONNAIRE_VERSION, type NativeRoutingContext } from '../../clinic-content/src/native-questionnaire.js';
+import { nativeCaptureComplete, nativeTopics, nativeScenarioTopics, nativeRoutingDecisions, deriveNativeRoutingContext, nextNativeGuidedField, activeNativeGuidedPrompt, guardNativePrompt, NATIVE_QUESTIONNAIRE_CANONICAL, NATIVE_QUESTIONNAIRE_VERSION, type NativeRoutingContext } from '../../clinic-content/src/native-questionnaire.js';
 import { administrativeLogisticsSchema, type AdministrativeLogistics } from '../../clinical-core/src/domain.js';
 import { streamSpeechScopeDigest } from './adaptive-stream-session.js';
 import { choiceConfirmationSpeech, exactSpokenChoice, exactChoiceConfirmation } from '../../clinic-contract/src/choice-voice.js';
@@ -138,7 +138,9 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
             const r = topicResponse(d, topic);
             if (topic.id === 'Q18' && !r.presented)
                 return { topic, field: { path: '__applicability', label: 'Is this topic relevant for your clinician to consider?', kind: 'choice', choices: ['__applicable', '__topic-not-applicable'], promptIds: ['Q18'], acceptsNegative: false, acceptsNotApplicable: false, action: 'answer', allowedStates: ['known', 'unknown', 'declined'] } };
-            const field = activeTopic === topic.id && activeSlot ? fieldAt(topic, r, activeSlot) : native ? nextNativeGuidedField(topic, r, evidence(d), { topics: effective(d, true).responses as Record<string, TopicResponse>, context: nativeContext(d) }) : nextGuidedField(topic, r, evidence(d));
+            let field = activeTopic === topic.id && activeSlot ? fieldAt(topic, r, activeSlot) : native ? nextNativeGuidedField(topic, r, evidence(d), { topics: effective(d, true).responses as Record<string, TopicResponse>, context: nativeContext(d) }) : nextGuidedField(topic, r, evidence(d));
+            if (native && activeSlot && topic.id === register.scenarios[d.scenario].workflowId && field && !activeNativeGuidedPrompt(topic, field, { ...nativeNavigation(d)!, scenario: d.scenario }, evidence(d)))
+                field = nextNativeGuidedField(topic, r, evidence(d), { topics: effective(d, true).responses as Record<string, TopicResponse>, context: nativeContext(d) });
             if (field)
                 return { topic, field };
         }
@@ -148,12 +150,11 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         if (!c)
             return;
         const { topic, field } = c;
-        let text = register.promptsById[field.promptIds[0]]?.text ?? field.label;
-        const selectedPromptId = native && topic.id === 'W02' && field.promptIds[0] === 'S01' && !nativeContext(d)?.appointment ? 'S01a' : native && topic.id === 'W04' && field.promptIds[0] === 'S03' && !nativeContext(d)?.plan ? 'S03a' : field.promptIds[0];
-        text = register.promptsById[selectedPromptId]?.text ?? text;
-        const verifiedContext = nativeContext(d);
-        if (selectedPromptId === 'S01' && verifiedContext?.appointment) text = text.replace('[verified date/time/timezone]', `${verifiedContext.appointment.startsAt} ${verifiedContext.appointment.timezone}`).replace('[dated prior update]', verifiedContext.appointment.priorUpdateAt);
-        if (selectedPromptId === 'S03' && verifiedContext?.plan) text = text.replace('[demo author/role]', verifiedContext.plan.author).replace('[date]', verifiedContext.plan.recordedAt);
+        const workflow = native && topic.id === register.scenarios[d.scenario].workflowId;
+        const selected = workflow ? activeNativeGuidedPrompt(topic, field, { ...nativeNavigation(d)!, scenario: d.scenario }, evidence(d)) : undefined;
+        if (workflow && !selected) return;
+        const selectedPromptId = selected?.promptId ?? field.promptIds[0];
+        let text = selected?.text ?? register.promptsById[selectedPromptId]?.text ?? field.label;
         if (native && field.path !== '__applicability' && !/^MH0[1-4]$/.test(field.path)) {
             const readiness = evaluateTopic(topic, topicResponse(d, topic), evidence(d));
             const alreadySatisfied = readiness.slots.some(slot => slot.id !== field.path && slot.state === 'sufficient' && slot.promptIds.includes(selectedPromptId));

@@ -1,4 +1,4 @@
-import { guardNativePrompt, nextNativeGuidedField } from '../../clinic-content/src/native-questionnaire.js';
+import { activeNativeGuidedPrompt, guardNativePrompt, nextNativeGuidedField } from '../../clinic-content/src/native-questionnaire.js';
 import { evaluateTopic, mentalHealthOptions, promptsById, scenarios, type TopicDefinition, type TopicResponse } from '../../clinic-content/src/index.js';
 import { adaptiveSlot, adaptiveHistoryScopes, adaptiveHistoryWindowUncertainty, type AdaptiveContext, type AdaptiveOutcome, type DialogueState, type DisplayedPrompt } from './adaptive-validation.js';
 import { assertValidatedAdaptiveGroups, type ValidatedAdaptiveGroups } from './adaptive-group-compile.js';
@@ -121,13 +121,22 @@ export function eligibleAdaptiveProbes(context: AdaptiveContext, rejectedTargets
         if (!answer.complete) probes.push({ topicId: topic.id, promptId: '__list-completion', targetPaths: [slot.id], kind: 'list-completion', text: 'Is that everything you wanted to add to this list, or is there something else?', labels: [definition.label], optional: topic.presentation === 'O' });
         continue;
       }
-      const promptId = slot.promptIds[0], instrument = /^MH0[1-4]$/.test(promptId);
+      const nativeWorkflow = context.nativeRouting && topic.id === scenarios[context.binding.scenario].workflowId;
+      const selected = context.nativeRouting && nativeWorkflow ? activeNativeGuidedPrompt(topic, { path: slot.id, promptIds: slot.promptIds }, {
+        scenario: context.binding.scenario,
+        topics: context.nativeRouting.topics ?? Object.fromEntries(Object.entries(context.responses).filter((entry): entry is [string, TopicResponse] => !!entry[1])),
+        repeatResolutionTopics: context.nativeRouting.repeatResolutionTopics ?? Object.fromEntries(Object.entries(context.responses).filter((entry): entry is [string, TopicResponse] => !!entry[1])),
+        relevantTopicIds: context.nativeRouting.relevantTopicIds,
+        context: context.nativeRouting.context,
+      }, evidence) : undefined;
+      if (nativeWorkflow && !selected) continue;
+      const promptId = selected?.promptId ?? slot.promptIds[0], instrument = /^MH0[1-4]$/.test(promptId);
       const prompt = promptsById[promptId];
       if (!prompt) continue;
       const key = `${promptId}:${itemScope(slot.id)}`;
       const group = groups.get(key);
       if (group) { group.targetPaths = [...group.targetPaths, slot.id]; group.labels.push(definition.label); continue; }
-      const text = instrument ? `${promptsById['MH.stem'].text}\n${prompt.text}` : prompt.text;
+      const text = instrument ? `${promptsById['MH.stem'].text}\n${prompt.text}` : selected?.text ?? prompt.text;
       groups.set(key, { topicId: topic.id, promptId, targetPaths: [slot.id], kind: instrument ? 'instrument' : 'question', text, labels: [definition.label], optional: topic.presentation === 'O', ...(instrument ? { choices: mentalHealthOptions.phq4.choices } : {}) });
     }
     for (const group of groups.values()) {

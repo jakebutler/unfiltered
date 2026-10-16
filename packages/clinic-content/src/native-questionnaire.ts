@@ -1930,6 +1930,35 @@ export function nativeCrossTopicReuses(
   }
   return result;
 }
+/** Select only an active authored prompt, filling templates from verified records alone.
+ * This is runtime navigation; unavailable prompts never change capture/readiness data. */
+export function activeNativeGuidedPrompt(
+  topic: TopicDefinition,
+  field: Pick<GuidedField, "path" | "promptIds">,
+  authority: NativePromptAuthority & { scenario: ScenarioId },
+  evidence: EvidenceContext,
+): { promptId: string; text: string } | undefined {
+  const candidates = field.promptIds.flatMap(id =>
+    id === "S01" ? [id, "S01a"] : id === "S03" ? [id, "S03a"] : [id],
+  );
+  for (const promptId of new Set(candidates)) {
+    let text = promptsById[promptId]?.text;
+    if (!text) continue;
+    const verified = authority.context;
+    if (promptId === "S01" && verified?.appointment)
+      text = text.replace("[verified date/time/timezone]", `${verified.appointment.startsAt} ${verified.appointment.timezone}`).replace("[dated prior update]", verified.appointment.priorUpdateAt);
+    if (promptId === "S03" && verified?.plan)
+      text = text.replace("[demo author/role]", verified.plan.author).replace("[date]", verified.plan.recordedAt);
+    if (text.includes("[")) continue;
+    try {
+      guardNativePrompt({ ...authority, promptId, topicId: topic.id, path: field.path, text }, evidence);
+      return { promptId, text };
+    } catch {
+      // An inactive first candidate must not hide a later active authored prompt.
+    }
+  }
+}
+
 /** Authored one-field selection. Relevant optional clarifications never become universal completion minimums. */
 export function nextNativeGuidedField(
   topic: TopicDefinition,
@@ -1981,6 +2010,16 @@ export function nextNativeGuidedField(
       if (resolved.answer && resolved.answer.state !== "not-asked") continue;
       return guidedFieldForPath(topic, response, path);
     }
+  }
+  const workflow = Object.values(scenarios).find(scenario => scenario.workflowId === topic.id);
+  if (workflow) {
+    // Filter navigation metadata only. In particular W02.changes remains unasked
+    // and unresolved until its prior item/date can be supplied by trusted context.
+    const navigable = { ...topic, slots: topic.slots.map(slot => {
+      const selected = activeNativeGuidedPrompt(topic, { path: slot.id, promptIds: slot.promptIds }, { scenario: workflow.id, topics, context }, evidence);
+      return { ...slot, promptIds: selected ? [selected.promptId] : [] };
+    }) };
+    return nextGuidedField(navigable, response, evidence);
   }
   return nextGuidedField(topic, response, evidence);
 }

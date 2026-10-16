@@ -43,6 +43,60 @@ function rewriteStoredSnapshot(f: Fixture, id: string, mutate: (snapshot: Snapsh
   f.native.histories.get(`DocumentReference/${resource.id}`)![0].content = resource.content;
 }
 describe('native questionnaire integration and recovery boundaries', () => {
+  it.each([false, true])('bypasses an explicitly selected unavailable changes prompt and rejects its stale answer (appointment context: %s)', async hasContext => {
+    const config = configuration();
+    if (hasContext) config.patients['pre-visit'] = { ...config.patients['pre-visit'], nativeContext: { appointment: { reference: 'Appointment/synthetic', version: '1', startsAt: '2026-10-20T15:00:00.000Z', timezone: 'America/New_York', priorUpdateAt: '2026-10-10T12:00:00.000Z' } } };
+    const c = conversation(config); let draft = draftFor('pre-visit');
+    draft.topics.W02 = { presented: true, answers: { appointmentContext: { state: 'known', value: 'Synthetic appointment details', sourceIds: ['source-1'] } } };
+    draft = c.select(draft, 'W02', 'changes');
+    expect(draft.activeSlot).toBe('changes');
+    expect(c.view(draft).currentPrompt).toMatchObject({ id: 'W02:priority' });
+    expect(c.view(draft).currentPrompt?.text).not.toContain('[');
+    const before = structuredClone(draft);
+    expect(() => c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: 'W02:changes', action: 'answer', text: 'This stale answer must not be recorded.' })).toThrow('stale-prompt');
+    expect(draft).toEqual(before);
+    for (const [path, text] of [['priority', 'Synthetic priority'], ['logistics', '__negative']] as const) {
+      expect(c.view(draft).currentPrompt?.id).toBe(`W02:${path}`);
+      draft = c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: `W02:${path}`, action: 'answer', text });
+    }
+    expect(c.view(draft).currentPrompt).toBeUndefined();
+    expect(draft.topics.W02.answers.changes).toBeUndefined();
+    expect(c.view(draft).topics.find(topic => topic.id === 'W02')?.details?.find(detail => detail.id === 'changes')).toMatchObject({ state: 'not-asked', sourceIds: [] });
+    expect((await c.preview(draft)).confirmation.submission.completeness).toBe('partial');
+  });
+  it.each([false, true])('keeps pre-visit native adaptive navigation active without prior-item context (appointment context: %s)', async hasContext => {
+    const config = configuration();
+    if (hasContext) config.patients['pre-visit'] = { ...config.patients['pre-visit'], nativeContext: { appointment: { reference: 'Appointment/synthetic', version: '1', startsAt: '2026-10-20T15:00:00.000Z', timezone: 'America/New_York', priorUpdateAt: '2026-10-10T12:00:00.000Z' } } };
+    const c = conversation(config), draft = draftFor('pre-visit');
+    draft.topics.W02 = { presented: true, answers: { appointmentContext: { state: 'known', value: 'Synthetic appointment details', sourceIds: ['source-1'] } } };
+    const context = (): AdaptiveContext => ({ binding: { operationId: 'op', sessionId: draft.id, patient: draft.patient, scenario: draft.scenario, revision: draft.revision, contentVersion: 'CC-0.2.phq4', snapshotDigest: 'bound-local-snapshot' }, source: draft.turns[0], sources: draft.turns, topics: c.definitions(draft), responses: draft.topics, nativeRouting: c.nativeNavigation(draft) });
+    const before = structuredClone(draft.topics), probes = eligibleAdaptiveProbes(context());
+    expect(probes.flatMap(probe => probe.targetPaths)).not.toContain('changes');
+    expect(probes.find(probe => probe.targetPaths.includes('logistics'))?.promptId).toBe(hasContext ? 'Q20' : 'S01a');
+    expect(selectAdaptiveDialogue(context()).prompt?.targetPaths).toEqual(['priority']);
+    expect(probes.every(probe => !probe.text.includes('['))).toBe(true);
+    expect(draft.topics).toEqual(before);
+    draft.topics.W02.answers.priority = { state: 'known', value: 'Synthetic priority', sourceIds: ['source-1'] };
+    expect(selectAdaptiveDialogue(context()).prompt?.targetPaths).toEqual(['logistics']);
+    draft.topics.W02.answers.logistics = { state: 'negative', sourceIds: ['source-1'] };
+    expect(selectAdaptiveDialogue(context()).prompt).toBeUndefined();
+    expect(draft.topics.W02.answers.changes).toBeUndefined();
+    expect((await c.preview(draft)).confirmation.submission.completeness).toBe('partial');
+  });
+  it.each([false, true])('uses active post-visit native adaptive question and difficulty prompts (plan context: %s)', hasContext => {
+    const config = configuration();
+    if (hasContext) config.patients['post-visit'] = { ...config.patients['post-visit'], nativeContext: { plan: { reference: 'CarePlan/synthetic', version: '1', author: 'Synthetic clinician', recordedAt: '2026-10-08T12:00:00.000Z', text: 'Synthetic plan.' } } };
+    const c = conversation(config), draft = draftFor('post-visit');
+    draft.topics.W04 = { presented: true, answers: { planContext: { state: 'known', value: 'Synthetic plan details', sourceIds: ['source-1'] } } };
+    const context = (): AdaptiveContext => ({ binding: { operationId: 'op', sessionId: draft.id, patient: draft.patient, scenario: draft.scenario, revision: draft.revision, contentVersion: 'CC-0.2.phq4', snapshotDigest: 'bound-local-snapshot' }, source: draft.turns[0], sources: draft.turns, topics: c.definitions(draft), responses: draft.topics, nativeRouting: c.nativeNavigation(draft) });
+    const probes = eligibleAdaptiveProbes(context());
+    expect(probes.find(probe => probe.targetPaths.includes('question'))?.promptId).toBe(hasContext ? 'W04.followup.1' : 'W04.followup.2');
+    expect(probes.find(probe => probe.targetPaths.includes('difficulty'))?.promptId).toBe(hasContext ? 'S03' : 'S03a');
+    expect(probes.every(probe => !probe.text.includes('['))).toBe(true);
+    expect(selectAdaptiveDialogue(context()).prompt?.targetPaths).toEqual(['question']);
+    draft.topics.W04.answers.question = { state: 'known', value: 'Synthetic question', sourceIds: ['source-1'] };
+    expect(selectAdaptiveDialogue(context()).prompt?.targetPaths).toEqual(['difficulty']);
+  });
   it('binds every scenario capture before confirmation and serializes honest nested partial responses', async () => {
     const c = conversation(configuration()), definition = await getNativeQuestionnaireDefinition();
     for (const scenario of scenarios) {
