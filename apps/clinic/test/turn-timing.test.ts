@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { newRequestId, parseServerTiming, percentile, recordTurnTiming, statOf, summarizeTurnTimings, turnRouteName, turnTimingLimit, turnTimings, type TurnTiming } from '../src/turn-timing';
+import { newRequestId, parseServerTiming, percentile, recordTurnTiming, statOf, summarizeTurnTimings, turnRouteName, turnTimingLimit, turnTimings, type TurnTiming, RenderedTurnTracker, recordRenderedTurnTiming, renderedTurnTimings, type TurnPresentation } from '../src/turn-timing';
 import { request } from '../src/api';
 
 describe('parseServerTiming', () => {
@@ -94,11 +94,11 @@ describe('request()', () => {
 
   it('sends X-Request-Id and records server timing for a turn route', async () => {
     const fetched = stubBrowser(new Response(JSON.stringify({ revision: 1 }), { status: 202, headers: { 'Content-Type': 'application/json', 'Server-Timing': 'session;dur=2.5, accept;dur=40, total;dur=48.5' } }));
-    await request('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: 0, text: 'x', channel: 'typed' });
+    await request('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: 0, text: 'x', channel: 'typed' }, { turnId: 'submission-id' });
     const headers = fetched[0].init.headers as Record<string, string>;
     expect(headers['X-Request-Id']).toMatch(/^[A-Za-z0-9._-]{8,64}$/);
     const exposed = (window as unknown as { __corvoTurnTimings: TurnTiming[] }).__corvoTurnTimings;
-    expect(exposed.at(-1)).toEqual({ requestId: headers['X-Request-Id'], route: 'POST /api/clinic/adaptive-turns', startedAt: expect.any(String), clientMs: expect.any(Number), status: 202, serverTiming: { session: 2.5, accept: 40, total: 48.5 } });
+    expect(exposed.at(-1)).toEqual({ requestId: headers['X-Request-Id'], turnId: 'submission-id', route: 'POST /api/clinic/adaptive-turns', startedAt: expect.any(String), clientMs: expect.any(Number), status: 202, serverTiming: { session: 2.5, accept: 40, total: 48.5 } });
   });
 
   it('sends a correlation id but records nothing for non-turn reads', async () => {
@@ -107,5 +107,116 @@ describe('request()', () => {
     await request('/api/clinic/session');
     expect((fetched[0].init.headers as Record<string, string>)['X-Request-Id']).toBeTruthy();
     expect(turnTimings()).toHaveLength(before);
+  });
+});
+
+
+describe('submit-to-React-commit lifecycle', () => {
+  const baseline: TurnPresentation = { sessionId: 'session-1', revision: 1, promptId: 'prompt-1', replyId: 'reply-1', responseReady: true, urgent: false, visible: true };
+  function setup() {
+    let now = 10;
+    const record = vi.fn();
+    const tracker = new RenderedTurnTracker(() => now, record);
+    return { tracker, record, at: (value: number) => { now = value; } };
+  }
+
+  it('includes pre-request waits and parsing-to-commit time for guided turns', () => {
+    const { tracker, record, at } = setup();
+    const id = tracker.begin('guided', baseline);
+    at(60); // A discard/status wait before sending the answer.
+    tracker.commit({ ...baseline, revision: 2, promptId: 'other' });
+    expect(record).not.toHaveBeenCalled();
+    at(110); tracker.accept(id, 3); // Parsed response is not completion.
+    expect(record).not.toHaveBeenCalled();
+    at(150); tracker.commit({ ...baseline, revision: 3, promptId: 'prompt-2' });
+    expect(record).toHaveBeenCalledExactlyOnceWith({ turnId: id, mode: 'guided', startedAt: expect.any(String), submitToRenderMs: 140 });
+  });
+
+  it('keeps one correlated adaptive sample through acknowledgement and finishes a streamed poll before interpret ends', () => {
+    const { tracker, record, at } = setup();
+    const id = tracker.begin('adaptive', baseline);
+    at(100); tracker.accept(id, 2, 'operation-1');
+    expect(tracker.forOperation('operation-1')).toBe(id);
+    expect(tracker.forOperation('old-operation')).toBeUndefined();
+    tracker.commit({ ...baseline, revision: 2, operationId: 'operation-1', responseReady: false });
+    tracker.commit({ ...baseline, revision: 3, operationId: 'operation-1', responseReady: false, promptId: 'prompt-2' });
+    expect(record).not.toHaveBeenCalled();
+    at(900); tracker.commit({ ...baseline, revision: 4, operationId: 'operation-1', promptId: 'prompt-2', replyId: 'reply-2' });
+    at(1500); tracker.commit({ ...baseline, revision: 5, operationId: 'operation-1', promptId: 'prompt-2', replyId: 'reply-2' });
+    expect(record).toHaveBeenCalledExactlyOnceWith({ turnId: id, mode: 'adaptive', startedAt: expect.any(String), submitToRenderMs: 890 });
+  });
+
+  it('finishes a scoped follow-up with new displayed content under the same authored ID and no reply', () => {
+    const { tracker, record, at } = setup();
+    const first = { ...baseline, replyId: undefined, promptPresentation: Symbol() };
+    const id = tracker.begin('adaptive', first); tracker.accept(id, 2, 'operation-1');
+    // An unchanged, reconstructed prompt is still the previous presentation.
+    tracker.commit({ ...first, revision: 2, operationId: 'operation-1' });
+    expect(record).not.toHaveBeenCalled();
+    // React memoizes a new opaque token when displayed text/purpose/choices/fields change.
+    const followup = { ...first, revision: 3, operationId: 'operation-1', promptPresentation: Symbol() };
+    at(250); tracker.commit({ ...followup, responseReady: false });
+    expect(record).not.toHaveBeenCalled();
+    at(300); tracker.commit(followup); tracker.commit(followup);
+    expect(record).toHaveBeenCalledExactlyOnceWith({ turnId: id, mode: 'adaptive', startedAt: expect.any(String), submitToRenderMs: 290 });
+    expect(Object.keys(record.mock.calls[0][0])).toEqual(['turnId', 'mode', 'startedAt', 'submitToRenderMs']);
+  });
+
+  it('keeps the original submission through an uncertain interpretation and manual status recovery', () => {
+    const { tracker, record, at } = setup();
+    const id = tracker.begin('adaptive', baseline); tracker.accept(id, 2, 'operation-1');
+    tracker.commit({ ...baseline, revision: 2, operationId: 'operation-1', responseReady: false });
+    // The interpretation POST is lost. Status reads, including manual reads, do
+    // not start/cancel a submission or infer another turn. run() keeps this accepted sample.
+    tracker.cancelUnaccepted();
+    expect(tracker.forOperation('operation-1')).toBe(id);
+    at(1200);
+    tracker.commit({ ...baseline, revision: 4, operationId: 'operation-1', replyId: 'recovered-reply' });
+    expect(record).toHaveBeenCalledExactlyOnceWith({ turnId: id, mode: 'adaptive', startedAt: expect.any(String), submitToRenderMs: 1190 });
+  });
+
+  it('finishes an urgent notice even while interpretation is pending', () => {
+    const { tracker, record } = setup();
+    const id = tracker.begin('adaptive', baseline); tracker.accept(id, 2, 'operation-1');
+    tracker.commit({ ...baseline, revision: 2, operationId: 'operation-1', responseReady: false, urgent: true });
+    expect(record).toHaveBeenCalledOnce();
+  });
+
+  it('does not finish a hidden or held old reply, and cancels replaced scopes and unmounts', () => {
+    for (const replacement of [{ sessionId: 'session-2' }, { visible: false }, { operationId: 'operation-2' }]) {
+      const { tracker, record } = setup();
+      const id = tracker.begin('adaptive', baseline); tracker.accept(id, 2, 'operation-1');
+      tracker.commit({ ...baseline, revision: 2, operationId: 'operation-1' });
+      expect(record).not.toHaveBeenCalled();
+      tracker.commit({ ...baseline, revision: 3, operationId: 'operation-1', ...replacement });
+      tracker.commit({ ...baseline, revision: 4, operationId: 'operation-1', replyId: 'reply-2' });
+      expect(record).not.toHaveBeenCalled();
+    }
+    const { tracker, record } = setup();
+    const id = tracker.begin('guided', baseline); tracker.accept(id, 2); tracker.cancel();
+    tracker.commit({ ...baseline, revision: 2, promptId: 'prompt-2' });
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('ignores late acknowledgement from a replaced submission and abandons unsent attempts', () => {
+    const { tracker, record } = setup();
+    const old = tracker.begin('adaptive', baseline);
+    const next = tracker.begin('adaptive', baseline);
+    tracker.accept(old, 2, 'old-operation'); tracker.cancelUnaccepted();
+    tracker.accept(next, 3, 'new-operation');
+    tracker.commit({ ...baseline, revision: 3, operationId: 'new-operation', replyId: 'reply-2' });
+    expect(record).not.toHaveBeenCalled();
+  });
+});
+
+describe('rendered timing buffer', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('bounds and exposes presentation samples separately from request diagnostics, without patient content', () => {
+    vi.stubGlobal('window', {});
+    for (let index = 0; index < turnTimingLimit + 1; index++) recordRenderedTurnTiming({ turnId: 'opaque-id', mode: 'adaptive', startedAt: '2026-10-16T00:00:00Z', submitToRenderMs: index });
+    const exposed = (window as unknown as { __corvoRenderedTurnTimings: unknown[] }).__corvoRenderedTurnTimings;
+    expect(exposed).toBe(renderedTurnTimings()); expect(exposed).toHaveLength(turnTimingLimit);
+    expect(exposed[0]).toEqual({ turnId: 'opaque-id', mode: 'adaptive', startedAt: '2026-10-16T00:00:00Z', submitToRenderMs: 1 });
+    expect(Object.keys(exposed[0] as object)).toEqual(['turnId', 'mode', 'startedAt', 'submitToRenderMs']);
   });
 });

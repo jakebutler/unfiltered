@@ -2,7 +2,8 @@
 // Only ids, route names, durations and status codes pass through this module. Callers must never pass
 // patient text, answers, names or other PHI as a phase name, route or id.
 
-export const requestIdPattern = /^[A-Za-z0-9._-]{8,64}$/;
+// Only opaque random IDs are accepted; token syntax alone also admits patient-looking text.
+export const requestIdPattern = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 const tokenPattern = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 /** Accept a client-supplied X-Request-Id when it is well formed; otherwise mint one. */
@@ -10,9 +11,30 @@ export function requestIdFrom(header: string | null | undefined, generate: () =>
   return header && requestIdPattern.test(header) ? header : generate();
 }
 
-/** Route name with path ids collapsed, e.g. "POST /api/clinic/adaptive-turns/:id/interpret". */
+// Fixed templates keep arbitrary URL segments out of logs, including failed requests.
+const staticRoutes = new Set([
+  '/api/clinic/config', '/api/clinic/sessions', '/api/clinic/session', '/api/clinic/confirm-identity',
+  '/api/clinic/reject-identity', '/api/clinic/leave', '/api/clinic/adaptive-turns',
+  '/api/clinic/conversation-mode', '/api/clinic/turns', '/api/clinic/topics', '/api/clinic/safety-reviews',
+  '/api/clinic/review', '/api/clinic/confirm', '/api/clinic/retry-delivery', '/api/clinic/receipt',
+  '/api/staff/login', '/api/staff/logout', '/api/staff/me', '/api/staff/queue', '/api/staff/safety',
+]);
+const dynamicRoutes: readonly [RegExp, string][] = [
+  [/^\/api\/clinic\/adaptive-turns\/[^/]+$/, '/api/clinic/adaptive-turns/:id'],
+  [/^\/api\/clinic\/adaptive-turns\/[^/]+\/interpret$/, '/api/clinic/adaptive-turns/:id/interpret'],
+  [/^\/api\/clinic\/adaptive-turns\/[^/]+\/discard$/, '/api/clinic/adaptive-turns/:id/discard'],
+  [/^\/api\/staff\/safety\/[^/]+$/, '/api/staff/safety/:id'],
+  [/^\/api\/staff\/safety\/[^/]+\/actions$/, '/api/staff/safety/:id/actions'],
+  [/^\/api\/staff\/handoffs\/[^/]+$/, '/api/staff/handoffs/:id'],
+  [/^\/api\/staff\/handoffs\/[^/]+\/actions$/, '/api/staff/handoffs/:id/actions'],
+  [/^\/api\/staff\/handoffs\/[^/]+\/resume$/, '/api/staff/handoffs/:id/resume'],
+];
+
+/** Only authored route templates and fixed method labels can enter request logs. */
 export function routeName(method: string, pathname: string): string {
-  return `${method} ${pathname.replace(/[a-f0-9-]{36}(?:\.v\d+)?/g, ':id').slice(0, 120)}`;
+  const safeMethod = ['GET', 'POST', 'HEAD', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'].includes(method) ? method : 'OTHER';
+  const route = staticRoutes.has(pathname) ? pathname : dynamicRoutes.find(([pattern]) => pattern.test(pathname))?.[1] ?? '/unmatched';
+  return `${safeMethod} ${route}`;
 }
 
 const round = (ms: number) => Math.max(0, Math.round(ms * 10) / 10);
@@ -63,7 +85,9 @@ export interface RequestLogEntry {
 }
 
 export function requestLogLine(entry: RequestLogEntry): string {
-  return JSON.stringify({ event: 'clinic.request', requestId: entry.requestId, route: entry.route, status: entry.status, durMs: entry.durMs, phases: entry.phases });
+  const separator = entry.route.indexOf(' ');
+  const route = routeName(entry.route.slice(0, separator), entry.route.slice(separator + 1));
+  return JSON.stringify({ event: 'clinic.request', requestId: requestIdFrom(entry.requestId), route, status: entry.status, durMs: entry.durMs, phases: entry.phases });
 }
 
 /**
@@ -71,11 +95,12 @@ export function requestLogLine(entry: RequestLogEntry): string {
  * The copy is required because responses from some constructors have immutable headers.
  */
 export function finishRequest(response: Response, input: { requestId: string; route: string; timing: RequestTiming; log?: (line: string) => void }): Response {
+  const requestId = requestIdFrom(input.requestId);
   const durMs = round(input.timing.totalMs());
   const phases = input.timing.phases();
   const headers = new Headers(response.headers);
-  headers.set('X-Request-Id', input.requestId);
+  headers.set('X-Request-Id', requestId);
   headers.set('Server-Timing', serverTimingHeader(phases, durMs));
-  (input.log ?? console.log)(requestLogLine({ requestId: input.requestId, route: input.route, status: response.status, durMs, phases }));
+  (input.log ?? console.log)(requestLogLine({ requestId, route: input.route, status: response.status, durMs, phases }));
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }

@@ -7,6 +7,8 @@ const tokenPattern = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 export interface TurnTiming {
   requestId: string;
+  /** Client submission shared by accept/interpret requests, when available. */
+  turnId?: string;
   /** Server route name, e.g. "POST /api/clinic/adaptive-turns/:id/interpret". */
   route: string;
   startedAt: string;
@@ -80,3 +82,67 @@ export function recordTurnTiming(entry: TurnTiming): void {
 }
 
 export function turnTimings(): readonly TurnTiming[] { return timings; }
+
+export interface RenderedTurnTiming {
+  turnId: string;
+  mode: 'guided' | 'adaptive';
+  startedAt: string;
+  /** Submit handler entry through the React commit that displays the response. */
+  submitToRenderMs: number;
+}
+const renderedTimings: RenderedTurnTiming[] = [];
+export function recordRenderedTurnTiming(entry: RenderedTurnTiming): void {
+  renderedTimings.push(entry);
+  if (renderedTimings.length > turnTimingLimit) renderedTimings.splice(0, renderedTimings.length - turnTimingLimit);
+  if (typeof window !== 'undefined') (window as Window & { __corvoRenderedTurnTimings?: RenderedTurnTiming[] }).__corvoRenderedTurnTimings = renderedTimings;
+}
+export function renderedTurnTimings(): readonly RenderedTurnTiming[] { return renderedTimings; }
+
+/** Only opaque identifiers and presentation flags enter the lifecycle; never patient words. */
+export interface TurnPresentation {
+  sessionId: string;
+  revision: number;
+  promptId?: string;
+  /** Opaque React identity for displayed prompt content; never emitted in samples. */
+  promptPresentation?: symbol;
+  replyId?: string;
+  operationId?: string;
+  responseReady: boolean;
+  urgent: boolean;
+  visible: boolean;
+}
+
+/** One submission survives accept, interpret and polling, and can complete only at a React commit. */
+export class RenderedTurnTracker {
+  private pending?: {
+    sample: Omit<RenderedTurnTiming, 'submitToRenderMs'>; started: number;
+    baseline: TurnPresentation; acceptedRevision?: number; operationId?: string;
+  };
+  constructor(private now = () => performance.now(), private record = recordRenderedTurnTiming) {}
+  begin(mode: RenderedTurnTiming['mode'], baseline: TurnPresentation): string {
+    const turnId = newRequestId();
+    this.pending = { sample: { turnId, mode, startedAt: new Date().toISOString() }, started: this.now(), baseline };
+    return turnId;
+  }
+  get turnId(): string | undefined { return this.pending?.sample.turnId; }
+  forOperation(operationId: string): string | undefined {
+    return this.pending?.operationId === operationId ? this.turnId : undefined;
+  }
+  accept(turnId: string, revision: number, operationId?: string): void {
+    if (this.turnId !== turnId) return;
+    this.pending!.acceptedRevision = revision;
+    this.pending!.operationId = operationId;
+  }
+  cancel(): void { this.pending = undefined; }
+  cancelUnaccepted(): void { if (this.pending?.acceptedRevision === undefined) this.cancel(); }
+  commit(view: TurnPresentation): void {
+    const pending = this.pending;
+    if (!pending) return;
+    if (view.sessionId !== pending.baseline.sessionId || !view.visible) { this.cancel(); return; }
+    if (pending.acceptedRevision === undefined || view.revision < pending.acceptedRevision) return;
+    if (pending.operationId && pending.operationId !== view.operationId) { this.cancel(); return; }
+    if (!view.urgent && (!view.responseReady || (pending.sample.mode === 'adaptive' && view.promptId === pending.baseline.promptId && view.promptPresentation === pending.baseline.promptPresentation && view.replyId === pending.baseline.replyId))) return;
+    this.cancel();
+    this.record({ ...pending.sample, submitToRenderMs: Math.round((this.now() - pending.started) * 10) / 10 });
+  }
+}

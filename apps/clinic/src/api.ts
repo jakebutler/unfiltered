@@ -6,7 +6,7 @@ export class RequestError extends Error {
   get uncertain() { return this.status === 0 || this.status >= 500; }
 }
 
-export async function request<T>(path: string, body?: unknown): Promise<T> {
+export async function request<T>(path: string, body?: unknown, timing?: { turnId?: string }): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 25_000);
   const method = body === undefined ? 'GET' : 'POST';
@@ -34,7 +34,7 @@ export async function request<T>(path: string, body?: unknown): Promise<T> {
     throw new RequestError('The connection was interrupted. We could not confirm the result.', 0, 'connection-interrupted', true);
   } finally {
     window.clearTimeout(timeout);
-    if (route) recordTurnTiming({ requestId, route, startedAt, clientMs: Math.round((performance.now() - started) * 10) / 10, status, serverTiming });
+    if (route) recordTurnTiming({ requestId, ...(timing?.turnId ? { turnId: timing.turnId } : {}), route, startedAt, clientMs: Math.round((performance.now() - started) * 10) / 10, status, serverTiming });
   }
 }
 

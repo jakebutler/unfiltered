@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { createRequestTiming, finishRequest, requestIdFrom, requestLogLine, routeName, serverTimingHeader } from '../src/request-timing.js';
 
-const fixedId = () => 'generated-id-0001';
+const opaqueId = '0f8fad5b-d9cb-469f-a165-70867728950e';
+const fixedId = () => opaqueId;
 
 describe('requestIdFrom', () => {
-  it.each(['abcdefgh', 'req.2026-10-13_A-1', 'a'.repeat(64)])('accepts a well-formed incoming id %s', id => {
+  it.each([opaqueId, opaqueId.toUpperCase(), 'a'.repeat(32)])('accepts a well-formed incoming id %s', id => {
     expect(requestIdFrom(id, fixedId)).toBe(id);
   });
 
-  it.each([null, undefined, '', 'short', 'a'.repeat(65), 'has space id', 'semi;colon-id', 'new\nline-id'])('replaces an unusable incoming id %j', id => {
-    expect(requestIdFrom(id, fixedId)).toBe('generated-id-0001');
+  // Supersedes WIP token acceptance: these old accepted IDs can contain patient text.
+  it.each(['abcdefgh', 'req.2026-10-13_A-1', 'a'.repeat(64), 'client-req.0001', 'patient-has-chest-pain', null, undefined, '', 'short', 'a'.repeat(65), 'has space id', 'semi;colon-id', 'new\nline-id'])('replaces an unusable incoming id %j', id => {
+    expect(requestIdFrom(id, fixedId)).toBe(opaqueId);
   });
 
   it('mints a UUID when no generator is supplied', () => {
@@ -24,9 +26,20 @@ describe('routeName', () => {
     expect(routeName('POST', `/api/staff/handoffs/${id}.v2/actions`)).toBe('POST /api/staff/handoffs/:id/actions');
   });
 
-  it('leaves static routes unchanged and bounds the length', () => {
+  it('keeps authored static routes and replaces unknown paths', () => {
     expect(routeName('POST', '/api/clinic/turns')).toBe('POST /api/clinic/turns');
-    expect(routeName('GET', `/${'x'.repeat(300)}`)).toBe(`GET /${'x'.repeat(119)}`);
+    expect(routeName('GET', `/${'x'.repeat(300)}`)).toBe('GET /unmatched');
+  });
+
+  it.each(['patient-has-chest-pain', 'Mary%20Smith', 'not-a-uuid', 'x'.repeat(300)])('redacts arbitrary dynamic segments %s', segment => {
+    expect(routeName('POST', `/api/clinic/adaptive-turns/${segment}/interpret`)).toBe('POST /api/clinic/adaptive-turns/:id/interpret');
+    expect(routeName('GET', `/api/staff/safety/${segment}`)).toBe('GET /api/staff/safety/:id');
+    expect(routeName('POST', `/api/staff/handoffs/${segment}/actions`)).toBe('POST /api/staff/handoffs/:id/actions');
+    expect(routeName('GET', `/api/clinic/${segment}/unexpected`)).toBe('GET /unmatched');
+  });
+
+  it('does not reflect an unknown method', () => {
+    expect(routeName('PATIENT-NAME', '/secret')).toBe('OTHER /unmatched');
   });
 });
 
@@ -79,9 +92,16 @@ describe('serverTimingHeader', () => {
 
 describe('requestLogLine', () => {
   it('emits only the documented fields as one JSON object', () => {
-    const line = requestLogLine({ requestId: 'req-12345678', route: 'POST /api/clinic/turns', status: 202, durMs: 12.5, phases: { session: 3, store: 4 } });
+    const line = requestLogLine({ requestId: opaqueId, route: 'POST /api/clinic/turns', status: 202, durMs: 12.5, phases: { session: 3, store: 4 } });
     expect(line).not.toContain('\n');
-    expect(JSON.parse(line)).toEqual({ event: 'clinic.request', requestId: 'req-12345678', route: 'POST /api/clinic/turns', status: 202, durMs: 12.5, phases: { session: 3, store: 4 } });
+    expect(JSON.parse(line)).toEqual({ event: 'clinic.request', requestId: opaqueId, route: 'POST /api/clinic/turns', status: 202, durMs: 12.5, phases: { session: 3, store: 4 } });
+  });
+
+  it('sanitizes unsafe direct log inputs too', () => {
+    const line = requestLogLine({ requestId: 'patient-has-chest-pain', route: 'GET /api/clinic/Mary%20Smith', status: 404, durMs: 1, phases: {} });
+    expect(JSON.parse(line)).toMatchObject({ requestId: expect.stringMatching(/^[0-9a-f-]{36}$/), route: 'GET /unmatched' });
+    expect(line).not.toContain('patient-has-chest-pain');
+    expect(line).not.toContain('Mary');
   });
 });
 
@@ -93,21 +113,21 @@ describe('finishRequest', () => {
     now += 6;
     const lines: string[] = [];
     const original = new Response(JSON.stringify({ ok: true }), { status: 201, headers: { 'Content-Type': 'application/json', 'Set-Cookie': 'a=b; Path=/' } });
-    const response = finishRequest(original, { requestId: 'req-12345678', route: 'POST /api/clinic/turns', timing, log: line => lines.push(line) });
+    const response = finishRequest(original, { requestId: opaqueId, route: 'POST /api/clinic/turns', timing, log: line => lines.push(line) });
     expect(response.status).toBe(201);
-    expect(response.headers.get('X-Request-Id')).toBe('req-12345678');
+    expect(response.headers.get('X-Request-Id')).toBe(opaqueId);
     expect(response.headers.get('Server-Timing')).toBe('session;dur=4, total;dur=10');
     expect(response.headers.get('Set-Cookie')).toBe('a=b; Path=/');
     expect(response.headers.get('Content-Type')).toBe('application/json');
     expect(await response.json()).toEqual({ ok: true });
     expect(lines).toHaveLength(1);
-    expect(JSON.parse(lines[0])).toMatchObject({ event: 'clinic.request', requestId: 'req-12345678', route: 'POST /api/clinic/turns', status: 201, durMs: 10, phases: { session: 4 } });
+    expect(JSON.parse(lines[0])).toMatchObject({ event: 'clinic.request', requestId: opaqueId, route: 'POST /api/clinic/turns', status: 201, durMs: 10, phases: { session: 4 } });
   });
 
   it('works for responses whose headers are immutable', async () => {
     const immutable = Response.redirect('https://example.invalid/', 302);
-    const response = finishRequest(immutable, { requestId: 'req-12345678', route: 'GET /x', timing: createRequestTiming(() => 0), log: () => undefined });
+    const response = finishRequest(immutable, { requestId: opaqueId, route: 'GET /x', timing: createRequestTiming(() => 0), log: () => undefined });
     expect(response.status).toBe(302);
-    expect(response.headers.get('X-Request-Id')).toBe('req-12345678');
+    expect(response.headers.get('X-Request-Id')).toBe(opaqueId);
   });
 });

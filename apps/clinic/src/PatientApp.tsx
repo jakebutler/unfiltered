@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
 import { ArrowLeft, ArrowRight, Check, CheckCheck, CircleHelp, ClipboardList, Clock3, LogOut, RefreshCw, Send, X } from 'lucide-react';
 import type { AdaptiveTurnInput, AdaptiveTurnResult, ClinicConfig, ClinicSessionView, DeliveryView, PromptView, ReviewPreview, ScenarioId, SourceChannel, SourceTurn, TopicView, TurnInput } from '../../../packages/clinic-contract/src/index';
 import { conversationSpeech } from '../../../packages/clinic-contract/src/index';
@@ -17,6 +17,7 @@ import type { VoiceChoiceCandidate } from './choice-voice';
 import { choiceConfirmationSpeech } from '../../../packages/clinic-contract/src/choice-voice';
 import type { CaptureScope } from './voice-capture';
 import { SafetyReviewQueue } from './safety-review-client';
+import { RenderedTurnTracker, type TurnPresentation } from './turn-timing';
 
 export function PatientApp({ captureMediaSource }: { captureMediaSource?: CaptureMediaSource } = {}) {
   const [config, setConfig] = useState<ClinicConfig>();
@@ -27,6 +28,9 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     sessionRef.current = value; setSessionState(value);
   }, []);
   const getSession = useCallback(() => sessionRef.current, []);
+  const turnTiming = useRef(new RenderedTurnTracker());
+  const timingForOperation = useCallback((id: string) => turnTiming.current.forOperation(id), []);
+  useEffect(() => () => turnTiming.current.cancel(), []);
   const [preview, setPreview] = useState<ReviewPreview>();
   const [booting, setBooting] = useState(true);
   const [busy, setBusy] = useState('');
@@ -55,6 +59,9 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
   const outlineTrigger = useRef<HTMLButtonElement>(null);
   const outlineRef = useRef<HTMLElement>(null);
   const activePrompt = heldPrompt ?? session?.currentPrompt;
+  // Authored IDs can be reused for scoped follow-ups. Keep an opaque identity for
+  // the actual displayed presentation; patient wording never enters timing metadata.
+  const promptPresentation = useMemo(() => Symbol(), [activePrompt?.id, activePrompt?.text, activePrompt?.purpose, JSON.stringify(activePrompt?.choices), JSON.stringify(activePrompt?.fields)]);
   const naturalAnswer = session?.adaptive?.mode === 'adaptive' && activePrompt?.mode !== 'guided';
   const exactChoicePrompt = activePrompt?.choices?.length && !activePrompt.fields?.length && !promptAllowsFreeText(activePrompt, false) ? activePrompt : undefined;
   const canCaptureAnswer = Boolean(exactChoicePrompt) || Boolean(activePrompt && promptAllowsFreeText(activePrompt, naturalAnswer) && !activePrompt.choices?.some(choice => choice.value === text) && !/^Q16:MH0[1-4](?:$|:)/.test(activePrompt.id));
@@ -111,7 +118,7 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     if (draftRef.current && previous && previous.id !== next.currentPrompt?.id) setHeldPrompt(held => held ?? previous);
     setSession(next);
   }, [setSession]);
-  const adaptive = useAdaptiveConversation({ session, getSession, onSession: acceptAdaptiveSession, onOperation: result => voice.controller.operation(result) });
+  const adaptive = useAdaptiveConversation({ session, getSession, onSession: acceptAdaptiveSession, onOperation: result => voice.controller.operation(result), timingForOperation });
   /** Browser output reads the same words the provider path would, resolved on the client. */
   const browserSpeechText = (sourceId: string, choiceValue?: string): string | undefined => {
     const adaptive = sessionRef.current?.adaptive;
@@ -143,6 +150,25 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
   useEffect(() => {
     if (!voice.active && ['review', 'interrupted'].includes(capture.status) && !heldPrompt) document.getElementById('answer-text')?.focus({ preventScroll: true });
   }, [capture.status, heldPrompt, voice.active]);
+
+  // Runs after DOM mutation, using exactly the prompt/reply selected by this render.
+  // The accepted/processing acknowledgement alone cannot complete an adaptive turn.
+  const timingPresentation = (): TurnPresentation | undefined => {
+    if (!session) return;
+    const op = session.adaptive?.operation;
+    const responseReady = !isPendingInterpretation(op) || op?.stream?.reply === 'saved';
+    return {
+      sessionId: session.id, revision: session.revision, promptId: activePrompt?.id, promptPresentation,
+      replyId: responseReady ? session.adaptive?.reply?.id : undefined,
+      operationId: op?.id, responseReady, urgent: session.notice?.tone === 'urgent',
+      visible: Boolean(config && !booting && verified && !leftAt && !identityRejected && !confirmationUnknown && session.phase !== 'identity' && session.phase !== 'confirmed' && (!preview || session.notice?.tone === 'urgent')),
+    };
+  };
+  useLayoutEffect(() => {
+    const view = timingPresentation();
+    if (view) turnTiming.current.commit(view);
+    else turnTiming.current.cancel();
+  });
 
   const boot = async () => {
     setBooting(true); setError('');
@@ -200,15 +226,19 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     if (topicOutline) { outlineRef.current?.focus({ preventScroll: true }); outlineRef.current?.scrollIntoView({ block: 'start' }); }
   }, [topicOutline]);
 
-  const run = async <T,>(name: string, fn: () => Promise<T>): Promise<T | undefined> => {
+  const run = async <T,>(name: string, fn: () => Promise<T>, timingMode: 'guided' | 'adaptive' = 'guided'): Promise<T | undefined> => {
     if (operation.current) return;
     operation.current = true; setBusy(name); setError('');
+    const baseline = timingPresentation();
+    if (name === 'answer' && baseline) turnTiming.current.begin(timingMode, baseline);
+    else if (name !== 'adaptive-status') turnTiming.current.cancel();
     try { return await fn(); }
     catch (e) {
+      if (name !== 'adaptive-status') turnTiming.current.cancel();
       setError(messageOf(e));
       if (e instanceof RequestError && e.status === 409) setStale(true);
       if (e instanceof RequestError && [401, 403].includes(e.status)) setVerified(false);
-    } finally { operation.current = false; setBusy(''); }
+    } finally { turnTiming.current.cancelUnaccepted(); operation.current = false; setBusy(''); }
   };
   const clearComposer = () => { capture.discard(); playback.stop(); answerRequestId.current = crypto.randomUUID(); setAnswerChannel('text'); draftRef.current = false; textRef.current = ''; setText(''); setFields({}); setHeldPrompt(undefined); };
   const start = (scenario: ScenarioId) => run('start', async () => {
@@ -228,6 +258,7 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     setSession(undefined); setPreview(undefined); setIdentityRejected(true); clearComposer(); setPendingTurn(undefined); setPendingAdaptive(undefined);
   });
   const updateTurn = (action: TurnInput['action']) => run('answer', async () => {
+    const timingId = turnTiming.current.turnId;
     if (!session?.currentPrompt || heldPrompt || capture.active) return;
     // Sending the answer releases any kept recording; the patient's typed answer is what gets saved.
     capture.discard();
@@ -241,8 +272,9 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     };
     setPendingTurn(input);
     let next: ClinicSessionView;
-    try { next = await request<ClinicSessionView>('/api/clinic/turns', input); }
+    try { next = await request<ClinicSessionView>('/api/clinic/turns', input, { turnId: timingId }); }
     catch (e) { if (e instanceof RequestError && !e.uncertain) setPendingTurn(undefined); throw e; }
+    if (timingId) turnTiming.current.accept(timingId, next.revision);
     setSession(next); clearComposer(); setPendingTurn(undefined); setPreview(undefined); setStale(false);
     if (returnToReview) {
       const nextPreview = await request<ReviewPreview>('/api/clinic/review', { expectedRevision: next.revision });
@@ -256,27 +288,31 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     return fresh.session;
   };
   const saveVoiceChoiceAttempt = (value: string, scope: CaptureScope, priorChoiceTranscript?: string): Promise<ClinicSessionView | undefined> => run('answer', async () => {
+    const timingId = turnTiming.current.turnId;
     const current = getSession();
     if (!current?.currentPrompt || current.id !== scope.sessionId || current.revision !== scope.expectedRevision || current.currentPrompt.id !== scope.promptId || heldPrompt || pendingTurn || pendingAdaptive) return;
     const saved = await currentChoiceSaveSession(current);
     const input: TurnInput = { requestId: scope.requestId, expectedRevision: saved.revision, promptId: scope.promptId, action: 'answer', text: value, channel: 'unreviewed-transcript', choiceTranscriptOnly: true, ...(priorChoiceTranscript ? { priorChoiceTranscript } : {}) };
     setPendingTurn(input);
     let next: ClinicSessionView;
-    try { next = await request<ClinicSessionView>('/api/clinic/turns', input); }
+    try { next = await request<ClinicSessionView>('/api/clinic/turns', input, { turnId: timingId }); }
     catch (e) { if (e instanceof RequestError && !e.uncertain) setPendingTurn(undefined); throw e; }
     if (getSession()?.id !== current.id || (getSession()?.revision ?? 0) > next.revision) throw new Error('The saved conversation changed. Check the save status before continuing.');
+    if (timingId) turnTiming.current.accept(timingId, next.revision);
     setSession(next); clearComposer(); setPendingTurn(undefined); setStale(false); return next;
   });
   const saveVoiceChoice = (candidate: VoiceChoiceCandidate, scope: CaptureScope, confirmation: { method: 'voice' | 'control'; transcript: string }): Promise<ClinicSessionView | undefined> => run('answer', async () => {
+    const timingId = turnTiming.current.turnId;
     const current = getSession();
     if (!current?.currentPrompt || current.id !== scope.sessionId || current.revision !== scope.expectedRevision || current.currentPrompt.id !== scope.promptId || heldPrompt || pendingTurn || pendingAdaptive) return;
     const saved = await currentChoiceSaveSession(current);
     const input: TurnInput = { requestId: scope.requestId, expectedRevision: saved.revision, promptId: scope.promptId, action: 'answer', text: candidate.value, channel: 'confirmed-transcript', choiceConfirmation: { optionTranscript: candidate.optionTranscript, confirmationTranscript: confirmation.transcript, confirmationMethod: confirmation.method } };
     setPendingTurn(input);
     let next: ClinicSessionView;
-    try { next = await request<ClinicSessionView>('/api/clinic/turns', input); }
+    try { next = await request<ClinicSessionView>('/api/clinic/turns', input, { turnId: timingId }); }
     catch (e) { if (e instanceof RequestError && !e.uncertain) setPendingTurn(undefined); throw e; }
     if (getSession()?.id !== current.id || (getSession()?.revision ?? 0) > next.revision) throw new Error('The saved conversation changed. Check the save status before continuing.');
+    if (timingId) turnTiming.current.accept(timingId, next.revision);
     setSession(next); clearComposer(); setPendingTurn(undefined); setPreview(undefined); setStale(false);
     if (returnToReview) {
       const nextPreview = await request<ReviewPreview>('/api/clinic/review', { expectedRevision: next.revision });
@@ -285,6 +321,7 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     return next;
   });
   const saveAdaptive = (naturalTurn?: { text: string; scope: CaptureScope }): Promise<AdaptiveTurnResult | undefined> => run('answer', async () => {
+    const timingId = turnTiming.current.turnId;
     const displayed = getSession();
     if (!displayed || heldPrompt || (!naturalTurn && capture.active) || !(naturalTurn?.text ?? text).trim() || (!pendingAdaptive && displayed.adaptive?.available !== true)) return;
     if (!naturalTurn) capture.discard();
@@ -302,14 +339,15 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     const input: AdaptiveTurnInput = pendingAdaptive ?? { requestId: naturalTurn?.scope.requestId ?? answerRequestId.current, expectedRevision: current.revision, text: naturalTurn?.text ?? text, channel: naturalTurn ? 'unreviewed-transcript' : answerChannel === 'unreviewed-transcript' ? 'confirmed-transcript' : answerChannel };
     setPendingAdaptive(input);
     let result: AdaptiveTurnResult;
-    try { result = await request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', input); }
+    try { result = await request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', input, { turnId: timingId }); }
     catch (e) { if (e instanceof RequestError && !e.uncertain) setPendingAdaptive(undefined); throw e; }
     if (result.session.id !== getSession()?.id || result.session.revision < (getSession()?.revision ?? 0)) throw new Error('The saved conversation changed. Reload saved answers before continuing. Your text is still here.');
+    if (timingId) turnTiming.current.accept(timingId, result.session.revision, result.operation.id);
     setSession(result.session); clearComposer(); setPendingAdaptive(undefined); setPreview(undefined); setStale(false);
     // Natural conversation coordinates the same one-attempt interpretation after the durable acknowledgement.
     if (!naturalTurn && !recoveringSave && result.operation.status === 'accepted' && result.session.adaptive?.operation?.id === result.operation.id) void adaptive.interpret(result.operation);
     return result;
-  });
+  }, 'adaptive');
   const updateAdaptive = () => saveAdaptive();
   const changeMode = (mode: 'adaptive' | 'guided') => run('mode', async () => {
     if (hasDraft) return;
