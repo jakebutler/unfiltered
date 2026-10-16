@@ -132,7 +132,7 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 | T1.3 | PHQ-4 coding only for the locked block | — | done `a811bd4`: strict topic/item scope and numeric decoding verified; fractional option sets explicitly use FHIR decimals; all six gates pass, golden/digest/count pins unchanged. |
 | T1.4a | Guided walk tests W02–W07 | — | done `7e46cde`: review details, confirmed owners and complete billing/scheduling logistics asserted; all six gates pass on Node 22. Four documented D-m expected failures remain. |
 | T1.4b | Voice-mode tests, non-intake workflows | — | done `46a1a3b`: provenance/unreviewed/PHQ coverage verified; all six gates pass with ten documented expected failures awaiting D-j. |
-| T2.5 | Pack zod schema | T1.2 | not started |
+| T2.5 | Pack zod schema | T1.2 | done `b6a7537`: strict schema/PHQ locks, named branch rules and scoped workflow copy; all six gates pass. |
 | T2.6 | Pack compiler + exporter + parity test | T2.5 | not started |
 | T2.7 | FHIR Questionnaire export for new packs | T2.6 | not started |
 | T3.8 | Between-visit check-in pack | T2.6, T1.3 | not started |
@@ -494,3 +494,24 @@ helper location; authored guards and fills are unchanged. Staff sees optional,
 collapsed completion/context guidance, including compatibility with older responses.
 The persisted logistics schema, questionnaire digest/count pins and prior test
 expectations remain unchanged. T2's prerequisite is now satisfied.
+
+T2.5 `b6a7537` passed fresh GPT-6.1 Sol xhigh review and all six checks:
+foundation **136 / 2102**, clinic **16 / 318**, hosting **1 / 29**, all three
+typechecks. Logs: `/workspace/scratch/unfiltered-validation/t25-{0..6}.log`.
+Strict nested references include merged Q16 variant namespaces and locked PHQ
+wording/options/bindings. The source's existing `accepted-targeted-choice` status
+is retained only for its canonical PHQ prompts; no wording is newly approved.
+Named rules preserve branch order and native evidence/context/tri-state behavior.
+Moved workflow dialogue copy is excluded only from native serialization where it
+was previously absent, leaving the original digest/count assertions unchanged.
+Compiler/exporter parity and the separate runtime switch remain T2.6.
+
+Pending task verification: D-j passed fresh review plus 153 focused API and 127
+browser-unit tests and both typechecks. A real local PatientApp walk also verified
+unmatched-source retention without repeated assistant questions and exact typed
+choice confirmation before saving. Two submit-to-React-commit entries were captured
+in `choice-browser-timings.json`; these are local mocked operations, not hosted
+latency measurements. D-l's separate offline harness passed three tests and the
+real PatientApp/StaffApp PHQ walk (scores 3/3/6, partial intake, clinician review).
+Logs/screenshots: `/workspace/scratch/unfiltered-validation/{choice,phq}-browser*`.
+Neither D-j nor D-l is marked done until its isolated full gate and verifying commit.
