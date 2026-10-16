@@ -50,6 +50,26 @@ New prompts go in `supplementalPromptText` (`content.ts:949`), all with
 | `W08.followup.1` | "Has anything changed since your last visit, such as medicines, eating, sleep or how you feel? If nothing has changed, you can say so." |
 | `W08.followup.2` | "Is there anything you'd like your care team to help with before your next visit?" |
 
+### Prepared candidate and owner registration boundary
+
+`packages/clinic-content/src/packs/between-visit-proposed.ts` contains a standalone candidate,
+derived from a validated copy of the T2.6 adult-intake mirror. It retains the existing topics,
+branches, seven workflows and mental-health variants, then appends only the three specified
+prompts and the W08 workflow above. Its own provenance and all new wording are explicitly
+`proposed-detail`; it does not claim clinical protocol approval. It has no runtime import or
+registry entry. `between-visit-proposed-pack.test.ts` covers schema/compiler compatibility,
+exact proposed copy, unchanged PHQ locks, and isolation from adult-intake data.
+
+This is preparation only, not T3.8 completion. Registering W08 in the adult authoring source,
+workflow registry, contracts, seeds and native publisher would change the protected native
+definition. Those steps remain blocked until the owner schedules the bundled re-qualification
+outside the current protected digest window. The existing digest, version and count assertions
+must remain unchanged during this preparation. The owner must then approve the new authored
+content, integrate registry and patient/staff flows, extend the guided/voice walks and adaptive
+Q08/Q15 relevance test, and record the local mock browser walk-through before deployment.
+Standalone compilation does not establish browser availability, adaptive routing, PHQ voice
+protection in W08, or a completed clinical handoff.
+
 ### Code touch points
 
 T1.1 and T1.2 should leave only these:
