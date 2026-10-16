@@ -127,7 +127,7 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 
 | ID | Task | Depends on | Status |
 |---|---|---|---|
-| T1.1 | Workflow registry (one `scenarioIds` source) | D-d landed (it touches `handler.ts`) | not started |
+| T1.1 | Workflow registry (one `scenarioIds` source) | D-d landed (it touches `handler.ts`) | done `1dd2ff3`: shared registry/labels, patient copy preserved; six gates plus AWS typecheck pass. |
 | T1.2 | Declarative workflow behaviour fields | T1.1 | not started |
 | T1.3 | PHQ-4 coding only for the locked block | — | done `a811bd4`: strict topic/item scope and numeric decoding verified; fractional option sets explicitly use FHIR decimals; all six gates pass, golden/digest/count pins unchanged. |
 | T1.4a | Guided walk tests W02–W07 | — | done `7e46cde`: review details, confirmed owners and complete billing/scheduling logistics asserted; all six gates pass on Node 22. Four documented D-m expected failures remain. |
@@ -466,3 +466,21 @@ expectations. Runtime selection checks active authored candidates and substitute
 only trusted appointment/plan context; unavailable prior-item questions remain
 unasked, preserving partial handoffs. Explicit selection also rejects stale answers
 without mutation. Questionnaire bytes, digest and count pins remain unchanged.
+
+T1.1 `1dd2ff3` passed fresh GPT-6.1 Sol xhigh review and all six checks:
+foundation **135 / 2080**, clinic **16 / 316**, hosting **1 / 29**, all three
+typechecks. Logs: `/workspace/scratch/unfiltered-validation/t11-{0..6}.log`.
+The dedicated `npx tsc -p infra/aws/tsconfig.json --noEmit` also passed. AWS's
+projection version now narrows through an identity transform after its unchanged
+regex; this closes D-f's compiler graph gap without accepting new values. Patient
+scheduling intent labels remain verbatim; the dependency-free contract and direct
+Node scripts retain documented literals with parity checks. Digest/count pins and
+all existing expectations remain unchanged.
+
+Read-only follow-up on the separate research timeout: the test awaits `result.json()`
+(research-package.test.ts:72) before resolving its provider (:74). Hosted stream EOF
+awaits lease settlement, which requires that same provider to settle. This circular
+wait, with frozen timers, explains the saved Node 22 timeout; it is not diagnosed as
+flakiness. A test sequencing repair should start body consumption, assert the lease
+is held, resolve the provider, then await the unchanged body/finish/release assertions.
+No research files or allowances were changed and no new reproduction is claimed.
