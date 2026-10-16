@@ -114,7 +114,7 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | D-f | Re-qualification without an admin grant (`/auth/me` observer) | done `07da259` (local implementation): projection/drift/freshness and complete sealing dependency pins verified; all six gates pass. Frozen private continuation smoke and live calibration remain owner steps. |
 | D-g | Mobile layout check | not started |
 | D-h | Secret rotation + one-time calibration + re-qualify before 2026-10-21 | blocked: needs local/owner; no live calls authorized for this continuation |
-| D-i | Docs: OPUS-HANDOFF, DEMO-TESTING-GUIDE, CLOUD-CLINIC | not started |
+| D-i | Docs: OPUS-HANDOFF, DEMO-TESTING-GUIDE, CLOUD-CLINIC | done `aae4937`: current fixes/offline proof separated from historical live receipts and owner renewal; all six gates pass. |
 | D-j | Free text at a guided choice repeats the choice | done `6dbc672`: explicit choice confirmation, retained source/question, PHQ buttons-only; all six gates pass. |
 | D-k | Crisis phrasing coverage **[digest]** | blocked: needs local/owner; hold for bundled re-qualification and owner phrase review |
 | D-l | PHQ-4 live/mock coverage | done `8067411`: offline native API and actual PatientApp/StaffApp smoke; all six gates pass. Live retest remains owner-only. |
@@ -579,3 +579,13 @@ overall intake remained partial. Evidence: `phq-browser.log`, `phq-browser-revie
 and `phq-browser-staff.png` under the validation directory. This does not execute or
 replace owner-authorized hosted/live qualification. The older local-mock-clinic still
 makes real DigitalOcean calls and is not the offline harness.
+
+D-i `aae4937` passed fresh GPT-6.1 Sol xhigh review and all six checks:
+foundation **140 / 2151**, clinic **17 / 333**, hosting **1 / 29**, all three
+typechecks. Logs: `/workspace/scratch/unfiltered-validation/di-{0..6}.log`.
+The three operator documents now distinguish current verified source from historical
+stage/configuration/test receipts, record D-j/D-l and local browser evidence accurately,
+and require owner authorization/current runtime proof for live setup. Old q4f local
+commands are historical and cloud-connected; new offline harness instructions are separate.
+Schema-2/3 qualification, expiry, calibration, runtime proof and no-admin-renewal boundaries
+remain explicit. No current deployment or live verification is claimed.
