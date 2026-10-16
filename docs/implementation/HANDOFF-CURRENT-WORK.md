@@ -41,9 +41,9 @@ npx vitest run -c vitest.hosting.config.mts       # infra/cloud/vercel/test
 npx tsc -p tsconfig.foundation.json --noEmit      # CommonJS-style NodeNext build: no import.meta
 npx tsc -p tsconfig.clinic.json --noEmit          # browser app; includes only apps/clinic/src and packages/clinic-contract/src
 npm run hosting:typecheck                       # clinic NodeNext + research Bundler, including research tests
-npx tsx scripts/dev/local-mock-clinic.mts         # local mock API on :8787 (no provider calls by default)
+npx tsx scripts/dev/local-mock-clinic.mts         # OWNER ONLY: in-memory FHIR, but REAL DigitalOcean calls; needs key
 npm run clinic:dev                                # clinic web on 127.0.0.1:5173, proxies to the mock
-# Optional real-model mock (spends DO credits, capped): LOCAL_ENV_FILE=/Volumes/rexy/GitHub/unfiltered/.env.local LOCAL_DO_CALL_CAP=20 npx tsx scripts/dev/local-mock-clinic.mts
+# Owner-authorized live-provider example (spends DO credits, capped; not executed here): LOCAL_ENV_FILE=/Volumes/rexy/GitHub/unfiltered/.env.local LOCAL_DO_CALL_CAP=20 npx tsx scripts/dev/local-mock-clinic.mts
 # Known mock limitation: "Confirm and send" fails on the mock (no Medplum). Not a bug to fix.
 ```
 
