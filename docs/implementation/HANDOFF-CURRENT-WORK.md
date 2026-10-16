@@ -135,7 +135,7 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 | T2.5 | Pack zod schema | T1.2 | done `b6a7537`: strict schema/PHQ locks, named branch rules and scoped workflow copy; all six gates pass. |
 | T2.6 | Pack compiler + exporter + parity test | T2.5 | done `9f818d6`: runtime switch after separately verified parity `124242b`; both stages pass all six gates. |
 | T2.7 | FHIR Questionnaire export for new packs | T2.6 | done `2702415`: governed R4 draft exporter, scoped controls and PHQ locks; all six gates pass. |
-| T3.8 | Between-visit check-in pack | T2.6, T1.3 | not started |
+| T3.8 | Between-visit check-in pack | T2.6, T1.3 | blocked: protected native digest window. Standalone proposed pack `7e4fd07` is reviewed and passes six gates; runtime registration/integration remains owner-gated. |
 | T3.9 | Prior-submission readback | T1.2 | done `ef96f47` (local): validated/frozen readback and scoped staff audit; all six gates pass. Deployment permissions remain owner-only. |
 | T3.10 | Clinic-initiated link (Resend) | T3.9 recommended | not started |
 
@@ -173,6 +173,9 @@ Additional defects found by the bounded D-d static review (regression tests stil
 2. **D-h.** The owner must rotate the Medplum ClientApplication secret and run the one-time
    calibration before 2026-10-21 01:48 UTC. Steps are in
    [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md#d-h).
+
+3. **Canonical pack source.** TS authoring modules remain canonical after T2.6; switching to
+   JSON requires an explicit owner decision. No source was removed.
 
 ## WIP map (snapshot commit `0fd34e3`, 2026-10-15)
 
@@ -610,3 +613,17 @@ until prior qualification authority can be reconstructed safely. Ordinary produc
 guided confirmations are covered. Appointment read-only permissions, plan category/timezone
 fixtures and clinical immutable-source reads require owner verification/re-qualification;
 the spec contains a proposal only, with no active policy, seed, admin or deployment edit.
+
+T3.8 standalone proposal `7e4fd07` passed fresh GPT-6.1 Sol xhigh review and
+all six checks: foundation **144 / 2204**, clinic **18 / 335**, hosting **1 / 29**,
+all three typechecks. Logs: `/workspace/scratch/unfiltered-validation/t38-proposal-{0..6}.log`.
+It derives a separate validated copy of adult content, appends exact proposed W08
+wording/workflow data, preserves PHQ locks in all mental-health modes, and is absent
+from the public index/runtime registry. Adult source, native version/digest/count pins,
+contract IDs, manifest and seed mappings are unchanged.
+
+**T3.8 is not complete:** adding W08 to the published adult workflow changes its digest
+and is forbidden during the protected window through 2026-10-21T01:48:12Z. An elapsed
+date alone is not permission. Runtime/contract/manifest registration, guided/adaptive/voice
+and staff integration, browser acceptance and owner-bundled re-qualification remain.
+The reviewed authoring artifact is useful preparation, not a claim that those steps ran.
