@@ -1,4 +1,60 @@
-# Clinic adaptive intake — handoff (2026-10-11)
+# Clinic adaptive intake — handoff (updated 2026-10-16)
+
+Current task status and gates live in [HANDOFF-CURRENT-WORK.md](HANDOFF-CURRENT-WORK.md).
+The dated deployment notes below are historical receipts. The verified October 16 source
+changes have not been deployed or exercised against live providers in this continuation.
+Hosted remains stage8/native-5; its existing proof expires **2026-10-21T01:48:12Z**.
+
+## Verified source changes (2026-10-16)
+
+The October 16 commits below passed independent review and all six hub gates on Node 22.23.3.
+D-a is the separately recorded historical fix:
+
+- **D-a:** the E-0.2 NegEx scope fix predates `cb0bfe8`; negated/history/family mentions no
+  longer trigger the tier-0 floor solely because they contain a crisis keyword. This does
+  not promise that the separate model gate will clear every such statement.
+- **D-b `f68c94f`:** the single-call interpreter awaits safety before extraction. A hopeless
+  disclosure retains its exact source, never supplies a PHQ answer or silently becomes
+  current stress, and a different authored probe preserves the original unanswered gap.
+  Existing higher-risk safety routing remains; no authored crisis list was widened.
+- **D-c `70437f8`:** spoken weight/height and digit transcripts require exact readback and a
+  reviewed confirmation before recording. An unreviewed yes cannot confirm; raw speech and
+  both sources remain in provenance. Approximation, conflicting units, signs and decimal
+  precision are checked; uncertain actual readings require clarification.
+- **D-d `b6a1761`:** fixed route templates and opaque request IDs protect timing metadata.
+  `Server-Timing` and request records measure request phases; a separate browser buffer
+  measures submit to React commit. The report CLI passed on a synthetic fixture. A real local PatientApp
+  exercise recorded two submit-to-React-commit timings (102.4 ms and 78.3 ms) containing only
+  opaque metadata; these mocked operations do not establish hosted latency or reductions.
+- **D-f `07da259`:** new schema-3 qualification observes the demoted runtime's `/auth/me`
+  Project projection at seal time and checks drift on refresh, without an admin feature
+  file. Schema-2 proofs retain their original contract until expiry. Full sealing-dependency
+  pins are verified locally. Frozen private continuation smoke is blocked by a missing q4f
+  runtime; owner calibration and live renewal remain outstanding. See
+  [CLOUD-CLINIC.md](CLOUD-CLINIC.md#qualification-without-request-time-writes).
+- **T1.3 `a811bd4`, T1.4a `7e46cde`, T1.4b `46a1a3b`:** PHQ coding is scoped to the locked
+  block and guided/voice regressions are covered. T1.4b originally recorded ten expected
+  failures; D-j `6dbc672` now passes all ten with their expectations unchanged.
+- **D-m `63a1483`:** active authored prompt selection prevents the pre-/post-visit guided
+  crash without trusted context. Unavailable prior-item questions stay unasked and partial;
+  questionnaire bytes, digest and count pins are unchanged.
+
+- **D-j `6dbc672`:** non-PHQ typed/spoken choices require explicit confirmation; unmatched
+  sources retain their displayed question without repeating the assistant turn. Original
+  speech remains immutable and is screened during recovery. PHQ rejects voice/control
+  bypasses; direct button scoring remains. A real offline PatientApp walk passed.
+
+- **D-l `8067411`:** the new offline native API and actual PatientApp/StaffApp walkthrough
+  verify incomplete three-item screening and four-button scores (GAD-2 3, PHQ-2 3, PHQ-4 6),
+  retaining partial overall intake and clinician review. No provider or hosted call is made.
+
+**Still open:** D-e staff safety visual checks and D-g mobile checks remain pending. D-k crisis
+phrase additions require owner review and bundled re-qualification. D-h requires owner-only
+secret rotation, one-time calibration, demotion verification and renewal before the expiry
+above. A real-microphone hosted human-voice test is still outstanding. Local gate success does
+not establish these live or visual results.
+
+## Historical deployment receipts
 
 > **2026-10-14 (stage8, P5): hosted runs native-5 with hands-free voice.**
 > - Medplum: questionnaire `CC-0.2.phq4.native-5` published (`Questionnaire/9004366b-…`), the three named AccessPolicies updated in place, staff memberships unchanged. One temporary admin elevation (owner-approved, granted three times in the console because of two retries); every seed run ended `demotion-verified`.
@@ -33,15 +89,17 @@
 >   - `CLINIC_SPEECH_INPUT=deepgram-direct` makes the browser stream microphone audio straight to Deepgram live (`nova-3-medical`). Each utterance uses a 30 s token minted at `POST /api/clinic/speech/tokens`. The server never relays audio. Each mint is an admission reservation under the Deepgram ledger, and it charges the 59 s stream bound. Requires the interpreter and provider policy as before.
 >   - Push-to-talk upload stays wired as the fallback. `deepgram-rest` remains push-to-talk only.
 >   - Optional read-aloud: `CLINIC_SPEECH_OUTPUT=elevenlabs` + `ELEVENLABS_API_KEY`, served by `POST /api/clinic/speech/output`. It only voices authored prompts or the current assistant reply, and it uses the same ledger. The default is browser voice.
->   - **Setup requirement:** Deepgram's token grant (`/v1/auth/grant`) needs an API key with at least the **Member** role; a lower-role key gets `403 FORBIDDEN` and hands-free falls back to push-to-talk. The local env file has a Member-role key since 2026-10-13; the hosted `DEEPGRAM_API_KEY` must be updated to it in P5.
+>   - **Setup requirement (historical P4 note; hosted key was updated in stage8):** Deepgram's token grant (`/v1/auth/grant`) needs an API key with at least the **Member** role; a lower-role key gets `403 FORBIDDEN` and hands-free falls back to push-to-talk. The local env file has a Member-role key since 2026-10-13; the hosted `DEEPGRAM_API_KEY` was subsequently updated in P5 (stage8).
 >   - The page's Content-Security-Policy adds `wss://api.deepgram.com` to connect-src only in direct mode.
 >   - Local testing: `LOCAL_SPEECH=direct` on `scripts/dev/local-mock-clinic.mts` runs direct voice and upload against real Deepgram. Calls are capped by `LOCAL_DEEPGRAM_CAP` (default 30). `DEEPGRAM_API_KEY` is read from `LOCAL_ENV_FILE`.
 >   - Verified 2026-10-13: suites green (foundation 1849, clinic 230, hosting 28). Live, the exact streaming URL transcribed a self-correction clip as one utterance with a clean close. A live browser token refusal fell back to push-to-talk, and real dictation filled the answer box.
-> - **Still open:**
->   - Tier 0 still pauses on "I have never had suicidal thoughts" (false positive). Fixing it changes the qualified digest.
->   - The staff safety screen was verified through its API, not visually.
->   - In the live run, one adaptive turn ("feeling hopeless…") repeated the previous question and filed the words under Q16 "current stress".
->   - Hands-free is verified locally in a real browser against Deepgram: 14 consecutive turns, barge-in, "stop" pausing without saving, and a self-correction kept in one turn. The P4 changes are not yet on hosted (that is P5).
+> - **Follow-up status (updated 2026-10-16):**
+>   - Tier-0 negation was fixed in E-0.2 before `cb0bfe8`; it is no longer an open task.
+>   - The staff safety screen was verified through its API; the visual check is still D-e.
+>   - The hopeless-turn defect is fixed in source by D-b `f68c94f`; live retesting remains pending.
+>   - Hands-free is hosted in stage8 (`cb0bfe8`), including the fake-microphone receipt above.
+>     The earlier local browser receipt covered 14 consecutive turns, barge-in, stop and a
+>     self-correction; a real-microphone hosted human-voice test remains outstanding.
 
 
 > **Later the same day:**
@@ -63,9 +121,9 @@
 >   - Corrections quoted with a small unmarked word gap are no longer rejected.
 >   - A question is never shown a third time for the same topic in a session.
 > - **Still open:**
->   - The script never reached PHQ-4 within its 55-call cap; PHQ-4 is covered by unit tests only.
+>   - That stage6 script never reached PHQ-4 within its 55-call cap. Stage7 later exercised it live (receipt above); D-l adds a repeatable smoke path.
 >   - Typing free text at a guided yes/no choice can repeat that choice. Use the buttons.
->   - 12 known test failures remain (see `b96f401`).
+>   - Twelve failures were recorded at stage6 (`b96f401`); this is a historical count, superseded by the current hub gates.
 > - **Known safety gap:** the authored crisis keyword list misses phrasings such as "don't want to be here anymore". Widening it changes the qualified definition digest.
 
 ## What you can test now (hosted)
@@ -99,14 +157,32 @@ A good script, exercised on hosted on 2026-10-11:
 6. Review. Answers show "Your words" source links and visible gaps ("Some details missing · you can still send").
 7. Confirm. The page shows "Received by Corvo Clinic", and staff see it via the queue.
 
-**Local alternative**
-- Commands, run from the worktree:
+**Historical cloud-connected local alternative (October 11; owner-only)**
+
+These commands preserve a historical setup, not a currently verified configuration. They
+make real DigitalOcean calls and share cloud Medplum state and budgets. Do not use the
+old private q4f configuration as current qualification. Any live reuse requires explicit
+owner authorization and a current verified runtime/qualification setup. For current offline
+PHQ testing, use the new harness in
+[the demo guide](DEMO-TESTING-GUIDE.md#offline-phq-browser-smoke-d-l).
+
+- Historical commands, run from the worktree:
   1. `CLINIC_CONFIG_PATH=$PWD/infra/cloud/.private/clinic-q4f-mapping-suffix-20261010-a3/clinic-config.qualified.json CLINIC_PROVIDER_SETTINGS=$PWD/infra/cloud/.private/local-cloud-dev/provider-settings.json npm run clinic:api`
   2. `npx vite --config infra/cloud/.private/local-cloud-dev/vite.cloud-origin.config.mjs`, then open http://127.0.0.1:5173.
 - The DO key must be in the environment, or in a 0600 file named by `CLINIC_PROVIDER_ENV_FILE`.
 - Local runs share the same Medplum project and budget ledger as hosted.
 
-## What changed and why
+## October 11 implementation narrative (historical)
+
+The remaining sections preserve the original October 11 notes. Their deployment IDs,
+configuration values, test counts, working-tree state, process state and proposed next steps
+are historical, not current operator instructions. The verified source section and hub
+supersede their status. In particular, the old October 17 seal expiry and stage4 rollback
+suggestions below must not be used: hosted stage8 uses the October 21 expiry and changed
+sealed policies, and even stage7 cannot be restored with its old sealed identity.
+Use the D-h owner checklist in [CLOUD-CLINIC.md](CLOUD-CLINIC.md) for renewal.
+
+### What changed and why
 
 **Root cause.** The earlier adaptive extractors asked mid-size models to fill about 150 typed addresses with mandatory metadata. The validator then rejected whole turns, which made the experience unusable. They were replaced (opt-in) with a simple single-call interpreter, `packages/clinic-api/src/intake-interpreter.ts` (`intake-interpreter-v1`).
 
@@ -152,7 +228,7 @@ A good script, exercised on hosted on 2026-10-11:
 - `infra/cloud/vercel/server.ts` now matches the deployed shape (`createClinicApplication`, `site-assets`) and injects the capped interpreter.
 - `hosted-config.ts` was ported from the deployed staged copy, adding the `nativeQuestionnaire` binding.
 
-## Model and configuration
+### October 11: model and configuration
 
 - DigitalOcean `qwen3.8-max` (`https://inference.do-ai.run/v1/chat/completions`): `max_tokens` 1500, timeout 14 s, `response_format` `json_object`, no retries.
   - `CLINIC_ADAPTIVE_MODEL` can override this with any allowed DO model.
@@ -164,11 +240,11 @@ A good script, exercised on hosted on 2026-10-11:
   - concurrency 3.
   - When it is exhausted, turns fail visibly; there is no silent fallback.
 - **Deployments:**
-  - Current: `dpl_HzkFg758m1Kx3Pjx4TBuRMAkLXQb` (stage6), built from the working tree by `infra/cloud/.private/clinic-intake-v1-20261011/build.mjs`, then `vercel build`, then the reused `prepare-api-routing.mjs` (prepared routing hash matches the previous deployment), then `deploy.py deploy`.
-  - Rollback: promote `dpl_2F9eveSeA6PSk2GDw6ew53DQbCXs` (stage4) or `dpl_CxDXSoWkB7RjtqAgQBuG7bkMba1B` (guided only), or remove the `CLINIC_ADAPTIVE_INTERPRETER` env var and redeploy.
-- **Expiry:** the storage qualification seal expires **2026-10-17T20:25:41Z**. After that the runtime refuses to start, locally too. Renew with `scripts/qualification/qualify-clinic-deployment.ts`.
+  - Historical stage6: `dpl_HzkFg758m1Kx3Pjx4TBuRMAkLXQb` (stage6), built from the working tree by `infra/cloud/.private/clinic-intake-v1-20261011/build.mjs`, then `vercel build`, then the reused `prepare-api-routing.mjs` (prepared routing hash matches the previous deployment), then `deploy.py deploy`.
+  - Obsolete rollback note (do not execute; sealed identity has since changed): promote `dpl_2F9eveSeA6PSk2GDw6ew53DQbCXs` (stage4) or `dpl_CxDXSoWkB7RjtqAgQBuG7bkMba1B` (guided only), or remove the `CLINIC_ADAPTIVE_INTERPRETER` env var and redeploy.
+- **Historical expiry:** the stage6 seal expired **2026-10-17T20:25:41Z**; this is superseded by stage8's **2026-10-21T01:48:12Z** expiry. Follow the current D-h checklist, not these stage6 operating notes.
 
-## Checks performed, and their limits
+### October 11: checks performed, and their limits
 
 **Static and offline checks**
 - `foundation:typecheck`, `clinic:typecheck` and `tsc -p tsconfig.hosting.json` are clean for clinic and hosting files. The hosting config's existing research/convex errors are unrelated.
@@ -210,9 +286,9 @@ A good script, exercised on hosted on 2026-10-11:
 - The full intake covers 22 topics plus PHQ-4. Nobody has completed it in adaptive mode; runs submitted partial handoffs.
 - The eval checks pre-synchronize outcomes. That is why it missed the estimate drop; the handler tests now cover that case.
 
-## Remaining failures and known weaknesses
+### October 11: remaining failures and known weaknesses
 
-**Full foundation suite: 35 of 1596 tests fail in 16 files**, all pre-existing. An independent triage reran every failing file with the interpreter disabled and the digest change reverted, and got identical failures. None of these paths is used by the live intake. Causes:
+**Historical October 11 result: 35 of 1596 foundation tests failed in 16 files**, recorded then as pre-existing. Current six-gate results in the hub supersede this count. An independent triage reran every failing file with the interpreter disabled and the digest change reverted, and got identical failures. None of these paths is used by the live intake. Causes:
 - **Fixtures missing `patients`:** `config.patients[scenario]` reads fail (adaptive-audit and three others).
 - **Outdated fake receipt shape:** the fake `check()` returns `{state:'unknown'}` without `resources`, so `handoffs.ts:87` throws (3 tests in adaptive-session).
   - Real `MedplumClient` receipts always include `resources`.
@@ -224,7 +300,7 @@ A good script, exercised on hosted on 2026-10-11:
 - **Speech:**
   - provenance and correction scope;
   - an ingress busy-retry test that expects a single reserve call.
-- The full run also showed a timing flake: the granular guided `conversation.test.ts` test exceeds 5 s under parallel load and passes alone in 2.6 s.
+- The historical full run also showed a timing failure: the granular guided `conversation.test.ts` test exceeds 5 s under parallel load and passes alone in 2.6 s.
 
 **Respecting resistance can over-skip**
 - "Rather not get into my childhood" stopped the whole weight-history topic, not just the childhood detail.
@@ -238,9 +314,9 @@ A good script, exercised on hosted on 2026-10-11:
 - A medication-change question received the generic "include your question for the care team" reply, not the prescriber-specific copy.
 - "No stomach issues" was not recorded as digestive=negative. The GI branch remains ineligible until asked anyway.
 
-## Uncommitted state
+### October 11: uncommitted state
 
-Nothing was committed or staged. All work sits in the existing large WIP tree.
+At that October 11 snapshot, nothing had been committed or staged and work sat in the large WIP tree. This does not describe the current checkout; the verifying commits and current WIP map are in the hub.
 
 Session-touched tracked or untracked files:
 - `packages/clinic-api/src/{intake-interpreter.ts (new),adaptive-session.ts,handler.ts,bounded-providers.ts}`
@@ -258,12 +334,12 @@ Private, gitignored files:
 
 Model spend this session: about 50 DO calls, plus an unknown number of errored calls from the interrupted earlier agent. All were within existing credits; none of the $25 extra was used. Research demo allowances were not touched.
 
-## Running processes
+### October 11: running processes
 
-None. No dev servers, test runners or browsers were left running by this session.
+The October 11 session reported no dev servers, test runners or browsers left running. This is not a current process inventory.
 
-## Single best next step
+### October 11: single best next step
 
-Run one complete hosted first-visit intake end to end, through PHQ-4 and every topic, to find the remaining pacing gaps. Then fix the two resistance and over-skip behaviors in `intake-interpreter.ts`:
+The October 11 proposed next step was a complete hosted first-visit intake through PHQ-4 and every topic to find pacing gaps, then fixing the two resistance and over-skip behaviors in `intake-interpreter.ts`:
 - keep volunteered facts when moving on;
 - scope the move-on to the displayed detail where possible.
