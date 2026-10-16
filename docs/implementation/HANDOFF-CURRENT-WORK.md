@@ -107,7 +107,7 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | ID | Task | Status |
 |---|---|---|
 | D-a | Tier-0 safety false positive on negated statements | done (pre-cb0bfe8); docs still list it as open, which D-i fixes |
-| D-b | "Hopeless" free-text turn handling | WIP in `0fd34e3`, unverified (agent stopped at "now the interpreter changes": tests written in `packages/clinic-api/test/intake-interpreter.test.ts`, source edits in `intake-interpreter.ts` / `dialogue.ts` may be partial) |
+| D-b | "Hopeless" free-text turn handling | done `f68c94f`: safety precedes interpreter extraction; disclosures retain provenance without PHQ scoring, and a different authored probe preserves the unanswered gap; all six gates pass. |
 | D-c | Spoken weight/number confirmation | WIP in `0fd34e3`, unverified (same agent as D-b; check whether any source exists yet) |
 | D-d | Turn latency instrumentation + reductions | done `b6a1761`: submit-to-React-commit timing, safe metadata and fixture report verified; all six gates pass. Reductions remain measured follow-ups, not claimed. |
 | D-e | Staff safety screen visual check | not started |
@@ -422,3 +422,14 @@ under Node 22 exits 1 because both continuation test modules import the absent f
 separate private runtime is not part of the 109-file release. It was not regenerated or
 changed; standalone bundle tests cover the new dependency-pin rejection offline. No live
 re-qualification, admin grant, policy change, deployment or Medplum write was performed.
+
+D-b `f68c94f` passed independent GPT-6.1 Sol xhigh review and all six checks on its
+isolated candidate: foundation **133 / 2021**, clinic **16 / 315**, hosting **1 / 29**,
+all three typechecks. Logs: `/workspace/scratch/unfiltered-validation/db-{0..6}.log`.
+The single-call interpreter now awaits screening before dispatch, never dispatches after an
+escalation or a discarded operation, and preserves the original disclosure/source. An
+interrupted question remains unanswered while another authored probe is offered. Domain-specific
+hopeless statements stay unplaced rather than becoming PHQ scores. The old WIP assertions
+requiring a repeated question and concurrent extraction were narrowly corrected to the stronger
+explicit D-b spec; all patient-visible safety/911/reviewer assertions remain. No authored crisis
+keyword list or questionnaire digest changed; no live classifier result is claimed.
