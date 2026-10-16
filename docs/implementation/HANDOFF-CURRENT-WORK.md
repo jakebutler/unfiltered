@@ -11,7 +11,7 @@ this file is the single entry point. It holds:
 Update the status tables **as soon as** a task lands: a commit hash plus a one-line result. Do
 not batch the updates. The next agent trusts this file over chat history.
 
-Last updated: 2026-10-16 (Codex cloud continuation; historical fixtures restored, T1.4a and T1.3 verified).
+Last updated: 2026-10-16 (Codex cloud continuation; current verifying commits and results below).
 
 ## Workspace
 
@@ -134,7 +134,7 @@ Overview: [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md). Spec
 | T1.4b | Voice-mode tests, non-intake workflows | — | done `46a1a3b`: provenance/unreviewed/PHQ coverage verified; all six gates pass with ten documented expected failures awaiting D-j. |
 | T2.5 | Pack zod schema | T1.2 | done `b6a7537`: strict schema/PHQ locks, named branch rules and scoped workflow copy; all six gates pass. |
 | T2.6 | Pack compiler + exporter + parity test | T2.5 | done `9f818d6`: runtime switch after separately verified parity `124242b`; both stages pass all six gates. |
-| T2.7 | FHIR Questionnaire export for new packs | T2.6 | not started |
+| T2.7 | FHIR Questionnaire export for new packs | T2.6 | done `2702415`: governed R4 draft exporter, scoped controls and PHQ locks; all six gates pass. |
 | T3.8 | Between-visit check-in pack | T2.6, T1.3 | not started |
 | T3.9 | Prior-submission readback | T1.2 | not started |
 | T3.10 | Clinic-initiated link (Resend) | T3.9 recommended | not started |
@@ -534,3 +534,15 @@ inference. Former assembly lives in the exporter's independent source oracle, so
 checks are not circular after the switch. Runtime never imports that `.mts` exporter.
 Native digest/count assertions and generated pack bytes remain unchanged. Authoring source
 modules remain canonical; making JSON canonical is an explicit future owner decision.
+
+T2.7 `2702415` passed fresh GPT-6.1 Sol xhigh review after PHQ scoped-copy,
+prompt-provenance and R4 structural edge fixes. All six checks pass: foundation
+**138 / 2126**, clinic **16 / 318**, hosting **1 / 29**, all three typechecks.
+Logs: `/workspace/scratch/unfiltered-validation/t27-{0..6}.log`. Primary LOINC
+verification confirms 69724-3 is the PHQ-4 panel. HL7 R4 answerOption excludes boolean
+and decimal, so those options use coding plus exact typed scalar metadata; the spec
+now records that correction. Medplum validator/types are absent from the offline root
+install; the documented structural validator fallback checks emitted R4 invariants.
+This is a new-pack draft authoring export, not a standalone clinical form: trusted
+Corvo evidence/routing controls and completeness assessment remain required. Adult
+intake export is explicitly rejected; native publisher/digest/count pins are unchanged.
