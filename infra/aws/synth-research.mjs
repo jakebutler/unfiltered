@@ -1,0 +1,10 @@
+import { writeFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { researchTemplate } from './templates/research.mjs';
+import { publicExample, newPrivateOutput } from './io.mjs';
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const arg = name => { const at = process.argv.indexOf(name); if (at < 0 || !process.argv[at + 1]) throw Error('explicit-synthesis-arguments-required'); return process.argv[at + 1]; };
+const output = newPrivateOutput(root, arg('--output')), template = researchTemplate(publicExample(root,arg('--manifest')), 'linux/amd64');
+writeFileSync(output, JSON.stringify(template,null,2)+'\n', {flag:'wx',mode:0o600});
+console.log(JSON.stringify({state:'synthesized-offline-unqualified',output,resources:Object.keys(template.Resources).length,cloudCalls:0}));

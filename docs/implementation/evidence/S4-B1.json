@@ -1,0 +1,39 @@
+{
+  "id": "S4-B1",
+  "at": "2026-10-10T03:16:47.489Z",
+  "state": "passed",
+  "scope": "isolated-local-synthetic",
+  "clientId": "jx7b29bkh18zr61knctqdvvvkn8g1z1k",
+  "projectId": "k97bysjh2afhq9zkn1jgj240g98g0dbv",
+  "sessionId": "kd7eat68v5a2bbbr281gqwny8s8g1q7z",
+  "checks": [
+    "normal operator password sign-in",
+    "client and project created through UI",
+    "two immutable study versions saved",
+    "invitation pinned to original version",
+    "capability removed from visible URL",
+    "consent before interview",
+    "exact answer saved",
+    "append-only correction with original preserved",
+    "pause survived reload and resumed at question2",
+    "explicit completed state",
+    "all5sources andcorrectionlineage visibletooperator",
+    "revocation invalidated activeparticipantview",
+    "archive+restore doesnotreviverevokedlink"
+  ],
+  "sourceCount": 5,
+  "viewport": {
+    "requestedWidth": 390,
+    "documentClientWidth": 379,
+    "documentScrollWidth": 379,
+    "horizontalOverflow": false
+  },
+  "nativeReadback": true,
+  "providerCalls": 0,
+  "cloudWrites": 0,
+  "limitations": [
+    "text interview only; no media/model/publication acceptance",
+    "transient pending copy and unstable generated API reference effect fixed during this pass",
+    "no browser screenshot file export; visual screenshot inspected inline"
+  ]
+}

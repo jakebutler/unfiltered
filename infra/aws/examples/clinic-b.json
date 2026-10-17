@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "topology": {
+    "compute": "single-private-node",
+    "replicas": 1,
+    "tlsEdge": true,
+    "privateDataServices": true,
+    "encryptedDurableVolumes": true
+  },
+  "gates": {
+    "phiEnabled": false,
+    "liveProvidersEnabled": false,
+    "complianceClaim": "none",
+    "productionReview": "required"
+  },
+  "stackId": "clinic-b",
+  "product": "clinic",
+  "publicOrigin": "https://clinic-b.example.invalid",
+  "authority": {
+    "medplumBaseUrl": "https://medplum-b.example.invalid/",
+    "projectId": "synthetic-project-b",
+    "clientId": "synthetic-client-b",
+    "membershipId": "synthetic-member-b",
+    "runtimeSecretRef": "unfiltered/clinic-b/runtime",
+    "databaseNamespace": "clinic-b-database",
+    "binaryNamespace": "clinic-b-binary"
+  }
+}

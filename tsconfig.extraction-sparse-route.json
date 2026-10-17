@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.foundation.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["packages/clinic-api/src/handler.ts", "packages/clinic-api/src/adaptive-extraction-sparse-provider.ts"]
+}

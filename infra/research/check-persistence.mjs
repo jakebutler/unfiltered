@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { ConvexHttpClient } from 'convex/browser';
+import { makeFunctionReference as ref } from 'convex/server';
+import { localConfig } from './setup-local.mjs';
+const env = await localConfig();
+const id = process.argv[2]; if (!/^[a-f0-9-]{36}$/.test(id ?? '')) throw new Error('Pass the completed local qualification UUID');
+const directory = new URL('../../docs/implementation/evidence/', import.meta.url);
+const prior = JSON.parse(await readFile(new URL(`research-${id}.json`, directory), 'utf8'));
+assert.equal(prior.state, 'passed'); assert(prior.clientId && prior.projectId && prior.sessionId);
+const secrets = JSON.parse(await readFile(new URL('./operator.private.json', import.meta.url), 'utf8'));
+await promisify(execFile)('docker', ['--context', 'colima-unfiltered-s0', 'compose', '-f', 'infra/research/compose.yml', 'restart', 'backend'], { cwd: fileURLToPath(new URL('../../', import.meta.url)), timeout: 30_000 });
+for (let i = 0; ; i++) { try { if ((await fetch(`${env.CONVEX_SELF_HOSTED_URL}/version`, { signal: AbortSignal.timeout(1000) })).ok) break; } catch {} if (i >= 30) throw new Error('Research backend did not restart'); await new Promise(r => setTimeout(r, 1000)); }
+const client = new ConvexHttpClient(env.CONVEX_SELF_HOSTED_URL, { logger: false });
+const signed = await client.action(ref('auth:signIn'), { provider: 'password', params: { flow: 'signIn', email: secrets.email, password: secrets.password } }); client.setAuth(signed.tokens.token);
+const sources = await client.query(ref('research:sessionSources'), { clientId: prior.clientId, projectId: prior.projectId, sessionId: prior.sessionId, paginationOpts: { cursor: null, numItems: 25 } });
+assert.equal(sources.page.length, 5); assert(sources.page.some(s => s.sourceId === prior.sourceId && s.text === '  I expected delivery options.\n'));
+const invites = await client.query(ref('invitations:list'), { clientId: prior.clientId, projectId: prior.projectId, paginationOpts: { cursor: null, numItems: 25 } });
+assert(invites.page.some(i => i.sessionId === prior.sessionId && i.revokedAt !== null));
+await client.action(ref('auth:signOut'), {});
+const receipt = { state: 'passed', qualificationId: id, checkedAt: new Date().toISOString(), isolatedBackendRestarted: true, sourceCount: sources.page.length, sourceId: prior.sourceId, revocationPreserved: true, operatorLoginPreserved: true, cloudMutations: 0, providerCalls: 0, cash: 0 };
+await writeFile(new URL(`research-persistence-${id}.json`, directory), JSON.stringify(receipt, null, 2) + '\n', { flag: 'wx' });
+console.log(JSON.stringify(receipt));

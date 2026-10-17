@@ -1,0 +1,83 @@
+{
+  "id": "bffca259-1ef9-481b-b2b7-accd0da8136d",
+  "startedAt": "2026-10-10T02:36:22.084Z",
+  "scope": "isolated-self-hosted-convex",
+  "url": "http://127.0.0.1:3210",
+  "checks": [
+    {
+      "name": "anonymous operator access denied",
+      "passed": true
+    },
+    {
+      "name": "closed public enrollment",
+      "passed": true
+    },
+    {
+      "name": "wrong password denied",
+      "passed": true
+    },
+    {
+      "name": "native password token resolves named operator",
+      "passed": true
+    },
+    {
+      "name": "cross-client study identifiers denied",
+      "passed": true
+    },
+    {
+      "name": "duplicate invite cannot create another session or recover plaintext",
+      "passed": true
+    },
+    {
+      "name": "issued session retains original immutable study",
+      "passed": true
+    },
+    {
+      "name": "consent is required before accepting answers",
+      "passed": true
+    },
+    {
+      "name": "lost acknowledgement replay preserves one immutable source",
+      "passed": true
+    },
+    {
+      "name": "reused request cannot overwrite prior source",
+      "passed": true
+    },
+    {
+      "name": "stale revision cannot advance interview",
+      "passed": true
+    },
+    {
+      "name": "source pages are bounded and correction retains original text",
+      "passed": true
+    },
+    {
+      "name": "new client resumes durable paused session and next question",
+      "passed": true
+    },
+    {
+      "name": "completed session has readable operator sources",
+      "passed": true
+    },
+    {
+      "name": "wrong client cannot read a completed source",
+      "passed": true
+    },
+    {
+      "name": "revocation terminates capability read and mutation",
+      "passed": true
+    },
+    {
+      "name": "sign out immediately revokes old access token at domain boundary",
+      "passed": true
+    }
+  ],
+  "cloudMutations": 0,
+  "providerCalls": 0,
+  "cash": 0,
+  "state": "passed",
+  "sessionId": "kd79qx9pyg7f86hkf0jc30p8558g04vk",
+  "sourceId": "kd79qx9pyg7f86hkf0jc30p8558g04vk:1",
+  "finishedAt": "2026-10-10T02:36:22.900Z"
+}

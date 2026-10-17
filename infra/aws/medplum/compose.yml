@@ -1,0 +1,32 @@
+{
+  "services": {
+    "postgres": {
+      "image": "postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d",
+      "platform": "linux/arm64", "restart": "no", "mem_limit": "1g", "cpus": 0.7, "pids_limit": 128,
+      "environment": { "POSTGRES_USER": "medplum", "POSTGRES_PASSWORD_FILE": "/run/secrets/postgres-password" },
+      "volumes": ["@DATA@/postgres:/var/lib/postgresql/data", "@CONFIG@/postgres-password:/run/secrets/postgres-password:ro"],
+      "command": ["postgres", "-c", "statement_timeout=60000", "-c", "default_transaction_isolation=REPEATABLE READ", "-c", "shared_preload_libraries=pg_stat_statements,auto_explain"],
+      "healthcheck": { "test": ["CMD-SHELL", "pg_isready -U medplum"], "interval": "5s", "timeout": "5s", "retries": 20 },
+      "logging": { "driver": "none" }
+    },
+    "redis": {
+      "image": "redis:7@sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85",
+      "platform": "linux/arm64", "restart": "no", "mem_limit": "256m", "cpus": 0.2, "pids_limit": 64,
+      "command": ["redis-server", "/run/secrets/redis.conf"],
+      "volumes": ["@DATA@/redis:/data", "@CONFIG@/redis.conf:/run/secrets/redis.conf:ro"],
+      "logging": { "driver": "none" }
+    },
+    "server": {
+      "image": "medplum/medplum-server:5.2.3@sha256:8fef2634b0936fc95d11ce3fca881adf66fa725e63228223a91b98cda9b8a3ee",
+      "platform": "linux/arm64", "user": "1000:1000", "restart": "no", "mem_limit": "1536m", "cpus": 1.0, "pids_limit": 128,
+      "cap_drop": ["ALL"], "security_opt": ["no-new-privileges:true"],
+      "command": ["file:/run/secrets/medplum-server.json"],
+      "depends_on": { "postgres": { "condition": "service_healthy" }, "redis": { "condition": "service_started" } },
+      "ports": ["@LISTEN@:8103"],
+      "volumes": ["@DATA@/binary:/var/medplum/binary", "@CONFIG@/medplum-server.json:/run/secrets/medplum-server.json:ro"],
+      "healthcheck": { "test": ["CMD", "node", "-e", "fetch('http://localhost:8103/healthcheck').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"], "interval": "10s", "timeout": "5s", "retries": 30, "start_period": "60s" },
+      "logging": { "driver": "none" }
+    }
+  },
+  "networks": { "default": { "internal": true } }
+}

@@ -1,0 +1,47 @@
+{
+  "generatedAt": "2026-10-09T23:56:24.177Z",
+  "operation": "read-only-preflight",
+  "inferenceCalls": 0,
+  "speechGenerationCalls": 0,
+  "providers": {
+    "digitalocean": {
+      "configured": true,
+      "status": 200,
+      "modelCount": 81,
+      "candidates": [
+        {
+          "id": "glm-5.3-flash",
+          "available": true
+        },
+        {
+          "id": "qwen3.8-max",
+          "available": true
+        }
+      ],
+      "accountCreditBalance": "not-provided-by-model-list"
+    },
+    "deepgram": {
+      "configured": true,
+      "status": 200,
+      "projectCount": 1,
+      "balances": [
+        {
+          "projectId": "af7cdb2f-a136-4e35-b7e8-b4d2467731f2",
+          "status": 403,
+          "balances": []
+        }
+      ]
+    },
+    "elevenlabs": {
+      "configured": true,
+      "status": 200,
+      "subscriptionStatus": "free",
+      "tier": "free",
+      "characterCount": 0,
+      "characterLimit": 10000,
+      "remainingCharacters": 10000,
+      "creditExtensionLimit": 0,
+      "canExtend": false
+    }
+  }
+}

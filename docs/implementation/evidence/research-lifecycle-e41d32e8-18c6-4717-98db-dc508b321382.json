@@ -1,0 +1,86 @@
+{
+  "id": "e41d32e8-18c6-4717-98db-dc508b321382",
+  "startedAt": "2026-10-10T03:08:27.133Z",
+  "scope": "isolated-self-hosted-convex",
+  "url": "http://127.0.0.1:3210",
+  "checks": [
+    {
+      "name": "internal fixture is unavailable to participant capability and normal operator",
+      "passed": true
+    },
+    {
+      "name": "live WebSocket subscriptions initially read the scoped session and four immutable sources",
+      "passed": true
+    },
+    {
+      "name": "quiet participant subscription invalidates at scheduled invitation expiry without a client request",
+      "passed": true,
+      "deniedAt": 1791601723256,
+      "maxDelayAfterDeadlineMs": 83,
+      "minDelayAfterDeadlineMs": 39,
+      "invitationExpiredAt": 1791601723282
+    },
+    {
+      "name": "retention schedule survives isolated research backend restart",
+      "passed": true,
+      "isolatedBackendRestarted": true
+    },
+    {
+      "name": "operator source subscription invalidates at retention deadline after reconnect",
+      "passed": true,
+      "deniedAt": 1791601743320,
+      "maxDelayAfterDeadlineMs": 147,
+      "minDelayAfterDeadlineMs": 103
+    },
+    {
+      "name": "all prompt, original and correction rows are physically gone; only tombstone metadata remains",
+      "passed": true,
+      "hasConsent": false,
+      "invitationExpiredAt": 1791601723282,
+      "physicalSourceCount": 0,
+      "purgedAt": 1791601743292,
+      "retentionState": "purged",
+      "sourceCount": 0
+    },
+    {
+      "name": "post-retention HTTP reads and writes are denied",
+      "passed": true
+    }
+  ],
+  "subscriptionEvents": [
+    {
+      "query": "participant:resume",
+      "at": 1791601723255,
+      "hadInitialResult": true,
+      "expectedDenial": true
+    },
+    {
+      "query": "research:sessionSources",
+      "at": 1791601743320,
+      "hadInitialResult": true,
+      "expectedDenial": true
+    }
+  ],
+  "cloudMutations": 0,
+  "providerCalls": 0,
+  "cash": 0,
+  "prepareStartedAt": 1791601708173,
+  "prepareFinishedAt": 1791601708217,
+  "localEarliestExpiry": 1791601723173,
+  "localLatestExpiry": 1791601723217,
+  "localEarliestRetention": 1791601743173,
+  "localLatestRetention": 1791601743217,
+  "clientId": "jx71mnckkn0j3yz2arxmd4tez58g1h9p",
+  "projectId": "k97ev18sh2khm2netm3wf8ba458g155c",
+  "sessionId": "kd75pdb8wx2mw58k6hxtdgtdz18g0ceb",
+  "invitationId": "k177jt53hq9kkf2tys16tb77k98g1f36",
+  "deadlines": {
+    "expiresAt": 1791601723266,
+    "preparedAt": 1791601708266,
+    "retainUntil": 1791601743266,
+    "sourceCount": 4
+  },
+  "state": "passed",
+  "fixtureDisabledAfterRun": true,
+  "finishedAt": "2026-10-10T03:09:03.667Z"
+}

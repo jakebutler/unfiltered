@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.foundation.json",
+  "compilerOptions": {
+    "rootDir": ".stream-chunk-diagnostic-stage",
+    "outDir": ".stream-chunk-diagnostic-build"
+  },
+  "include": [
+    ".stream-chunk-diagnostic-stage/packages/clinical-core/src/digitalocean-stream.ts",
+    ".stream-chunk-diagnostic-stage/packages/clinical-core/src/synthetic-diagnostic-prefix.ts"
+  ]
+}

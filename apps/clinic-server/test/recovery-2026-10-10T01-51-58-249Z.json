@@ -1,0 +1,43 @@
+{
+  "at": "2026-10-10T01:51:58.249Z",
+  "scope": "Targeted synthetic recovery and real Medplum queue pages; test-only restoration of preserved patient session; real named staff authentication",
+  "passed": false,
+  "checks": [
+    {
+      "name": "read saved uncertain amendment before any confirmation retry",
+      "passed": false,
+      "error": "The expression evaluated to a falsy value:\n\n  assert(saved.draft.turns.some(turn => turn.corrects && turn.text === 'Corrected synthetic goal: walk for 30 minutes with fewer rest stops.'))\n"
+    },
+    {
+      "name": "named physician queue has bounded real pages and rejects forged cursor",
+      "passed": true,
+      "pages": [
+        5,
+        5
+      ],
+      "elapsedMs": [
+        780,
+        601
+      ],
+      "continuation": "10"
+    },
+    {
+      "name": "unassigned named clinician has empty queue and cannot open handoff",
+      "passed": true,
+      "elapsedMs": 7
+    }
+  ],
+  "nativeCalls": 181,
+  "upstreamFailures": [
+    {
+      "method": "POST",
+      "resource": "",
+      "status": 412
+    },
+    {
+      "method": "PUT",
+      "resource": "Patient",
+      "status": 412
+    }
+  ]
+}

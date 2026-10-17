@@ -1,0 +1,81 @@
+{
+  "at": "2026-10-10T01:43:50.408Z",
+  "scope": "actual local synthetic clinic API; not rendered UI or clinical protocol acceptance",
+  "passed": false,
+  "results": [
+    {
+      "name": "identity gate, cookie tampering, origin and unconfirmed access fail closed",
+      "passed": true,
+      "draft": "cf4c7643-8c74-42eb-9483-035cad2d7653"
+    },
+    {
+      "name": "durable accepted turn, duplicate ID, changed ID payload, stale revision and reload",
+      "passed": true,
+      "draft": "cd6b4ffd-c6b5-4a2a-aaa6-d05e73294ca8"
+    },
+    {
+      "name": "missing measurements preserve partial handoff and wrong digest cannot confirm",
+      "passed": true,
+      "handoff": "cd6b4ffd-c6b5-4a2a-aaa6-d05e73294ca8.v1",
+      "completeness": "partial"
+    },
+    {
+      "name": "all seven scenarios receive native FHIR handoffs with truthful ownership",
+      "passed": true,
+      "scenarios": 7,
+      "handoffs": [
+        "c952b312-5065-4241-9c71-86ee6cf3eb83.v1",
+        "a1d3f8b9-83ac-49db-898d-785ad5a0836e.v1",
+        "226c1095-5648-4066-b172-15b1b37009a1.v1",
+        "b62306a0-0a78-442b-8ac5-05559e2b9132.v1",
+        "13b1f0bd-e546-4dba-9de9-0402f00df0ee.v1",
+        "c37aee0d-1067-4ad9-8467-3a9bae8f0fe3.v1"
+      ]
+    },
+    {
+      "name": "named physician PKCE login and queue",
+      "passed": false,
+      "error": "/api/staff/queue: {\"error\":{\"code\":\"invalid-queue-pagination\",\"message\":\"This action could not be completed. Your saved answers have not been discarded.\",\"retryable\":false}}\n\n503 !== 200\n"
+    },
+    {
+      "name": "named registered-dietitian PKCE login and queue",
+      "passed": false,
+      "error": "/api/staff/queue: {\"error\":{\"code\":\"invalid-queue-pagination\",\"message\":\"This action could not be completed. Your saved answers have not been discarded.\",\"retryable\":false}}\n\n503 !== 200\n"
+    },
+    {
+      "name": "named administrative PKCE login and queue",
+      "passed": false,
+      "error": "/api/staff/queue: {\"error\":{\"code\":\"invalid-queue-pagination\",\"message\":\"This action could not be completed. Your saved answers have not been discarded.\",\"retryable\":false}}\n\n503 !== 200\n"
+    },
+    {
+      "name": "RD reads full intake and sources; selecting does not review; medical action denied",
+      "passed": false,
+      "error": "The expression evaluated to a falsy value:\n\n  assert(c)\n"
+    },
+    {
+      "name": "attributed RD outcome persists to patient; stale work update denied",
+      "passed": false,
+      "error": "Cannot read properties of undefined (reading 'request')"
+    },
+    {
+      "name": "administrative view is logistics-only; closure does not close medical",
+      "passed": false,
+      "error": "Cannot read properties of undefined (reading 'request')"
+    },
+    {
+      "name": "all seven scenarios expose a concrete attributed staff outcome to the patient",
+      "passed": false,
+      "error": "Cannot read properties of undefined (reading 'request')"
+    },
+    {
+      "name": "correction changes digest, keeps prior source and produces versioned amendment",
+      "passed": true,
+      "amendment": "cd6b4ffd-c6b5-4a2a-aaa6-d05e73294ca8.v2"
+    },
+    {
+      "name": "unassigned clinician cannot access target handoff",
+      "passed": false,
+      "error": "/api/staff/queue: {\"error\":{\"code\":\"invalid-queue-pagination\",\"message\":\"This action could not be completed. Your saved answers have not been discarded.\",\"retryable\":false}}\n\n503 !== 200\n"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-10T01:54:27.104Z",
+  "passed": true,
+  "scope": "synthetic structured full intake and actual Medplum receipt; not clinical-content or rendered acceptance",
+  "handoff": "2f819f57-f7c7-4f2c-b437-f95b2f0d7044.v1",
+  "acceptedTurns": 70,
+  "measuredWeight": "220 lb around February 2026; approximate date",
+  "separateEstimate": "230 lb at source timestamp",
+  "screening": {
+    "gad2": 3,
+    "phq2": 0,
+    "phq4": 3,
+    "furtherAssessmentRequested": true,
+    "clinicianReviewRequired": true,
+    "clinicalClearance": false
+  }
+}

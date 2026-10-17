@@ -1,0 +1,13 @@
+import { v } from 'convex/values';
+export const scope = { clientId: v.id('researchClients'), projectId: v.id('researchProjects') };
+export const sourceKind = v.union(v.literal('self-report'), v.literal('dom-event'), v.literal('screen-observation'), v.literal('camera-observation'), v.literal('audio'), v.literal('capture-gap'));
+export const selection = v.object({ sessionId: v.id('researchSessions'), kind: sourceKind, id: v.string(), start: v.number(), end: v.number() });
+export const evidence = v.object({ sessionId: v.id('researchSessions'), kind: sourceKind, id: v.string(), start: v.number(), end: v.number(), hash: v.string(), consentEpoch: v.number(), sharingEpoch: v.number(), retainApprovedExcerpts: v.boolean(), text: v.union(v.string(), v.null()) });
+export const finding = v.object({ id: v.string(), statement: v.string(), type: v.union(v.literal('self-report'), v.literal('observed-dom'), v.literal('tentative-screen'), v.literal('tentative-camera'), v.literal('interpretation')), supports: v.array(v.string()), counterevidence: v.array(v.string()), limitations: v.string() });
+export const excerpt = v.object({ evidenceId: v.string(), text: v.string() });
+export const rawGrant = v.object({ evidenceId: v.string(), view: v.boolean(), download: v.boolean() });
+export const analysisState = v.union(v.literal('admitted'), v.literal('dispatching'), v.literal('ready'), v.literal('failed'), v.literal('unknown'), v.literal('invalidated'));
+export const reservation = v.object({ id: v.string(), model: v.union(v.literal('glm-5.3-flash'), v.literal('qwen3.8-max')), maxInputBytes: v.number(), maxOutputTokens: v.number(), expiresAt: v.number(), live: v.boolean() });
+export const frameReceipt = v.object({ evidenceId: v.string(), mediaHash: v.string(), atMs: v.number(), imageHash: v.string(), bytes: v.number() });
+export const providerReceipt = v.object({ requestId: v.union(v.string(), v.null()), model: v.string(), inputHash: v.string(), requestBytes: v.number(), maxOutputTokens: v.number(), outputHash: v.union(v.string(), v.null()), frames: v.array(frameReceipt), classification: v.union(v.literal('live'), v.literal('offline-fixture')), errorCode: v.union(v.string(), v.null()) });
+export const reportState = v.union(v.literal('published'), v.literal('withdrawn'), v.literal('invalidated'), v.literal('expired'));

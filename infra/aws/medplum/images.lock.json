@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "platform": "linux/arm64",
+  "sourceCommit": "39c4978d683cb4186d1b54b507a8b68d627396b6",
+  "source": "https://github.com/medplum/medplum/tree/39c4978d683cb4186d1b54b507a8b68d627396b6",
+  "qualification": "existing infra/local ARM64 image pins; new package runtime unqualified",
+  "server": "medplum/medplum-server:5.2.3@sha256:8fef2634b0936fc95d11ce3fca881adf66fa725e63228223a91b98cda9b8a3ee",
+  "postgres": "postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d",
+  "redis": "redis:7@sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85"
+}

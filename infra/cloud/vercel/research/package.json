@@ -1,0 +1,8 @@
+{
+  "name": "corvo-research-hosted-runtime-dependencies",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pinned hosted lifecycle API bundled into the research backend; frontend dependencies stay in the root lock.",
+  "engines": { "node": "22.x" },
+  "dependencies": { "@vercel/functions": "3.9.5" }
+}

@@ -1,0 +1,27 @@
+{
+  "at": "2026-10-10T01:52:58.669Z",
+  "scope": "Targeted synthetic recovery and real Medplum queue pages; test-only restoration of preserved patient session; real named staff authentication",
+  "passed": true,
+  "checks": [
+    {
+      "name": "read saved uncertain amendment before any confirmation retry",
+      "passed": true,
+      "initialPhase": "conversation",
+      "recovered": "974d2879-4f35-4a95-99d2-422d7ff93ced.v2",
+      "receivedAt": "2026-10-10T01:52:58.362Z"
+    }
+  ],
+  "nativeCalls": 62,
+  "upstreamFailures": [
+    {
+      "method": "POST",
+      "resource": "",
+      "status": 412
+    },
+    {
+      "method": "PUT",
+      "resource": "Patient",
+      "status": 412
+    }
+  ]
+}

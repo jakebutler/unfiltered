@@ -1,0 +1,4 @@
+{
+ "extends":"./tsconfig.extraction-scoped-v2.json",
+ "compilerOptions":{"outDir":".extraction-scoped-final-build"}
+}

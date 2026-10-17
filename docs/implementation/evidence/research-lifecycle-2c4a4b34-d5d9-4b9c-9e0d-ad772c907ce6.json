@@ -1,0 +1,35 @@
+{
+  "id": "2c4a4b34-d5d9-4b9c-9e0d-ad772c907ce6",
+  "startedAt": "2026-10-10T03:04:39.806Z",
+  "scope": "isolated-self-hosted-convex",
+  "url": "http://127.0.0.1:3210",
+  "checks": [
+    {
+      "name": "internal fixture is unavailable to participant capability and normal operator",
+      "passed": true
+    },
+    {
+      "name": "live WebSocket subscriptions initially read the scoped session and four immutable sources",
+      "passed": true
+    }
+  ],
+  "cloudMutations": 0,
+  "providerCalls": 0,
+  "cash": 0,
+  "clientId": "jx75a0mkvd6a6d53rsm3j02jm98g0775",
+  "projectId": "k97932s8exfxxaz237fq5rxbf58g0by5",
+  "sessionId": "kd77k20vcd8gyxr5h4365c196h8g14vh",
+  "invitationId": "k17a1ejksbv186g9q78g0z8tns8g1ajd",
+  "deadlines": {
+    "expiresAt": 1791601495530,
+    "retainUntil": 1791601515530,
+    "sourceCount": 4
+  },
+  "state": "failed",
+  "failure": {
+    "phase": "quiet participant subscription invalidates at scheduled invitation expiry without a client request",
+    "name": "Error"
+  },
+  "fixtureDisabledAfterRun": true,
+  "finishedAt": "2026-10-10T03:04:55.582Z"
+}

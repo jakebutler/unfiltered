@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.foundation.json",
+  "compilerOptions": { "outDir": ".stream-full-build" },
+  "include": [
+    "packages/clinic-api/src/adaptive-reply-full-compact.ts",
+    "scripts/qualification/fixtures/adaptive-full-development.ts",
+    "scripts/qualification/fixtures/adaptive-full-cases.ts",
+    "scripts/qualification/fixtures/adaptive-full-readback.ts"
+  ]
+}

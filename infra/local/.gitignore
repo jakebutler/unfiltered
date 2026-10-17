@@ -1,0 +1,9 @@
+.env
+.runtime.env
+.clinic.env
+.clinic-config.json
+.clinic-provider-settings.json
+.clinic-users.json
+.clinic-api.log
+.clinic-api.pid
+*.receipt.json

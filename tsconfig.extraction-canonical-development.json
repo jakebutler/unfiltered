@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.foundation.json",
+  "compilerOptions": { "outDir": ".extraction-canonical-development-build" },
+  "include": ["scripts/qualification/fixtures/adaptive-canonical-development.ts", "packages/clinic-api/src/adaptive-extraction-sparse-provider.ts"]
+}

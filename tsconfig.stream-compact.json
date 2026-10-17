@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.stream-qualification.json",
+  "compilerOptions": { "outDir": ".stream-compact-build" },
+  "include": [
+    "packages/clinical-core/src/digitalocean-stream.ts",
+    "packages/clinical-core/src/action-first-object.ts",
+    "packages/clinic-api/src/adaptive-reply-compact.ts",
+    "packages/clinic-content/src/index.ts"
+  ]
+}

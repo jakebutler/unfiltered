@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "mode": "deployable-candidate",
+  "canonicalOrigin": "https://corvo-research-demo.vercel.app",
+  "deployment": "https://elegant-crane-662.convex.cloud",
+  "convexSite": "https://elegant-crane-662.convex.site",
+  "r2": {
+    "accountId": "728ae4b71b42dfcef062336c06bd8595",
+    "bucket": "unfiltered-recordings",
+    "namespace": "research-hosted-demo",
+    "deadlineMs": 15000
+  },
+  "maxSegmentBytes": 4000000,
+  "maxResponseBytes": 4000000,
+  "ffmpeg": {
+    "sha256": "bcb7aa88c3180229f09e92438afd331665a34725ccabbc9903672ed845ee30d6",
+    "bytes": 142166568,
+    "architecture": "linux-x64",
+    "version": "n8.1.3-16-ge0a878dd70",
+    "source": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-09-14-16/ffmpeg-n8.1.3-16-ge0a878dd70-linux64-lgpl-8.1.tar.xz",
+    "license": "LGPL-3.0-or-later",
+    "licenseSha256": "d6b1484f496d9acfbc5fc6fb0eedd593d36bd7e49cfd45599e615b31d13fac39"
+  }
+}
