@@ -11,7 +11,7 @@ this file is the single entry point. It holds:
 Update the status tables **as soon as** a task lands: a commit hash plus a one-line result. Do
 not batch the updates. The next agent trusts this file over chat history.
 
-Last updated: 2026-10-16 (Codex cloud continuation; current verifying commits and results below).
+Last updated: 2026-10-17 (demo release preparation; current verification and blockers below).
 
 ## Workspace
 
@@ -90,6 +90,36 @@ spec explicitly allows to be `it.fails` (a recorded bug).
     `packages/clinic-content/test/native-questionnaire.test.ts:30`) is a re-qualification event.
     Never make one inside the Oct 21 window. See
     [PLAN-QUESTIONNAIRE-TEMPLATE.md](PLAN-QUESTIONNAIRE-TEMPLATE.md#re-qualification-bundling).
+
+## October 17 demo release preparation
+
+The user requested browser validation, repeatable patient scripts, completion and deployment,
+and selected copy/paste invitations without email. Deployment/live testing is now requested;
+this does not remove the technical qualification prerequisites or the protected digest boundary.
+
+- **D-n packaging repair: `be2d1a9`.** The original generated server exited successfully
+  without listening, and its `public/` output disagreed with the runtime's `site-assets/`.
+  The packager now emits an explicit Node startup wrapper, bundled application, guarded
+  assets, Node framework configuration and complete runtime includes. Receipt hashes bind
+  application/configuration bytes and the asset manifest. Final artifact smoke: **28 checks
+  passed**, zero outbound fetch attempts. Failed baseline receipt was preserved.
+- All six required gates passed on Node 22.23.3: **2,266 foundation / 345 clinic / 31 hosting**
+  tests plus foundation, clinic and aggregate hosting typechecks. Logs are retained in
+  `/workspace/scratch/demo-release/`; no acceptance criteria or historical fixtures changed.
+- Independent GPT-6.1 Sol xhigh review identified wrapper-only receipt hashing, closed safety
+  rows remaining in the active queue, and navigation during a pending safety action. Confirmed
+  findings were fixed; targeted real Chromium re-review passed.
+- Live access remains blocked: current environment policy permits package hosts and WorkOS,
+  but not the clinic, Medplum or provider/Vercel endpoints. Canonical clinic request returned
+  proxy CONNECT 403. Environment readiness rechecked; policy is still restricted.
+- Owner-private inputs are absent: `infra/cloud/.private/corvo-clinic/clinic-config.json`,
+  `infra/cloud/.private/clinic-cloud-q4f-20261010/clinic-users.json`, and the frozen q4f runtime
+  at `.factory/private/native-questionnaire-integration/runtime-2026-10-10-q4f/`.
+  Do not recreate frozen evidence. The existing 2026-10-21T01:48:12Z expiry is unchanged.
+- **Not deployed.** No secret rotation, Medplum policy/admin change, live provider call,
+  qualification renewal, or production mutation was performed in this continuation.
+  Vercel connector read confirmed the expected clinic project and its existing READY production
+  deployment. This is not a new hosted acceptance result.
 
 ## Tracks and status
 
