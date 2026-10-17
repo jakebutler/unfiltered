@@ -1,5 +1,10 @@
 # Corvo Clinic intake: how to try it
 
+For the repeatable client presentation, use [patient scripts](DEMO-PATIENT-SCRIPTS.md),
+the [full acceptance walkthrough](DEMO-ACCEPTANCE.md), and the
+[release and secret-rotation runbook](DEMO-RELEASE-RUNBOOK.md). These distinguish
+offline browser verification from the remaining hosted release checks.
+
 Synthetic demo. Use only made-up details; never real health information.
 
 Hosted status: stage8/native-5 (2026-10-14); qualification expires
@@ -24,7 +29,7 @@ Voice notes:
   - While a recording is kept, **Send answer** stays off, so it can't be dropped by accident.
   - Anything you type meanwhile stays; the retried words are added after it.
 - Correcting yourself mid-sentence works: "metformin 500 mg, no wait, 850 mg" is saved as 850 mg, with the 500 mg kept on record as corrected.
-- PHQ-4 mood items and other fixed-choice questions stay **buttons only**. That is intentional.
+- PHQ-4 mood items stay **buttons only**. Other supported fixed-choice questions can accept speech only through explicit option confirmation; ambiguous speech must be corrected before saving.
 - Use Chrome, Edge or Safari, and allow the microphone when asked.
 
 ### Hands-free (when enabled)
@@ -36,7 +41,7 @@ Hands-free listens for your answers without the Dictate and Finish buttons. Push
 3. The assistant waits about a second after you stop, and about 2.5 seconds if you end on "um", "no wait", "I mean", "and", a comma, or an amount such as "ten milligrams". That leaves room to correct yourself. Click **Done speaking** to skip the wait.
 4. Say **"stop"**, **"wait"**, **"pause"** or **"hold on"** to pause voice. Nothing is saved when you say it. Click **Resume voice conversation** to carry on, or click **Stop conversation** at any time.
 5. Speaking over a question that is being read aloud stops the reading.
-6. PHQ-4 mood items and other fixed-choice questions stay **buttons only**. Voice pauses and asks you to use the buttons.
+6. PHQ-4 mood items stay **buttons only**. Voice pauses for those items. Other supported fixed choices require explicit confirmation of the selected option.
 7. If hands-free can't connect, you'll see: "Hands-free voice could not connect. Nothing was lost: dictate one answer instead, or keep typing." Voice then switches to push-to-talk for the rest of the visit.
    - If the connection drops mid-answer, the words heard so far stay in the answer box. The last words may be missing, so check them.
 
