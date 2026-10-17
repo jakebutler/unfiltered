@@ -11,18 +11,18 @@ this file is the single entry point. It holds:
 Update the status tables **as soon as** a task lands: a commit hash plus a one-line result. Do
 not batch the updates. The next agent trusts this file over chat history.
 
-Last updated: 2026-10-17 (demo release preparation; current verification and blockers below).
+Last updated: 2026-10-17 (new-session release preflight; current verification and blockers below).
 
 ## Workspace
 
 | Item | Value |
 |---|---|
-| Cloud continuation checkout | `/workspace/unfiltered`; this continuation started from remote `e8dc812`; both locked dependency installs completed |
+| Cloud continuation checkout | `/workspace/unfiltered`; latest continuation fetched remote `codex/unfiltered-foundation` at `7b4e506`; existing history preserved |
 | Owner worktree (local work happens here) | `/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered` |
 | Branch | `codex/unfiltered-foundation` (pushed to `origin`, which is public on GitHub) |
 | Open PRs (linked to the t3-code thread) | #7, #8 |
 | WIP snapshot | `0fd34e3` holds the starting snapshot from stopped agents (D-b/D-c, D-d, D-f, T1.3, T1.4a, T1.4b), **unverified when captured**. Later verifying commits and their gates are recorded below; the snapshot was preserved. |
-| Cloud agents | A Codex cloud agent works on a fresh clone of this branch. Local-only items do not exist there: the primary checkout, `.env.local`, `docs/implementation/evidence/`, `infra/cloud/.private/`, Medplum/Vercel credentials, t3-code preview tools. Skip anything that needs them and mark it `blocked: needs local/owner`. |
+| Cloud agents | A Codex cloud agent works on a fresh clone of this branch. Local-only items do not exist there: the primary checkout, `.env.local`, owner-private evidence/configuration, and t3-code preview tools. The October 17 new session has injected Medplum/Vercel runtime credentials that authenticate; private clinic/staff/frozen-runtime inputs remain absent. Mark work needing absent inputs `blocked: needs local/owner`. |
 | Primary checkout (do **not** work here) | `/Volumes/rexy/GitHub/unfiltered`, branch `codex/rebuild-discovery`. Its `.env.local` holds credentials. |
 | Shell note | The tool shell resets cwd to the primary checkout after every command. Always `cd <worktree> && …`. |
 | Hosted clinic demo | `https://corvo-clinic-demo.vercel.app` (stage8, native questionnaire `native-5`). Qualification expires **2026-10-21T01:48:12Z**. |
@@ -126,9 +126,8 @@ this does not remove the technical qualification prerequisites or the protected 
 - Independent GPT-6.1 Sol xhigh review identified wrapper-only receipt hashing, closed safety
   rows remaining in the active queue, and navigation during a pending safety action. Confirmed
   findings were fixed; targeted real Chromium re-review passed.
-- Live access remains blocked: current environment policy permits package hosts and WorkOS,
-  but not the clinic, Medplum or provider/Vercel endpoints. Canonical clinic request returned
-  proxy CONNECT 403. Environment readiness rechecked; policy is still restricted.
+- **Earlier-session network result (superseded by the new-session preflight below):** clinic,
+  Medplum and provider/Vercel destinations returned proxy CONNECT 403.
 - Owner-private inputs are absent: `infra/cloud/.private/corvo-clinic/clinic-config.json`,
   `infra/cloud/.private/clinic-cloud-q4f-20261010/clinic-users.json`, and the frozen q4f runtime
   at `.factory/private/native-questionnaire-integration/runtime-2026-10-10-q4f/`.
@@ -137,6 +136,82 @@ this does not remove the technical qualification prerequisites or the protected 
   qualification renewal, or production mutation was performed in this continuation.
   Vercel connector read confirmed the expected clinic project and its existing READY production
   deployment. This is not a new hosted acceptance result.
+
+## October 17 new-session access preflight (from `7b4e506`)
+
+Implementation, deployment and bounded synthetic live testing are authorized. Copy/paste
+invitations remain the release mode; email, W08 and proposed crisis wording remain deferred.
+No clinical content, questionnaire digest, historical fixture or research allowance changed.
+
+- **Actual environment:** attached instance reports current/observed revision **2**, running,
+  observations current, but network-policy and variable readiness **unknown**. This differs
+  from the earlier revision-12 instance; neither report establishes credential readiness.
+  `/etc/codex/network-policy.json` is restricted and contains the new hosts, with one typo:
+  **`inference.do-ai-run` must be `inference.do-ai.run`**. Do not bypass the proxy.
+- **Actual proxied requests:** Vercel root 308, canonical clinic 200, Medplum root 200,
+  Deepgram/ElevenLabs roots 404 (reachable, not authenticated provider tests). Correct
+  DigitalOcean inference hostname still returns CONNECT 403. No inference/audio calls ran.
+- **Authenticated read checks:** Vercel API returned 200 for the exact supplied project/team.
+  Existing production is READY, deployment `dpl_ECQpBeUZSvXipBuRErgyL1BMCMYR`, URL
+  `corvo-clinic-demo-54xh2eai1-butlerjake-gmailcoms-projects.vercel.app`. This is the older
+  release, not this candidate. Production environment metadata includes sensitive
+  `CLINIC_CONFIG_JSON`, DigitalOcean and Deepgram bindings; values were not retrieved.
+- **Medplum runtime:** OAuth and `/auth/me` returned 200 for the expected project/client,
+  with `admin:false` and no project super-admin. FHIR metadata reports `5.2.5-656286c`.
+  Own pinned ProjectMembership read and AccessPolicy search each returned **403**. Reported
+  effective policy has no wildcard/administrative resource rule and **no Appointment rule**;
+  patient-scoped Appointment read permission remains a release prerequisite, not a reason
+  to grant broader access. Other role, cross-patient and invitation permissions remain unrun.
+- **Hosted browser, existing release only:** Chromium public `/` and `/staff` returned 200
+  at 1365×1000, 390×844 and 360×740; six page observations, no page errors or horizontal
+  overflow, staff login fields present. Unauthenticated staff me/queue/safety and patient
+  session/receipt returned **401**. No authenticated patient-to-staff acceptance is claimed.
+- **Still missing:** `infra/cloud/.private/corvo-clinic/clinic-config.json`,
+  `infra/cloud/.private/clinic-cloud-q4f-20261010/clinic-users.json` and frozen
+  `.factory/private/native-questionnaire-integration/runtime-2026-10-10-q4f/`.
+  The qualifier requires the real `clinic-users.json` beside the chosen private config;
+  restoring a users file elsewhere alone does not satisfy that input. Environment provider
+  keys do not replace patient/staff bindings, cookie secret, budget state or attestation.
+- **Administrative prerequisite:** an authorized Medplum administrator must perform the
+  documented coordinated runtime-secret rotation and calibration, with verified demotion.
+  The runtime credential deliberately cannot do this. No secret rotation, policy mutation,
+  qualification write, deployment or promotion has been attempted. The cloud secret binding
+  and Vercel newly qualified config must be updated together; old deployments keep old env.
+- **Qualification remains unchanged:** `2026-10-21T01:48:12Z` (October 20, 6:48:12 PM Pacific).
+  No historical receipt or frozen runtime was reconstructed. Full seven-workflow hosted
+  acceptance, native staff permissions/persistence, real microphone, provider latency and
+  physical-phone keyboard remain **blocked/unrun** for this candidate.
+- **Local gates:** both locked installs, foundation build, **2,266 foundation / 345 clinic /
+  31 hosting tests**, foundation/clinic typechecks and aggregate `hosting:typecheck` passed
+  on Node **22.23.3**. Initial nested-`npx` EUSAGE logs are preserved; reruns used installed
+  binaries. The first real foundation run had 2,101 passes / 29 failures plus five failed
+  suites because historical inputs were missing. Downloaded the published GitHub release
+  `historical-fixtures-v1`, verified the archive checksum and all 109 manifest size/SHA-256
+  pins, checked safe paths and existing-content conflicts, restored only missing files, and
+  reran all foundation tests successfully. Original bytes/expectations were unchanged; restored
+  evidence and archived modules remain uncommitted. The frozen q4f runtime is still absent.
+- **Browser harness startup correction:** `tsx@4.20.6` failed on the named `MedplumClient`
+  import under Node 22. The locked `vite-node --script` command starts the existing offline
+  harness; plain `vite-node` exits without executing its main guard. The acceptance document
+  now uses the verified startup command. Both unsuccessful launch logs are retained.
+- **Offline Chromium rerun:** all **24 recorded cases passed**, using the corrected locked
+  runner, system Chromium and existing `clinic-browser-smoke.cjs`. Desktop/390×844/360×740
+  exercised all seven partial workflow deliveries/reloads, PHQ patient/staff scores,
+  copy-only invitation identity/single-use checks, fail-closed safety review and lost-action
+  acknowledgement recovery. No page errors/horizontal overflow. Report:
+  `/workspace/scratch/clinic-release-20261017-access/browser/report.json`.
+- **Generated clinic package:** source implementation `7b4e506`, new private output
+  `infra/cloud/.private/clinic-demo-20261017-session2/`; **28 artifact checks passed**, zero
+  outbound fetch attempts, clean server exit. Private receipt:
+  `docs/implementation/evidence/hosting-package-1c959d99-89f7-4c75-90e9-5d20887d09c1.json`.
+  This is local packaging proof only; the package remains unqualified and **not deployed**.
+- **Fresh independent GPT-6.1 Sol xhigh review:** no actionable findings in the five-file
+  release-document diff; runner entrypoint and qualification input layout checked. Clarified
+  that runtime credentials are injected while private staff/configuration remain absent.
+  No runtime source change required or made in this continuation.
+- Private logs/screenshots for this preflight: `/workspace/scratch/clinic-release-20261017-access/`.
+  These, restored historical fixtures, private configuration and generated artifacts are not
+  committed. Existing `S1-BROWSER.md` was preserved.
 
 ## Tracks and status
 
@@ -160,7 +235,7 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | D-e | Staff safety screen visual check | `dd26461` local Chromium verified: source/level/action history, closed rows leave active queue, delayed/lost response retries and navigation guard; live reviewer gate remains D-h |
 | D-f | Re-qualification without an admin grant (`/auth/me` observer) | done `07da259` (local implementation): projection/drift/freshness and complete sealing dependency pins verified; all six gates pass. Frozen private continuation smoke and live calibration remain owner steps. |
 | D-g | Mobile layout check | `dd26461` 390×844 and 360×740 browser layout checks pass; physical keyboard and real voice/device checks remain unrun |
-| D-h | Secret rotation + one-time calibration + re-qualify before 2026-10-21 | blocked: needs local/owner; no live calls authorized for this continuation |
+| D-h | Secret rotation + one-time calibration + re-qualify before 2026-10-21 | Authorized, blocked: private config/staff/frozen q4f runtime absent; administrative rotation/calibration outstanding; inference allowlist typo. Runtime OAuth works without admin. |
 | D-i | Docs: OPUS-HANDOFF, DEMO-TESTING-GUIDE, CLOUD-CLINIC | done `aae4937`: current fixes/offline proof separated from historical live receipts and owner renewal; all six gates pass. |
 | D-j | Free text at a guided choice repeats the choice | done `6dbc672`: explicit choice confirmation, retained source/question, PHQ buttons-only; all six gates pass. |
 | D-k | Crisis phrasing coverage **[digest]** | `28e4d46` concrete proposed phrase/scope matrix in CRISIS-PHRASE-REVIEW.md; no runtime change, still held for owner review and bundled re-qualification |

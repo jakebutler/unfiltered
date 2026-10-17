@@ -6,7 +6,7 @@ Scope: the seven existing workflows, copy/paste invitations, patient review and 
 
 ## Presenter setup
 
-1. Use the release and test status in [DEMO-ACCEPTANCE.md](DEMO-ACCEPTANCE.md). Do not describe local mock results as hosted validation.
+1. Use the release and test status in [DEMO-ACCEPTANCE.md](DEMO-ACCEPTANCE.md). Do not describe local mock results as hosted validation. The October 17 new-session preflight checked only public pages on the older release; authenticated Scripts A–E remain unrun for this candidate while private staff/configuration and qualification prerequisites are missing.
 2. Have a patient browser window and a separate staff window/profile. Use the assigned physician, dietitian and administrative accounts from the private users file. Never project passwords or invitation tokens to the audience.
 3. Keep the patient on the fictional identity shown by the invitation. Each link is single-use, expires after 72 hours, and should be pasted into a fresh patient context. Create a new link for each repeat; reloading an already redeemed link is not a new invitation.
 4. Copy-only delivery needs no Resend credentials. Do not click or imply an email-send flow.

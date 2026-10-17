@@ -8,13 +8,14 @@ Use [DEMO-PATIENT-SCRIPTS.md](DEMO-PATIENT-SCRIPTS.md) for fictional answers and
 
 | Area | October 17, 2026 result |
 |---|---|
-| Foundation / clinic / hosting suites | 2,266 / 345 / 31 passed; all required typechecks passed |
-| Desktop and 390/360 px browser journeys | Offline harness; seven partial workflows, PHQ, invitations and safety actions tested |
-| Generated deployment package | Local Node startup/assets/security checks passed; no outbound provider calls |
+| Foundation / clinic / hosting suites | New session: 2,266 / 345 / 31 passed on Node 22.23.3 after unchanged historical fixtures were restored; all required typechecks passed. Earlier failures retained in the linked handoff |
+| Desktop and 390/360 px browser journeys | New session: 24 offline Chromium cases passed; seven partial workflows, PHQ, invitations and safety actions |
+| Generated deployment package | New session: 28 local Node startup/assets/security checks passed; zero outbound fetch attempts; package remains unqualified and undeployed |
 | Hosted patient-to-staff journey, native role permissions | Not yet verified for this candidate |
 | Real microphone, adaptive provider behavior, hosted latency | Not yet verified for this candidate |
 | Physical phone keyboard / mobile browser behavior | Not yet verified; viewport emulation is not a physical-device check |
-| Deployment / qualification renewal / secret rotation | Not performed; see release runbook for exact missing access and inputs |
+| Deployment / qualification renewal / secret rotation | Not performed; inference allowlist typo, missing private inputs and administrative prerequisites remain |
+| Existing hosted public pages only | Six Chromium page observations passed across desktop/390/360 px; five unauthenticated API denials returned 401. This is the older release |
 
 ## Automated local browser run
 
@@ -23,8 +24,12 @@ Requires Node 22, root dependencies (`npm ci`), and Chromium. Run from the repos
 Terminal 1:
 
 ```sh
-npx tsx scripts/dev/invitations-local-smoke.mts --serve-local
+node_modules/.bin/vite-node --script scripts/dev/invitations-local-smoke.mts --serve-local
 ```
+
+The locked `vite-node` runner handles the repository’s mixed `.mts`/CommonJS imports.
+In the new Node 22 session, `tsx@4.20.6` failed before server startup with a missing
+`MedplumClient` named export; that launch is not a passing browser run.
 
 Terminal 2:
 

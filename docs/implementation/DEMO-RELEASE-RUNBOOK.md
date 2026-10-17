@@ -16,7 +16,11 @@ No evidence in the handoff requires blanket rotation of DigitalOcean, Deepgram, 
 
 ## Access and private inputs
 
-The October 17 cloud instance had an enforced restricted network policy allowing package hosts and WorkOS, but not the clinic/Medplum/provider/Vercel endpoints. A direct request to the clinic returned proxy CONNECT 403. Environment credential readiness does not override that network policy.
+The earlier October 17 instance blocked all six destinations. The new session fetched `7b4e506` and reports current/observed revision 2, running, observations current, but policy and variable readiness unknown. Its actual startup policy includes the added hosts with a typo: **`inference.do-ai-run` must be corrected to `inference.do-ai.run`** through environment configuration. Proxied requests now reach Vercel, the canonical clinic, Medplum, Deepgram and ElevenLabs; the correct inference hostname still returns CONNECT 403. Reachability is not authenticated provider validation.
+
+Vercel project API authentication and Medplum runtime OAuth now work. The runtime is non-admin; its own ProjectMembership read and AccessPolicy search return 403. No administrative credential was supplied for rotation/calibration. The reported effective runtime policy has no Appointment rule: verify and, through the authorized administrator, provision only the required patient-scoped read permission before qualification. Do not infer complete least privilege from these two negative controls.
+
+The owner-private config, named staff users and frozen q4f runtime remain absent at the paths in the handoff. The qualifier reads `clinic-users.json` **beside the selected config**; securely restore the actual files in that layout. Do not generate replacement identities, cookie secrets, budget state or historical artifacts. Vercel production metadata confirms sensitive `CLINIC_CONFIG_JSON` exists, but its contents were not retrieved or treated as a new qualification. Existing public pages pass six Chromium observations; this is the old release only. See [current preflight](HANDOFF-CURRENT-WORK.md#october-17-new-session-access-preflight-from-7b4e506).
 
 Required destination access: `api.vercel.com`, the canonical clinic origin and intended deployment URL, `api.medplum.com`, `inference.do-ai.run`, and `api.deepgram.com` for live voice. `api.elevenlabs.io` is only needed if optional ElevenLabs output is tested. Use the supported environment configuration workflow; do not bypass the proxy.
 
@@ -36,7 +40,9 @@ The new W08 pack remains excluded. Proposed crisis-phrase changes remain review 
 
 ## Local release gates
 
-Use Node 22 and install both locked dependency sets as described in the handoff. Run sequentially and retain failure logs:
+Use Node 22 and install both locked dependency sets as described in the handoff. A fresh checkout also needs the original `historical-fixtures-v1` GitHub release archive. Verify its published checksum, validate safe relative regular-file paths and existing-content conflicts, then restore only missing files and verify all 109 manifest size/SHA-256 pins. Leave these historical evidence/private/staged modules uncommitted. The October 17 new session reproduced the earlier 2,266-test result after this restoration; missing fixtures must not be replaced with generated evidence. This archive does **not** provide the frozen q4f runtime or current private clinic/staff inputs.
+
+Run sequentially and retain failure logs:
 
 ```sh
 npm run foundation:build

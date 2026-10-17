@@ -1,12 +1,19 @@
 # Corvo Clinic cloud deployment boundary
 
-Status updated 2026-10-16: hosted stage8 at
+Status updated 2026-10-17: hosted stage8 at
 [corvo-clinic-demo.vercel.app](https://corvo-clinic-demo.vercel.app) uses native-5 and
 hands-free Deepgram voice (historical receipt: `cb0bfe8`, October 14). Its schema-2
 qualification expires **2026-10-21T01:48:12Z**. D-f `07da259` passed independent review and
 all six local hub gates on Node 22.23.3; schema-3 renewal is implemented, but owner
-calibration and live re-qualification have not run in this continuation. No live provider,
-Medplum write, elevation, policy change or deployment was performed by the cloud continuation.
+calibration and live re-qualification have not run in this continuation. The new session's
+runtime OAuth and `/auth/me` work as the expected non-admin client. Own membership read
+and AccessPolicy search return 403; server metadata reports `5.2.5-656286c`. Vercel and
+canonical public pages are reachable, but inference remains CONNECT-403 blocked by the
+allowlist typo `inference.do-ai-run` (required: `inference.do-ai.run`). The effective runtime
+policy has no Appointment rule; patient-scoped read access still needs verification before
+release. Private config, named staff credentials and the frozen q4f runtime remain absent.
+No live inference/audio call, Medplum FHIR write, elevation, policy change, secret rotation,
+qualification renewal or deployment was performed by this continuation.
 See [current task status](HANDOFF-CURRENT-WORK.md) and
 [dated deployment receipts](OPUS-HANDOFF.md#historical-deployment-receipts).
 This is a synthetic demonstration, not a clinical production deployment.
@@ -14,8 +21,8 @@ This is a synthetic demonstration, not a clinical production deployment.
 The October 10 [local evidence](evidence/CLOUD-CLINIC-LOCAL.json) and bootstrap procedures
 below are historical context. The existing hosted project has already been bootstrapped;
 routine renewal after the one-time D-h calibration does not require re-seeding or another
-setup elevation. Private files
-and credentials remain owner-local; commands below are operator instructions, not evidence
+setup elevation. Owner-private configuration
+and named staff credentials remain owner-local; commands below are operator instructions, not evidence
 that those commands have been executed in this continuation.
 
 ## Exact Medplum target and bootstrap operation
