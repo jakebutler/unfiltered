@@ -11,13 +11,13 @@ this file is the single entry point. It holds:
 Update the status tables **as soon as** a task lands: a commit hash plus a one-line result. Do
 not batch the updates. The next agent trusts this file over chat history.
 
-Last updated: 2026-10-17 (new-session release preflight; current verification and blockers below).
+Last updated: 2026-10-17 (corrected-hostname preflight from `213ebfe`; current results and blockers below).
 
 ## Workspace
 
 | Item | Value |
 |---|---|
-| Cloud continuation checkout | `/workspace/unfiltered`; latest continuation fetched remote `codex/unfiltered-foundation` at `7b4e506`; existing history preserved |
+| Cloud continuation checkout | `/workspace/unfiltered`; latest continuation fetched remote `codex/unfiltered-foundation` at `213ebfe`; existing history preserved |
 | Owner worktree (local work happens here) | `/Volumes/rexy/GitHub/codex-worktrees/unfiltered-foundation/unfiltered` |
 | Branch | `codex/unfiltered-foundation` (pushed to `origin`, which is public on GitHub) |
 | Open PRs (linked to the t3-code thread) | #7, #8 |
@@ -213,6 +213,92 @@ No clinical content, questionnaire digest, historical fixture or research allowa
   These, restored historical fixtures, private configuration and generated artifacts are not
   committed. Existing `S1-BROWSER.md` was preserved.
 
+
+## October 17 corrected-hostname preflight (from `213ebfe`)
+
+Fetched the latest remote `codex/unfiltered-foundation` before starting. Implementation,
+deployment and bounded synthetic testing remain authorized; the current build is still
+**not deployed** because the technical release prerequisites below remain unsatisfied.
+
+- **Inference access resolved:** status and startup policy both contain `inference.do-ai.run`.
+  The attached environment reports revision 2/current observations/running, with policy and
+  variable readiness still unknown. Actual proxied `/v1/models` returned 401 without a key
+  and **200 with the configured key**, listing 83 models. This supersedes the earlier typo
+  blocker; no proxy bypass, inference request or budget reset occurred. Deepgram project
+  metadata and optional ElevenLabs subscription metadata each returned 200; no audio ran.
+- **Exact targets rechecked:** Vercel project/team returned 200; production remains the older
+  READY `dpl_ECQpBeUZSvXipBuRErgyL1BMCMYR`. Medplum OAuth and `/auth/me` returned 200 as
+  the pinned ClientApplication/project with `admin:false`. Metadata remains `5.2.5-656286c`.
+  Own ProjectMembership read and AccessPolicy search returned 403. Effective policy has no
+  wildcard/administrative resource rule and no Appointment rule. A bounded native Patient
+  ID/metadata search returned 200; Appointment search scoped to that actual patient returned
+  **403**, confirming the required read permission is unavailable. Full staff role isolation
+  remains unrun, not inferred from runtime denials.
+- **Still absent:** `infra/cloud/.private/corvo-clinic/clinic-config.json`,
+  `infra/cloud/.private/clinic-cloud-q4f-20261010/clinic-users.json`, and
+  `.factory/private/native-questionnaire-integration/runtime-2026-10-10-q4f/`.
+  No matching supplied files were found in workspace shared/library locations. The real
+  `clinic-users.json` must be beside the selected config. No identities, configuration,
+  frozen artifacts or historical receipts were fabricated.
+- **Administrative blockers:** no authorized administrative account was supplied for runtime
+  secret rotation, coordinated cloud/private/Vercel updates, one-time calibration and verified
+  demotion, or provisioning patient-scoped read-only Appointment permission. The runtime
+  credential deliberately lacks this access. No elevation, policy or secret mutation was
+  attempted. Existing negative controls do not replace the documented calibration/demotion.
+- **Historical restoration:** verified published archive checksum, every safe regular-file
+  path, existing-content conflicts and all **109** manifest size/SHA-256 pins before restoring
+  missing files. All 109 original files were absent and restored unchanged; they remain
+  uncommitted. The archive still does not supply the private q4f runtime.
+- **Current gate failures preserved:** the unchanged default foundation run reported
+  **2,264 passed / 2 failed**. Grouped-session v2 capacity overflow took 1,339 ms and returned
+  unresolved rather than the expected capacity failure; grouped-session height-unknown took
+  1,170 ms and withheld its next prompt. Both fixtures use a 1,000 ms real-clock operation
+  deadline. A two-file single-worker diagnostic passed those cases but reported **44 passed /
+  3 failed** elsewhere: the P1 settlement/readback case exceeded Vitest’s 5,000 ms test
+  timeout (its operation deadline is 35,000 ms; failed stage unknown), provider dispatch
+  absent after the 200 ms timeout budget, and unresolved state in the direct-edit/CAS case.
+  This is timing sensitivity evidence, not a proven product defect or a passing gate. No test deadline, assertion, fixture
+  byte or exclusion was changed. Failure logs: `foundation-tests.log` and
+  `foundation-deadline-isolation.log` in the private evidence directory. Foundation build,
+  **345 clinic / 31 hosting** tests and all required typechecks passed.
+- **Complete foundation rerun:** all **149 files / 2,266 tests passed** with
+  `node_modules/.bin/vitest run -c vitest.foundation.config.mts --maxWorkers=1` on Node
+  **22.23.3** (285.42 seconds). The same original tests/assertions were included, without
+  deadline increases or fixture edits. An independent GPT-6.1 Sol xhigh source/log review
+  found the observed failed outcomes consistent with deadline guards and established no
+  product defect; timing sensitivity is supported, not a proven root cause or hosted latency
+  result. Keep both failed runs and the passing `foundation-serial.log`.
+- **Fresh offline Chromium:** all **24 cases passed**, at 1365×1000, 390×844 and 360×740,
+  using the documented locked `vite-node --script` harness and system Chromium. All seven
+  partial workflow deliveries/reloads, PHQ 6/3/3 in patient/staff views, identity-bound
+  single-use copy invitations, fail-closed safety actions/history/navigation guards and
+  lost-acknowledgement recovery passed. No page errors or horizontal overflow. Report:
+  `browser/report.json` in the private evidence directory. This is offline-provider proof.
+  All 109 historical size/hash pins were rechecked unchanged after the local gates.
+- **Hosted public rerun, older deployment only:** Chromium `/` and `/staff` each returned
+  200 at all three viewports (six observations), with staff login fields present, no page
+  errors and no horizontal overflow. Unauthenticated staff me/queue/safety and patient
+  session/receipt returned 401 (five checks). Private report: `hosted-public/report.json`.
+  This neither exercises authenticated Scripts A–E nor validates the candidate release.
+- **Fresh generated clinic package:** implementation source `213ebfe`, ignored output
+  `infra/cloud/.private/clinic-demo-20261017-corrected-access/`. All **28 local artifact
+  checks passed**, with zero outbound fetch attempts and a clean server exit. Private receipt:
+  `docs/implementation/evidence/hosting-package-bcd2bd42-e626-45ab-a2f4-f4b6067c2e50.json`;
+  artifact SHA-256: `cf993e2c5345f6ec79871e8f1a0e821e25b5ddb8c18777902e0ab60b1c9f6a4f`.
+  The package remains **unqualified and not deployed**; its synthetic smoke configuration
+  is not a deployable clinic qualification.
+- **Release boundary:** qualification expiry remains **2026-10-21T01:48:12Z** (October 20,
+  6:48:12 PM Pacific). Current-build authenticated seven-workflow hosted journeys, native
+  persistence/role isolation, real voice, hosted latency and physical-phone keyboard testing
+  remain blocked/unrun. No cloud FHIR write, qualification, secret rotation, deployment, email,
+  W08 enablement, clinical content/digest change or research allowance change occurred.
+- **Final independent GPT-6.1 Sol xhigh review:** no actionable findings in the five-document
+  release diff; verified the final serial/browser/package counts against actual private
+  reports and checked that failures, administrative blockers and unrun hosted checks remain
+  explicit. No application source or test changes were made in this session.
+- Private evidence for this session: `/workspace/scratch/clinic-release-20261017-corrected-access/`.
+  Keep its logs/screenshots, historical fixtures and generated packages uncommitted.
+
 ## Tracks and status
 
 Status values:
@@ -235,7 +321,7 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | D-e | Staff safety screen visual check | `dd26461` local Chromium verified: source/level/action history, closed rows leave active queue, delayed/lost response retries and navigation guard; live reviewer gate remains D-h |
 | D-f | Re-qualification without an admin grant (`/auth/me` observer) | done `07da259` (local implementation): projection/drift/freshness and complete sealing dependency pins verified; all six gates pass. Frozen private continuation smoke and live calibration remain owner steps. |
 | D-g | Mobile layout check | `dd26461` 390×844 and 360×740 browser layout checks pass; physical keyboard and real voice/device checks remain unrun |
-| D-h | Secret rotation + one-time calibration + re-qualify before 2026-10-21 | Authorized, blocked: private config/staff/frozen q4f runtime absent; administrative rotation/calibration outstanding; inference allowlist typo. Runtime OAuth works without admin. |
+| D-h | Secret rotation + one-time calibration + re-qualify before 2026-10-21 | Authorized, blocked: private config/staff/frozen q4f runtime absent; administrative rotation/calibration and patient-scoped Appointment permission outstanding. Corrected inference metadata and runtime OAuth pass. |
 | D-i | Docs: OPUS-HANDOFF, DEMO-TESTING-GUIDE, CLOUD-CLINIC | done `aae4937`: current fixes/offline proof separated from historical live receipts and owner renewal; all six gates pass. |
 | D-j | Free text at a guided choice repeats the choice | done `6dbc672`: explicit choice confirmation, retained source/question, PHQ buttons-only; all six gates pass. |
 | D-k | Crisis phrasing coverage **[digest]** | `28e4d46` concrete proposed phrase/scope matrix in CRISIS-PHRASE-REVIEW.md; no runtime change, still held for owner review and bundled re-qualification |

@@ -8,14 +8,14 @@ Use [DEMO-PATIENT-SCRIPTS.md](DEMO-PATIENT-SCRIPTS.md) for fictional answers and
 
 | Area | October 17, 2026 result |
 |---|---|
-| Foundation / clinic / hosting suites | New session: 2,266 / 345 / 31 passed on Node 22.23.3 after unchanged historical fixtures were restored; all required typechecks passed. Earlier failures retained in the linked handoff |
-| Desktop and 390/360 px browser journeys | New session: 24 offline Chromium cases passed; seven partial workflows, PHQ, invitations and safety actions |
-| Generated deployment package | New session: 28 local Node startup/assets/security checks passed; zero outbound fetch attempts; package remains unqualified and undeployed |
+| Foundation / clinic / hosting suites | Current session: 2,266 foundation passed with `--maxWorkers=1`; 345 clinic and 31 hosting passed; all required typechecks passed on Node 22.23.3. Default run (2,264 passed / 2 failed) and two-file diagnostic (44 passed / 3 failed) retained as timing sensitivity evidence in the handoff |
+| Desktop and 390/360 px browser journeys | Latest corrected-hostname session: 24 offline Chromium cases passed; seven partial workflows, reload, PHQ, copy-only invitations and safety actions |
+| Generated deployment package | Latest session: 28 local Node startup/assets/security checks passed; zero outbound fetch attempts and clean exit; fresh package remains unqualified and undeployed |
 | Hosted patient-to-staff journey, native role permissions | Not yet verified for this candidate |
 | Real microphone, adaptive provider behavior, hosted latency | Not yet verified for this candidate |
 | Physical phone keyboard / mobile browser behavior | Not yet verified; viewport emulation is not a physical-device check |
-| Deployment / qualification renewal / secret rotation | Not performed; inference allowlist typo, missing private inputs and administrative prerequisites remain |
-| Existing hosted public pages only | Six Chromium page observations passed across desktop/390/360 px; five unauthenticated API denials returned 401. This is the older release |
+| Deployment / qualification renewal / secret rotation | Not performed; corrected inference access passes authenticated metadata, but private inputs and administrative prerequisites remain |
+| Existing hosted public pages only | Latest session: six Chromium page observations passed across desktop/390/360 px; five unauthenticated API denials returned 401. This is the older release |
 
 ## Automated local browser run
 

@@ -16,11 +16,32 @@ No evidence in the handoff requires blanket rotation of DigitalOcean, Deepgram, 
 
 ## Access and private inputs
 
-The earlier October 17 instance blocked all six destinations. The new session fetched `7b4e506` and reports current/observed revision 2, running, observations current, but policy and variable readiness unknown. Its actual startup policy includes the added hosts with a typo: **`inference.do-ai-run` must be corrected to `inference.do-ai.run`** through environment configuration. Proxied requests now reach Vercel, the canonical clinic, Medplum, Deepgram and ElevenLabs; the correct inference hostname still returns CONNECT 403. Reachability is not authenticated provider validation.
+The latest October 17 session fetched remote `codex/unfiltered-foundation` at `213ebfe`.
+Current/observed environment revision 2 is running with observations current; policy and
+variable readiness still report unknown. Both the status report and startup policy now list
+**`inference.do-ai.run` correctly**. Actual proxied model-list requests returned 401 without
+a credential and **200 with the configured credential** (83 models); the earlier CONNECT
+403 blocker is resolved. No inference was generated and no account credit balance was established.
+Deepgram project metadata and optional ElevenLabs subscription metadata each returned 200;
+these are authenticated metadata checks, not real voice validation.
 
-Vercel project API authentication and Medplum runtime OAuth now work. The runtime is non-admin; its own ProjectMembership read and AccessPolicy search return 403. No administrative credential was supplied for rotation/calibration. The reported effective runtime policy has no Appointment rule: verify and, through the authorized administrator, provision only the required patient-scoped read permission before qualification. Do not infer complete least privilege from these two negative controls.
+The exact Vercel project/team API returned 200 and still identifies the older READY production
+`dpl_ECQpBeUZSvXipBuRErgyL1BMCMYR`. Medplum OAuth and `/auth/me` returned 200 as the pinned
+runtime client with `admin:false`; own ProjectMembership read and AccessPolicy search returned
+403. Server metadata remains `5.2.5-656286c`. The effective runtime policy has no wildcard or
+administrative resource rule and still has **no Appointment rule**. A bounded Patient ID/metadata
+search returned 200; an Appointment search scoped to that native patient returned **403**.
+An authorized administrator must provision and verify only the required patient-scoped read
+permission before qualification.
+These negative controls do not establish complete role isolation.
 
-The owner-private config, named staff users and frozen q4f runtime remain absent at the paths in the handoff. The qualifier reads `clinic-users.json` **beside the selected config**; securely restore the actual files in that layout. Do not generate replacement identities, cookie secrets, budget state or historical artifacts. Vercel production metadata confirms sensitive `CLINIC_CONFIG_JSON` exists, but its contents were not retrieved or treated as a new qualification. Existing public pages pass six Chromium observations; this is the old release only. See [current preflight](HANDOFF-CURRENT-WORK.md#october-17-new-session-access-preflight-from-7b4e506).
+The private config, named staff users and frozen q4f runtime remain absent at the documented
+paths, with no matching supplied files found in the workspace shared/library locations.
+The qualifier reads `clinic-users.json` **beside the selected config**; securely restore the
+actual files in that layout. No administrative account was supplied for coordinated rotation
+and calibration. Do not generate replacement identities, cookie secrets, budget state or
+historical artifacts. Existing public-page checks concern the old release only.
+See [latest preflight](HANDOFF-CURRENT-WORK.md#october-17-corrected-hostname-preflight-from-213ebfe).
 
 Required destination access: `api.vercel.com`, the canonical clinic origin and intended deployment URL, `api.medplum.com`, `inference.do-ai.run`, and `api.deepgram.com` for live voice. `api.elevenlabs.io` is only needed if optional ElevenLabs output is tested. Use the supported environment configuration workflow; do not bypass the proxy.
 
@@ -40,7 +61,7 @@ The new W08 pack remains excluded. Proposed crisis-phrase changes remain review 
 
 ## Local release gates
 
-Use Node 22 and install both locked dependency sets as described in the handoff. A fresh checkout also needs the original `historical-fixtures-v1` GitHub release archive. Verify its published checksum, validate safe relative regular-file paths and existing-content conflicts, then restore only missing files and verify all 109 manifest size/SHA-256 pins. Leave these historical evidence/private/staged modules uncommitted. The October 17 new session reproduced the earlier 2,266-test result after this restoration; missing fixtures must not be replaced with generated evidence. This archive does **not** provide the frozen q4f runtime or current private clinic/staff inputs.
+Use Node 22 and install both locked dependency sets as described in the handoff. A fresh checkout also needs the original `historical-fixtures-v1` GitHub release archive. Verify its published checksum, validate safe relative regular-file paths and existing-content conflicts, then restore only missing files and verify all 109 manifest size/SHA-256 pins. Leave these historical evidence/private/staged modules uncommitted. The earlier October 17 session reproduced the 2,266-test result after this restoration. The latest session restored the same pins but encountered real-clock test failures; its current results and preserved failures are in the handoff. Missing fixtures must not be replaced with generated evidence. This archive does **not** provide the frozen q4f runtime or current private clinic/staff inputs.
 
 Run sequentially and retain failure logs:
 
@@ -53,6 +74,11 @@ npx tsc -p tsconfig.foundation.json --noEmit
 npx tsc -p tsconfig.clinic.json --noEmit
 npm run hosting:typecheck
 ```
+
+The latest session passed all 2,266 foundation tests using the same suite with
+`--maxWorkers=1` after the default run and a two-file diagnostic hit real-clock timing
+failures. Preserve those failure logs; the passing serial run does not establish hosted
+latency. Use the documented Node 22 version and keep assertions/deadlines unchanged.
 
 Run the real browser suite in [DEMO-ACCEPTANCE.md](DEMO-ACCEPTANCE.md), then build into a **new** ignored output directory:
 

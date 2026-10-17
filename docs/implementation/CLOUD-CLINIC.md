@@ -8,9 +8,11 @@ all six local hub gates on Node 22.23.3; schema-3 renewal is implemented, but ow
 calibration and live re-qualification have not run in this continuation. The new session's
 runtime OAuth and `/auth/me` work as the expected non-admin client. Own membership read
 and AccessPolicy search return 403; server metadata reports `5.2.5-656286c`. Vercel and
-canonical public pages are reachable, but inference remains CONNECT-403 blocked by the
-allowlist typo `inference.do-ai-run` (required: `inference.do-ai.run`). The effective runtime
-policy has no Appointment rule; patient-scoped read access still needs verification before
+canonical public pages are reachable. The corrected `inference.do-ai.run` allowlist now
+passes authenticated model-list access (200, 83 models); Deepgram and optional ElevenLabs
+metadata authentication also pass. These are metadata checks only. The effective runtime
+policy has no Appointment rule; a native patient-scoped Appointment search returned 403.
+Required read permission must be provisioned by an authorized administrator and verified before
 release. Private config, named staff credentials and the frozen q4f runtime remain absent.
 No live inference/audio call, Medplum FHIR write, elevation, policy change, secret rotation,
 qualification renewal or deployment was performed by this continuation.
