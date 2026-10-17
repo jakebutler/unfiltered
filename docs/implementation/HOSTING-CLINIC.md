@@ -1,5 +1,20 @@
 # Clinic hosting package
 
+## October 17 packaging repair
+
+The current generator now emits a Node 22 startup `server.cjs` that constructs and
+listens on the clinic server, plus `clinic-bootstrap.cjs` for the bundled application.
+Guarded assets live in `site-assets/`; no platform-autoserved `public/` directory is
+emitted. Vercel configuration uses `framework: "node"`, `buildCommand: null`, and
+explicit runtime includes. The old generator exited without starting the server
+and used an asset directory inconsistent with the runtime.
+
+The local artifact smoke exercises `/`, `/staff`, `/join`, configuration, asset
+integrity, private-path denial and disabled speech upgrades, with outbound fetch
+denied. Its receipt binds the bootstrap, wrapper, asset manifest and deployment
+configuration digests. This is local package evidence only; live deployment and
+Medplum qualification are separate gates. See [the release runbook](DEMO-RELEASE-RUNBOOK.md).
+
 Status: packaging implementation has subsequent local verification recorded in `evidence/hosting-package-bb27592a-c9e2-4962-93e1-97b7880c08eb.json`. The later shared-ingress patch described in [INGRESS-CLINIC.md](INGRESS-CLINIC.md) is **static only, untested and not hosted-qualified**. This package has not been deployed. Current account/project setup is tracked by root separately; it does not establish runtime behavior or remaining hosting headroom.
 
 ## Packaging choice

@@ -19,7 +19,10 @@ const config = {
   storageQualification: { signature: 'a'.repeat(64), payload: { schema: 2, purpose: 'synthetic-clinic-conditional-resumable', deliveryContract: 'conditional-resumable-v1', mode: 'live', origin, expiresAt: new Date(Date.now() + 3600000).toISOString(), identity: { endpoint: 'https://api.medplum.com/fhir/R4/', projectId: '13eaac67-a2c3-4aa1-aa9e-590a083e5fef', clientId: '50db76bd-d099-4305-8ec3-7439ffc38ca1', membershipId: '6e565de2-837d-4618-9578-f6428fbb0be1' } } },
 };
 const id = `hosting-package-${randomUUID()}`, scratch = mkdtempSync(join(tmpdir(), 'corvo-package-smoke-'));
-const report = { id, at: new Date().toISOString(), state: 'running', serverSha256: createHash('sha256').update(readFileSync(join(directory, 'server.cjs'))).digest('hex'), providersEnabled: false, outboundFetchAttempts: 0, checks: [] };
+// Bind the receipt to application bytes, not just the constant startup wrapper.
+// The asset manifest binds public bytes, which are fetched and verified below.
+const artifactDigests = Object.fromEntries(['server.cjs', 'clinic-bootstrap.cjs', 'asset-manifest.json', 'package.json', 'vercel.json', '.vercelignore'].map(file => [file, createHash('sha256').update(readFileSync(join(directory, file))).digest('hex')]));
+const report = { id, at: new Date().toISOString(), state: 'running', serverSha256: artifactDigests['server.cjs'], artifactDigests, artifactSha256: createHash('sha256').update(JSON.stringify(artifactDigests)).digest('hex'), providersEnabled: false, outboundFetchAttempts: 0, checks: [] };
 const receipt = `docs/implementation/evidence/${id}.json`;
 writeFileSync(receipt, JSON.stringify(report, null, 2) + '\n', { flag: 'wx' });
 if (browserFixture) {
@@ -27,7 +30,7 @@ if (browserFixture) {
   const manifest = JSON.parse(readFileSync(join(directory, 'asset-manifest.json'), 'utf8'));
   for (const [source, target] of [['worklet-csp.html', 'index.html'], ['worklet-csp.js', 'worklet-csp.js']]) {
     const body = readFileSync(new URL(`./fixtures/${source}`, import.meta.url));
-    writeFileSync(join(directory, 'public', target), body);
+    writeFileSync(join(directory, 'site-assets', target), body);
     manifest.files = manifest.files.filter(item => item.path !== target);
     manifest.files.push({ path: target, digest: createHash('sha256').update(body).digest('hex') });
   }
@@ -55,7 +58,7 @@ try {
     child.once('exit', () => { clearTimeout(timeout); reject(new Error('artifact-start-failed')); });
   });
   const base = `http://127.0.0.1:${port}`;
-  const request = path => fetch(base + path, { signal: AbortSignal.timeout(5000) });
+  const request = path => fetch(base + path, { headers: { Host: 'clinic.example' }, signal: AbortSignal.timeout(5000) });
   if (browserFixture) {
     report.csp = (await request('/')).headers.get('content-security-policy');
     report.workletSha256 = createHash('sha256').update(await (await request('/clinic-capture.worklet.js')).bytes()).digest('hex');
@@ -65,7 +68,11 @@ try {
     check('no-outbound-fetch-attempt', report.outboundFetchAttempts === 0);
     report.state = 'browser-fixture-served-observation-separate';
   } else {
-  for (const path of ['/', '/staff']) {
+  const hosting = JSON.parse(readFileSync(join(directory, 'vercel.json'), 'utf8'));
+  check('node-framework', hosting.framework === 'node' && hosting.buildCommand === null);
+  check('runtime-includes', hosting.functions?.['server.cjs']?.includeFiles === '{clinic-bootstrap.cjs,site-assets/**,asset-manifest.json}');
+  check('bootstrap-present', readFileSync(join(directory, 'clinic-bootstrap.cjs')).length > 0);
+  for (const path of ['/', '/staff', '/join']) {
     const response = await request(path), html = await response.text();
     check(`page:${path}`, response.status === 200 && html.includes('Corvo Clinic') && html.includes('/assets/'));
     check(`csp:${path}`, response.headers.get('content-security-policy')?.includes("connect-src 'self' wss://clinic.example"));
@@ -74,7 +81,7 @@ try {
   check('guided-mode', settings.conversation?.mode === 'guided');
   check('voice-disabled', settings.voice?.available === false);
   check('unknown-api-json-404', (await request('/api/not-found')).status === 404);
-  for (const path of ['/.env.local', '/server.cjs', '/asset-manifest.json', '/package-receipt.json', '/package.json']) check(`private-path-denied:${path}`, (await request(path)).status === 404);
+  for (const path of ['/.env.local', '/server.cjs', '/clinic-bootstrap.cjs', '/asset-manifest.json', '/package-receipt.json', '/package.json']) check(`private-path-denied:${path}`, (await request(path)).status === 404);
   const manifest = JSON.parse(readFileSync(join(directory, 'asset-manifest.json'), 'utf8'));
   for (const asset of manifest.files) {
     const response = await request('/' + asset.path), bytes = new Uint8Array(await response.arrayBuffer());
