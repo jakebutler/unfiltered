@@ -97,6 +97,13 @@ The user requested browser validation, repeatable patient scripts, completion an
 and selected copy/paste invitations without email. Deployment/live testing is now requested;
 this does not remove the technical qualification prerequisites or the protected digest boundary.
 
+- **Demo and acceptance content: `28e4d46`.** [Five patient scripts](DEMO-PATIENT-SCRIPTS.md)
+  cover all seven existing workflows, with presenter setup, narration and repeat/reset steps.
+  [Full acceptance walkthrough](DEMO-ACCEPTANCE.md) includes runnable local Chromium checks,
+  manual hosted/voice/permissions/recovery/device checks and an explicit pass/unrun boundary.
+  [Release runbook](DEMO-RELEASE-RUNBOOK.md) identifies the exact Medplum secret and update
+  locations, network/private-input blockers and deployment steps. [D-k proposal](CRISIS-PHRASE-REVIEW.md)
+  contains reviewable wording and scope cases only; active clinical content/digest is unchanged.
 - **D-e/D-g local browser work: `dd26461`.** Real Chromium at 1365×1000,
   390×844 and 360×740 passed all seven partial workflow deliveries/reloads, PHQ
   patient/staff scores 6/3/3, copy-only identity-bound single-use invitations, and
@@ -156,7 +163,7 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | D-h | Secret rotation + one-time calibration + re-qualify before 2026-10-21 | blocked: needs local/owner; no live calls authorized for this continuation |
 | D-i | Docs: OPUS-HANDOFF, DEMO-TESTING-GUIDE, CLOUD-CLINIC | done `aae4937`: current fixes/offline proof separated from historical live receipts and owner renewal; all six gates pass. |
 | D-j | Free text at a guided choice repeats the choice | done `6dbc672`: explicit choice confirmation, retained source/question, PHQ buttons-only; all six gates pass. |
-| D-k | Crisis phrasing coverage **[digest]** | blocked: needs local/owner; hold for bundled re-qualification and owner phrase review |
+| D-k | Crisis phrasing coverage **[digest]** | `28e4d46` concrete proposed phrase/scope matrix in CRISIS-PHRASE-REVIEW.md; no runtime change, still held for owner review and bundled re-qualification |
 | D-l | PHQ-4 live/mock coverage | done `8067411`: offline native API and actual PatientApp/StaffApp smoke; all six gates pass. Live retest remains owner-only. |
 | D-m | **Pre-/post-visit native guided crash without context** (see bug table) | done `63a1483`: runtime-only active prompt routing; four original regressions pass with unchanged expectations; all six gates pass. |
 
