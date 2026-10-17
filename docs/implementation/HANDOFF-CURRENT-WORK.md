@@ -97,6 +97,16 @@ The user requested browser validation, repeatable patient scripts, completion an
 and selected copy/paste invitations without email. Deployment/live testing is now requested;
 this does not remove the technical qualification prerequisites or the protected digest boundary.
 
+- **D-e/D-g local browser work: `dd26461`.** Real Chromium at 1365×1000,
+  390×844 and 360×740 passed all seven partial workflow deliveries/reloads, PHQ
+  patient/staff scores 6/3/3, copy-only identity-bound single-use invitations, and
+  fail-closed safety review with history. A deliberately lost acknowledgement after
+  persistence retries the same action ID without duplication. Held responses block
+  navigation; closed reviews leave active work and remain in reviewed history.
+  Independent reviewer reproduced and reverified the desktop race. Final browser
+  report/screenshots: `/workspace/scratch/demo-release/browser-reviewed/`; **24 cases**,
+  no page errors or horizontal overflow. This is offline-provider evidence; physical
+  keyboards, real microphone, hosted AI/latency and native role authorization remain unrun.
 - **D-n packaging repair: `be2d1a9`.** The original generated server exited successfully
   without listening, and its `public/` output disagreed with the runtime's `site-assets/`.
   The packager now emits an explicit Node startup wrapper, bundled application, guarded
@@ -140,9 +150,9 @@ Detailed specs: [PLAN-INTAKE-DEMO-FINISH.md](PLAN-INTAKE-DEMO-FINISH.md)
 | D-b | "Hopeless" free-text turn handling | done `f68c94f`: safety precedes interpreter extraction; disclosures retain provenance without PHQ scoring, and a different authored probe preserves the unanswered gap; all six gates pass. |
 | D-c | Spoken weight/number confirmation | done `70437f8`: exact readback and reviewed confirmation required; raw provenance, precision/sign/units and estimate boundaries preserved; all six gates pass. |
 | D-d | Turn latency instrumentation + reductions | done `b6a1761`: submit-to-React-commit timing, safe metadata and fixture report verified; all six gates pass. Reductions remain measured follow-ups, not claimed. |
-| D-e | Staff safety screen visual check | not started |
+| D-e | Staff safety screen visual check | `dd26461` local Chromium verified: source/level/action history, closed rows leave active queue, delayed/lost response retries and navigation guard; live reviewer gate remains D-h |
 | D-f | Re-qualification without an admin grant (`/auth/me` observer) | done `07da259` (local implementation): projection/drift/freshness and complete sealing dependency pins verified; all six gates pass. Frozen private continuation smoke and live calibration remain owner steps. |
-| D-g | Mobile layout check | not started |
+| D-g | Mobile layout check | `dd26461` 390×844 and 360×740 browser layout checks pass; physical keyboard and real voice/device checks remain unrun |
 | D-h | Secret rotation + one-time calibration + re-qualify before 2026-10-21 | blocked: needs local/owner; no live calls authorized for this continuation |
 | D-i | Docs: OPUS-HANDOFF, DEMO-TESTING-GUIDE, CLOUD-CLINIC | done `aae4937`: current fixes/offline proof separated from historical live receipts and owner renewal; all six gates pass. |
 | D-j | Free text at a guided choice repeats the choice | done `6dbc672`: explicit choice confirmation, retained source/question, PHQ buttons-only; all six gates pass. |
@@ -705,3 +715,14 @@ verification and optional Resend configuration; prior readback for authority-bea
 (`research-node22.log`); and D-f's absent frozen q4f runtime module. Their exact commands,
 errors and limitations remain in the task records above. Earlier failed gate runs remain recorded with their diagnosis or correction and
 successful full reruns; no assertions, historical bytes or deadline settings were weakened.
+
+### October 17 browser verification history
+
+The previous scratch PHQ selector matched an invitation panel instead of the work queue;
+the committed runner selects actual queue buttons. Runner development also exposed
+identity re-confirmation on reload, a navigation-related Chromium response-body lifetime,
+and pagination-aware empty safety messages. These were test assumptions repaired to match
+existing product behavior, not acceptance exceptions. Intermediate failed logs remain in
+`/workspace/scratch/demo-release/`. The final committed runner passes all three widths
+against the accumulated disposable fixture, including the delayed/lost action responses.
+The historical archive checksum was reverified; historical bytes remain uncommitted.
