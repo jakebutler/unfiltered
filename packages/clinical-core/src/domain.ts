@@ -1,3 +1,4 @@
+import { scenarioIds as scenarios } from '../../clinic-content/src/workflows.js';
 import { z } from 'zod';
 import { representationReviewSchema, validateRepresentationBinding, validateRepresentationDigests, type TrustedRepresentationAuthority } from './representation-review.js';
 import { nativeQuestionnaireCaptureSchema, validateNativeQuestionnaireCaptureShape, validateNativeQuestionnaireCapture } from './questionnaire-response.js';
@@ -5,7 +6,7 @@ import { nativeQuestionnaireCaptureSchema, validateNativeQuestionnaireCaptureSha
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/);
 const reference = (type: string) => z.string().regex(new RegExp(`^${type}/[A-Za-z0-9.-]{1,64}$`));
 const text = z.string().min(1).max(12000);
-export const scenarios = ['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill'] as const;
+export { scenarioIds as scenarios } from '../../clinic-content/src/workflows.js';
 export const clinicalRoles = ['registered-dietitian', 'nurse-practitioner', 'physician-assistant', 'physician'] as const;
 export type StaffRole = typeof clinicalRoles[number] | 'administrative';
 const sourceSchema = z.object({
@@ -16,6 +17,7 @@ const sourceSchema = z.object({
   channel: z.enum(['text', 'confirmed-transcript', 'unreviewed-transcript']).optional(),
   corrects: id.optional(),
   displayedPromptId: z.string().min(1).max(400).optional(),
+  displayedPromptText: z.string().min(1).max(8000).optional(),
   recording: z.object({ reference: reference('DocumentReference'), startMs: z.number().int().nonnegative(), endMs: z.number().int().positive() }).strict().optional(),
 }).strict();
 const answerSchema = z.object({
@@ -24,6 +26,8 @@ const answerSchema = z.object({
   text: text.optional(), sourceIds: z.array(id).max(600),
 }).strict();
 const logisticsDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value);
+export const billingLogisticsFields: readonly string[] = ['issueType', 'serviceDate', 'requestedResolution'];
+export const schedulingLogisticsFields: readonly string[] = ['intent', 'visitCategory', 'preferredDay', 'preferredWindow', 'requestedDate', 'timezone'];
 /** Only approved structured logistics. Clinical text is never copied into this projection. */
 export const administrativeLogisticsSchema = z.object({
   kind: z.enum(['billing', 'scheduling', 'other']),
@@ -34,9 +38,7 @@ export const administrativeLogisticsSchema = z.object({
   preferredWindow: z.enum(['Morning', 'Afternoon', 'Evening', 'Flexible', 'Not sure']).optional(), requestedDate: logisticsDate.optional(),
   timezone: z.enum(['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu', 'Other', 'Not sure']).optional(),
 }).strict().superRefine((value, context) => {
-  const billing = ['issueType', 'serviceDate', 'requestedResolution'];
-  const scheduling = ['intent', 'visitCategory', 'preferredDay', 'preferredWindow', 'requestedDate', 'timezone'];
-  for (const field of Object.keys(value).filter(field => field !== 'kind')) if (!(value.kind === 'billing' ? billing : value.kind === 'scheduling' ? scheduling : []).includes(field)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'logistics-kind-mismatch', path: [field] });
+  for (const field of Object.keys(value).filter(field => field !== 'kind')) if (!(value.kind === 'billing' ? billingLogisticsFields : value.kind === 'scheduling' ? schedulingLogisticsFields : []).includes(field)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'logistics-kind-mismatch', path: [field] });
 });
 export type AdministrativeLogistics = z.infer<typeof administrativeLogisticsSchema>;
 export const submissionSchema = z.object({

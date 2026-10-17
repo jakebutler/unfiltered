@@ -1,0 +1,2575 @@
+{
+ "version": "SPC-0.4",
+ "note": "Synthetic patient answers, one per row, labelled by whether the answer alone is specific enough for the field (gap = needs a follow-up). Authored for the SP-0.1 gate; not patient data. Rows H-* and H2-* were holdouts labelled before first run: H-* scored 31/40 before the lexicon fixes it prompted; H2-* scored 45/47 on first run (2026-10-12). Rows R-* are independent-review reports (codex and cubic, 2026-10-13), added with the fixes they prompted; all scored as labelled after those fixes.",
+ "items": [
+  {
+   "id": "Q08-medicines.name-0",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "metformin",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-1",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "Lisinopril 20mg",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-2",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "atorvastatin",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-3",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "my Ozempic pen",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-4",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "Wegovy",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-5",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "Zepbound",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-6",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "vitamin D3",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-7",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "fish oil",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-8",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "a multivitamin",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-9",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "B12 shots",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-10",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "Tylenol when needed",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-11",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "levothyroxine 75 mcg",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-12",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "baby aspirin",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-13",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "melatonin gummies",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-14",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "sertraline",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-15",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "my inhaler, albuterol",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-16",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "phentermine",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-17",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "magnesium",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-18",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "turmeric",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-19",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "Synthroid",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.name-20",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "pills for my heart",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-21",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "a water pill",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-22",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "my blood pressure medicine",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-23",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "the shot",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-24",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "some vitamins",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-25",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "a sleeping pill",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-26",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "the little white one",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-27",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "cholesterol meds",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-28",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "something for my thyroid",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-29",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "my diabetes medication",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-30",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "insulin",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-31",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "an antidepressant",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-32",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "the weight loss injection",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-33",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "allergy pills",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-34",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "a pain pill",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-35",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "my inhaler",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-36",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "stuff for my stomach",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-37",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "birth control",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-38",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "a blood thinner",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.name-39",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "gummies",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.actualUse-0",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "every morning",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.actualUse-1",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "twice a day with meals",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.actualUse-2",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "once a week on Sundays",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.actualUse-3",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "as needed for pain",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.actualUse-4",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "most days",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.actualUse-5",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "at bedtime",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.actualUse-6",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "2 pills daily",
+   "expect": "specific"
+  },
+  {
+   "id": "Q08-medicines.actualUse-7",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "sometimes",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.actualUse-8",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "when I remember",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.actualUse-9",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "on and off",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.actualUse-10",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "not very often",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.actualUse-11",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "every so often",
+   "expect": "gap"
+  },
+  {
+   "id": "Q08-medicines.actualUse-12",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "it varies",
+   "expect": "gap"
+  },
+  {
+   "id": "Q06-reportedConditions.term-0",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "type 2 diabetes",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-1",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "high blood pressure",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-2",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "PCOS",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-3",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "sleep apnea",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-4",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "hypothyroidism",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-5",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "fatty liver",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-6",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "GERD",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-7",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "asthma",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-8",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "osteoarthritis in my knees",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-9",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "fibromyalgia",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-10",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "depression",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-11",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "gout",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-12",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "prediabetes",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-13",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "atrial fibrillation",
+   "expect": "specific"
+  },
+  {
+   "id": "Q06-reportedConditions.term-14",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "heart problems",
+   "expect": "gap"
+  },
+  {
+   "id": "Q06-reportedConditions.term-15",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "sugar issues",
+   "expect": "gap"
+  },
+  {
+   "id": "Q06-reportedConditions.term-16",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "thyroid",
+   "expect": "gap"
+  },
+  {
+   "id": "Q06-reportedConditions.term-17",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "stomach issues",
+   "expect": "gap"
+  },
+  {
+   "id": "Q06-reportedConditions.term-18",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "some kidney trouble",
+   "expect": "gap"
+  },
+  {
+   "id": "Q06-reportedConditions.term-19",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "blood stuff",
+   "expect": "gap"
+  },
+  {
+   "id": "Q06-reportedConditions.term-20",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "breathing problems",
+   "expect": "gap"
+  },
+  {
+   "id": "Q06-reportedConditions.term-21",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "hormone issues",
+   "expect": "gap"
+  },
+  {
+   "id": "Q06-reportedConditions.term-22",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "skin problems",
+   "expect": "gap"
+  },
+  {
+   "id": "Q06-reportedConditions.term-23",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "liver trouble",
+   "expect": "gap"
+  },
+  {
+   "id": "Q06-reportedConditions.term-24",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "joint issues",
+   "expect": "gap"
+  },
+  {
+   "id": "Q06-reportedConditions.term-25",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "back problems",
+   "expect": "gap"
+  },
+  {
+   "id": "Q10-familyHistory.condition-0",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "breast cancer",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.condition-1",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "a heart attack",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.condition-2",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "type 1 diabetes",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.condition-3",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "stroke",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.condition-4",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "high cholesterol",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.condition-5",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "Alzheimer's",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.condition-6",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "colon cancer",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.condition-7",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "obesity",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.condition-8",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "heart stuff",
+   "expect": "gap"
+  },
+  {
+   "id": "Q10-familyHistory.condition-9",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "sugar problems",
+   "expect": "gap"
+  },
+  {
+   "id": "Q10-familyHistory.condition-10",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "cancer stuff",
+   "expect": "gap"
+  },
+  {
+   "id": "Q10-familyHistory.condition-11",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "some kind of thyroid thing",
+   "expect": "gap"
+  },
+  {
+   "id": "Q10-familyHistory.condition-12",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "weight problems",
+   "expect": "gap"
+  },
+  {
+   "id": "Q10-familyHistory.condition-13",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "blood pressure issues",
+   "expect": "gap"
+  },
+  {
+   "id": "Q10-familyHistory.relationship-0",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "my mom",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.relationship-1",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "dad",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.relationship-2",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "my grandmother on my father's side",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.relationship-3",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "older brother",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.relationship-4",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "aunt",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.relationship-5",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "both parents",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.relationship-6",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "my cousin",
+   "expect": "specific"
+  },
+  {
+   "id": "Q10-familyHistory.relationship-7",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "someone in my family",
+   "expect": "gap"
+  },
+  {
+   "id": "Q10-familyHistory.relationship-8",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "a relative",
+   "expect": "gap"
+  },
+  {
+   "id": "Q10-familyHistory.relationship-9",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "family",
+   "expect": "gap"
+  },
+  {
+   "id": "Q10-familyHistory.relationship-10",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "people on my mom's side",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.event-0",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "gallbladder removal",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.event-1",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "knee replacement",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.event-2",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "C-section",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.event-3",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "appendectomy",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.event-4",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "gastric sleeve",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.event-5",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "hospital stay for pneumonia",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.event-6",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "a surgery",
+   "expect": "gap"
+  },
+  {
+   "id": "Q07-events.event-7",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "an operation",
+   "expect": "gap"
+  },
+  {
+   "id": "Q07-events.event-8",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "a procedure",
+   "expect": "gap"
+  },
+  {
+   "id": "Q07-events.event-9",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "some surgery on my stomach",
+   "expect": "gap"
+  },
+  {
+   "id": "Q07-events.event-10",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "a hospital stay",
+   "expect": "gap"
+  },
+  {
+   "id": "Q07-events.when-0",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "2019",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.when-1",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "last year",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.when-2",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "when I was 30",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.when-3",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "in March",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.when-4",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "five years ago",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.when-5",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "as a kid",
+   "expect": "specific"
+  },
+  {
+   "id": "Q07-events.when-6",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "a while ago",
+   "expect": "gap"
+  },
+  {
+   "id": "Q07-events.when-7",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "a long time ago",
+   "expect": "gap"
+  },
+  {
+   "id": "Q07-events.when-8",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "years ago",
+   "expect": "gap"
+  },
+  {
+   "id": "Q07-events.when-9",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "at some point",
+   "expect": "gap"
+  },
+  {
+   "id": "Q07-events.when-10",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "recently",
+   "expect": "gap"
+  },
+  {
+   "id": "Q09-reactions.substance-0",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "penicillin",
+   "expect": "specific"
+  },
+  {
+   "id": "Q09-reactions.substance-1",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "shellfish",
+   "expect": "specific"
+  },
+  {
+   "id": "Q09-reactions.substance-2",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "sulfa drugs",
+   "expect": "specific"
+  },
+  {
+   "id": "Q09-reactions.substance-3",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "peanuts",
+   "expect": "specific"
+  },
+  {
+   "id": "Q09-reactions.substance-4",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "latex",
+   "expect": "specific"
+  },
+  {
+   "id": "Q09-reactions.substance-5",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "ibuprofen",
+   "expect": "specific"
+  },
+  {
+   "id": "Q09-reactions.substance-6",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "codeine",
+   "expect": "specific"
+  },
+  {
+   "id": "Q09-reactions.substance-7",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "some antibiotic",
+   "expect": "gap"
+  },
+  {
+   "id": "Q09-reactions.substance-8",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "a pain medicine",
+   "expect": "gap"
+  },
+  {
+   "id": "Q09-reactions.substance-9",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "a medication",
+   "expect": "gap"
+  },
+  {
+   "id": "Q09-reactions.substance-10",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "something in the hospital",
+   "expect": "gap"
+  },
+  {
+   "id": "Q09-reactions.substance-11",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "some kind of drug",
+   "expect": "gap"
+  },
+  {
+   "id": "Q05-approaches.approach-0",
+   "topicId": "Q05",
+   "path": "approaches.approach",
+   "value": "Weight Watchers",
+   "expect": "specific"
+  },
+  {
+   "id": "Q05-approaches.approach-1",
+   "topicId": "Q05",
+   "path": "approaches.approach",
+   "value": "keto",
+   "expect": "specific"
+  },
+  {
+   "id": "Q05-approaches.approach-2",
+   "topicId": "Q05",
+   "path": "approaches.approach",
+   "value": "Noom",
+   "expect": "specific"
+  },
+  {
+   "id": "Q05-approaches.approach-3",
+   "topicId": "Q05",
+   "path": "approaches.approach",
+   "value": "phentermine",
+   "expect": "specific"
+  },
+  {
+   "id": "Q05-approaches.approach-4",
+   "topicId": "Q05",
+   "path": "approaches.approach",
+   "value": "intermittent fasting",
+   "expect": "specific"
+  },
+  {
+   "id": "Q05-approaches.approach-5",
+   "topicId": "Q05",
+   "path": "approaches.approach",
+   "value": "counting calories with MyFitnessPal",
+   "expect": "specific"
+  },
+  {
+   "id": "Q05-approaches.approach-6",
+   "topicId": "Q05",
+   "path": "approaches.approach",
+   "value": "Ozempic",
+   "expect": "specific"
+  },
+  {
+   "id": "Q05-approaches.approach-7",
+   "topicId": "Q05",
+   "path": "approaches.approach",
+   "value": "a diet",
+   "expect": "gap"
+  },
+  {
+   "id": "Q05-approaches.approach-8",
+   "topicId": "Q05",
+   "path": "approaches.approach",
+   "value": "some program",
+   "expect": "gap"
+  },
+  {
+   "id": "Q05-approaches.approach-9",
+   "topicId": "Q05",
+   "path": "approaches.approach",
+   "value": "an app",
+   "expect": "gap"
+  },
+  {
+   "id": "Q05-approaches.approach-10",
+   "topicId": "Q05",
+   "path": "approaches.approach",
+   "value": "a plan from my doctor",
+   "expect": "gap"
+  },
+  {
+   "id": "Q05-approaches.approach-11",
+   "topicId": "Q05",
+   "path": "approaches.approach",
+   "value": "pills",
+   "expect": "gap"
+  },
+  {
+   "id": "Q05-approaches.period-0",
+   "topicId": "Q05",
+   "path": "approaches.period",
+   "value": "2021 for about six months",
+   "expect": "specific"
+  },
+  {
+   "id": "Q05-approaches.period-1",
+   "topicId": "Q05",
+   "path": "approaches.period",
+   "value": "last summer",
+   "expect": "specific"
+  },
+  {
+   "id": "Q05-approaches.period-2",
+   "topicId": "Q05",
+   "path": "approaches.period",
+   "value": "in my twenties",
+   "expect": "specific"
+  },
+  {
+   "id": "Q05-approaches.period-3",
+   "topicId": "Q05",
+   "path": "approaches.period",
+   "value": "a while back",
+   "expect": "gap"
+  },
+  {
+   "id": "Q05-approaches.period-4",
+   "topicId": "Q05",
+   "path": "approaches.period",
+   "value": "years ago",
+   "expect": "gap"
+  },
+  {
+   "id": "Q05-approaches.period-5",
+   "topicId": "Q05",
+   "path": "approaches.period",
+   "value": "a few years ago",
+   "expect": "gap"
+  },
+  {
+   "id": "Q02-concern-0",
+   "topicId": "Q02",
+   "path": "concern",
+   "value": "knee pain when I walk",
+   "expect": "specific"
+  },
+  {
+   "id": "Q02-concern-1",
+   "topicId": "Q02",
+   "path": "concern",
+   "value": "heartburn after dinner",
+   "expect": "specific"
+  },
+  {
+   "id": "Q02-concern-2",
+   "topicId": "Q02",
+   "path": "concern",
+   "value": "swollen ankles",
+   "expect": "specific"
+  },
+  {
+   "id": "Q02-concern-3",
+   "topicId": "Q02",
+   "path": "concern",
+   "value": "short of breath on stairs",
+   "expect": "specific"
+  },
+  {
+   "id": "Q02-concern-4",
+   "topicId": "Q02",
+   "path": "concern",
+   "value": "headaches most mornings",
+   "expect": "specific"
+  },
+  {
+   "id": "Q02-concern-5",
+   "topicId": "Q02",
+   "path": "concern",
+   "value": "stomach issues",
+   "expect": "gap"
+  },
+  {
+   "id": "Q02-concern-6",
+   "topicId": "Q02",
+   "path": "concern",
+   "value": "not feeling great",
+   "expect": "gap"
+  },
+  {
+   "id": "Q02-concern-7",
+   "topicId": "Q02",
+   "path": "concern",
+   "value": "something weird",
+   "expect": "gap"
+  },
+  {
+   "id": "Q02-concern-8",
+   "topicId": "Q02",
+   "path": "concern",
+   "value": "just off",
+   "expect": "gap"
+  },
+  {
+   "id": "Q02-onset-0",
+   "topicId": "Q02",
+   "path": "onset",
+   "value": "last month",
+   "expect": "specific"
+  },
+  {
+   "id": "Q02-onset-1",
+   "topicId": "Q02",
+   "path": "onset",
+   "value": "two weeks ago",
+   "expect": "specific"
+  },
+  {
+   "id": "Q02-onset-2",
+   "topicId": "Q02",
+   "path": "onset",
+   "value": "since January",
+   "expect": "specific"
+  },
+  {
+   "id": "Q02-onset-3",
+   "topicId": "Q02",
+   "path": "onset",
+   "value": "when I started the new job",
+   "expect": "specific"
+  },
+  {
+   "id": "Q02-onset-4",
+   "topicId": "Q02",
+   "path": "onset",
+   "value": "a while ago",
+   "expect": "gap"
+  },
+  {
+   "id": "Q02-onset-5",
+   "topicId": "Q02",
+   "path": "onset",
+   "value": "recently",
+   "expect": "gap"
+  },
+  {
+   "id": "Q02-onset-6",
+   "topicId": "Q02",
+   "path": "onset",
+   "value": "for some time",
+   "expect": "specific"
+  },
+  {
+   "id": "Q03-majorChanges.timing-0",
+   "topicId": "Q03",
+   "path": "majorChanges.timing",
+   "value": "after my second pregnancy",
+   "expect": "specific"
+  },
+  {
+   "id": "Q03-majorChanges.timing-1",
+   "topicId": "Q03",
+   "path": "majorChanges.timing",
+   "value": "in college",
+   "expect": "specific"
+  },
+  {
+   "id": "Q03-majorChanges.timing-2",
+   "topicId": "Q03",
+   "path": "majorChanges.timing",
+   "value": "2015",
+   "expect": "specific"
+  },
+  {
+   "id": "Q03-majorChanges.timing-3",
+   "topicId": "Q03",
+   "path": "majorChanges.timing",
+   "value": "when I was 40",
+   "expect": "specific"
+  },
+  {
+   "id": "Q03-majorChanges.timing-4",
+   "topicId": "Q03",
+   "path": "majorChanges.timing",
+   "value": "years ago",
+   "expect": "gap"
+  },
+  {
+   "id": "Q03-majorChanges.timing-5",
+   "topicId": "Q03",
+   "path": "majorChanges.timing",
+   "value": "at some point",
+   "expect": "gap"
+  },
+  {
+   "id": "Q03-majorChanges.timing-6",
+   "topicId": "Q03",
+   "path": "majorChanges.timing",
+   "value": "a while back",
+   "expect": "gap"
+  },
+  {
+   "id": "Q04-lastMeasuredWeight.measuredWhen-0",
+   "topicId": "Q04",
+   "path": "lastMeasuredWeight.measuredWhen",
+   "value": "this morning",
+   "expect": "specific"
+  },
+  {
+   "id": "Q04-lastMeasuredWeight.measuredWhen-1",
+   "topicId": "Q04",
+   "path": "lastMeasuredWeight.measuredWhen",
+   "value": "yesterday",
+   "expect": "specific"
+  },
+  {
+   "id": "Q04-lastMeasuredWeight.measuredWhen-2",
+   "topicId": "Q04",
+   "path": "lastMeasuredWeight.measuredWhen",
+   "value": "last week at the doctor",
+   "expect": "specific"
+  },
+  {
+   "id": "Q04-lastMeasuredWeight.measuredWhen-3",
+   "topicId": "Q04",
+   "path": "lastMeasuredWeight.measuredWhen",
+   "value": "in June",
+   "expect": "specific"
+  },
+  {
+   "id": "Q04-lastMeasuredWeight.measuredWhen-4",
+   "topicId": "Q04",
+   "path": "lastMeasuredWeight.measuredWhen",
+   "value": "a while back",
+   "expect": "gap"
+  },
+  {
+   "id": "Q04-lastMeasuredWeight.measuredWhen-5",
+   "topicId": "Q04",
+   "path": "lastMeasuredWeight.measuredWhen",
+   "value": "recently",
+   "expect": "gap"
+  },
+  {
+   "id": "Q04-lastMeasuredWeight.measuredWhen-6",
+   "topicId": "Q04",
+   "path": "lastMeasuredWeight.measuredWhen",
+   "value": "a few years ago",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.foods-0",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "oatmeal with berries",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.foods-1",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "a turkey sandwich",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.foods-2",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "chicken and rice",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.foods-3",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "two eggs and toast",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.foods-4",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "pizza",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.foods-5",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "a salad",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.foods-6",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "snacks",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.foods-7",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "some food",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.foods-8",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "junk",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.foods-9",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "whatever was around",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.foods-10",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "a meal",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.drinks-0",
+   "topicId": "Q11",
+   "path": "occasions.drinks",
+   "value": "black coffee",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.drinks-1",
+   "topicId": "Q11",
+   "path": "occasions.drinks",
+   "value": "a can of Coke",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.drinks-2",
+   "topicId": "Q11",
+   "path": "occasions.drinks",
+   "value": "orange juice",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.drinks-3",
+   "topicId": "Q11",
+   "path": "occasions.drinks",
+   "value": "water",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.drinks-4",
+   "topicId": "Q11",
+   "path": "occasions.drinks",
+   "value": "two beers",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.drinks-5",
+   "topicId": "Q11",
+   "path": "occasions.drinks",
+   "value": "a drink",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.drinks-6",
+   "topicId": "Q11",
+   "path": "occasions.drinks",
+   "value": "drinks",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.drinks-7",
+   "topicId": "Q11",
+   "path": "occasions.drinks",
+   "value": "something to drink",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.foodAmounts-0",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "a small bowl",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.foodAmounts-1",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "two slices",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.foodAmounts-2",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "a handful",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.foodAmounts-3",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "half a plate",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.foodAmounts-4",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "one sandwich",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.foodAmounts-5",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "a lot",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.foodAmounts-6",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "some",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.foodAmounts-7",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "too much",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.foodAmounts-8",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "a bunch",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.drinkAmounts-0",
+   "topicId": "Q11",
+   "path": "occasions.drinkAmounts",
+   "value": "a large cup",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.drinkAmounts-1",
+   "topicId": "Q11",
+   "path": "occasions.drinkAmounts",
+   "value": "two cans",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.drinkAmounts-2",
+   "topicId": "Q11",
+   "path": "occasions.drinkAmounts",
+   "value": "16 oz",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.drinkAmounts-3",
+   "topicId": "Q11",
+   "path": "occasions.drinkAmounts",
+   "value": "one glass",
+   "expect": "specific"
+  },
+  {
+   "id": "Q11-occasions.drinkAmounts-4",
+   "topicId": "Q11",
+   "path": "occasions.drinkAmounts",
+   "value": "a lot",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.drinkAmounts-5",
+   "topicId": "Q11",
+   "path": "occasions.drinkAmounts",
+   "value": "some",
+   "expect": "gap"
+  },
+  {
+   "id": "Q11-occasions.drinkAmounts-6",
+   "topicId": "Q11",
+   "path": "occasions.drinkAmounts",
+   "value": "plenty",
+   "expect": "gap"
+  },
+  {
+   "id": "Q14-frequency-0",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "3 days a week for 30 minutes",
+   "expect": "specific"
+  },
+  {
+   "id": "Q14-frequency-1",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "every day",
+   "expect": "specific"
+  },
+  {
+   "id": "Q14-frequency-2",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "most days",
+   "expect": "specific"
+  },
+  {
+   "id": "Q14-frequency-3",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "twice a week",
+   "expect": "specific"
+  },
+  {
+   "id": "Q14-frequency-4",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "weekends only",
+   "expect": "specific"
+  },
+  {
+   "id": "Q14-frequency-5",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "sometimes",
+   "expect": "gap"
+  },
+  {
+   "id": "Q14-frequency-6",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "when I can",
+   "expect": "gap"
+  },
+  {
+   "id": "Q14-frequency-7",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "not very often",
+   "expect": "gap"
+  },
+  {
+   "id": "Q14-frequency-8",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "occasionally",
+   "expect": "gap"
+  },
+  {
+   "id": "Q15-quality-0",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "I wake up around 3 am and can't get back to sleep",
+   "expect": "specific"
+  },
+  {
+   "id": "Q15-quality-1",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "trouble falling asleep",
+   "expect": "specific"
+  },
+  {
+   "id": "Q15-quality-2",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "I feel tired every morning",
+   "expect": "specific"
+  },
+  {
+   "id": "Q15-quality-3",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "I snore and wake up a lot",
+   "expect": "specific"
+  },
+  {
+   "id": "Q15-quality-4",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "not great",
+   "expect": "gap"
+  },
+  {
+   "id": "Q15-quality-5",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "bad",
+   "expect": "gap"
+  },
+  {
+   "id": "Q15-quality-6",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "I don't sleep well",
+   "expect": "gap"
+  },
+  {
+   "id": "Q15-quality-7",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "poorly",
+   "expect": "gap"
+  },
+  {
+   "id": "Q15-quality-8",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "meh",
+   "expect": "gap"
+  },
+  {
+   "id": "Q17-substances.frequencyAmount-0",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "two glasses of wine on weekends",
+   "expect": "specific"
+  },
+  {
+   "id": "Q17-substances.frequencyAmount-1",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "half a pack a day",
+   "expect": "specific"
+  },
+  {
+   "id": "Q17-substances.frequencyAmount-2",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "once a month",
+   "expect": "specific"
+  },
+  {
+   "id": "Q17-substances.frequencyAmount-3",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "every night, one or two beers",
+   "expect": "specific"
+  },
+  {
+   "id": "Q17-substances.frequencyAmount-4",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "socially",
+   "expect": "gap"
+  },
+  {
+   "id": "Q17-substances.frequencyAmount-5",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "sometimes",
+   "expect": "gap"
+  },
+  {
+   "id": "Q17-substances.frequencyAmount-6",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "now and then",
+   "expect": "gap"
+  },
+  {
+   "id": "Q17-substances.frequencyAmount-7",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "a little",
+   "expect": "gap"
+  },
+  {
+   "id": "Q17-substances.frequencyAmount-8",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "occasionally",
+   "expect": "gap"
+  },
+  {
+   "id": "Q19-clinicians.owner-0",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "Dr. Patel",
+   "expect": "specific"
+  },
+  {
+   "id": "Q19-clinicians.owner-1",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "Northside Family Medicine",
+   "expect": "specific"
+  },
+  {
+   "id": "Q19-clinicians.owner-2",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "my endocrinologist Dr. Kim",
+   "expect": "specific"
+  },
+  {
+   "id": "Q19-clinicians.owner-3",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "Kaiser",
+   "expect": "specific"
+  },
+  {
+   "id": "Q19-clinicians.owner-4",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "my doctor",
+   "expect": "gap"
+  },
+  {
+   "id": "Q19-clinicians.owner-5",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "a specialist",
+   "expect": "gap"
+  },
+  {
+   "id": "Q19-clinicians.owner-6",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "my heart doctor",
+   "expect": "gap"
+  },
+  {
+   "id": "Q19-clinicians.owner-7",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "the clinic",
+   "expect": "gap"
+  },
+  {
+   "id": "Q19-clinicians.owner-8",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "my PCP",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q08-medicines.name-0",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "Jardiance",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q08-medicines.name-1",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "my thyroid medicine",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q08-medicines.name-2",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "losartan 50",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q08-medicines.name-3",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "a probiotic",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q08-medicines.name-4",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "the patch",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q08-medicines.name-5",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "an acid reducer",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q08-medicines.name-6",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "omeprazole",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q08-medicines.name-7",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "my nerve pills",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q06-reportedConditions.term-0",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "celiac disease",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q06-reportedConditions.term-1",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "lung problems",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q06-reportedConditions.term-2",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "anemia",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q06-reportedConditions.term-3",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "memory issues",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q06-reportedConditions.term-4",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "a tumor",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q06-reportedConditions.term-5",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "kidney stones",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q10-familyHistory.condition-0",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "dementia",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q10-familyHistory.condition-1",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "liver disease",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q10-familyHistory.condition-2",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "heart issues",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q10-familyHistory.condition-3",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "diabetes",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q10-familyHistory.condition-4",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "mental health stuff",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q07-events.event-0",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "hip replacement",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q07-events.event-1",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "a minor procedure",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q07-events.event-2",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "tonsils out",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q07-events.event-3",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "an ER visit",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q09-reactions.substance-0",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "amoxicillin",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q09-reactions.substance-1",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "eggs",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q09-reactions.substance-2",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "some cream",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q11-occasions.foods-0",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "cereal with milk",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q11-occasions.foods-1",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "some leftovers",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q11-occasions.foods-2",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "a burger and fries",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q17-substances.frequencyAmount-0",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "a few drinks on Fridays",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q17-substances.frequencyAmount-1",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "once in a while",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q17-substances.frequencyAmount-2",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "a pack a week",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q14-frequency-0",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "a 20 minute walk every evening",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q14-frequency-1",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "whenever I feel like it",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q19-clinicians.owner-0",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "Dr. Alvarez at Mercy",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q19-clinicians.owner-1",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "a nurse practitioner",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q07-events.when-0",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "back in 2010",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q07-events.when-1",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "ages ago",
+   "expect": "gap"
+  },
+  {
+   "id": "H-Q15-quality-0",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "I wake up every 2 hours",
+   "expect": "specific"
+  },
+  {
+   "id": "H-Q15-quality-1",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "so-so",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q08-medicines.name-0",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "Trulicity",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q08-medicines.name-1",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "Mounjaro 5 mg",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q08-medicines.name-2",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "my cholesterol pill",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q08-medicines.name-3",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "a stool softener",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q08-medicines.name-4",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "Zyrtec",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q08-medicines.name-5",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "my anxiety meds",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q08-medicines.name-6",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "prednisone",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q08-medicines.name-7",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "a nasal spray",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q08-medicines.name-8",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "an iron supplement",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q08-medicines.name-9",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "my migraine shot",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q06-reportedConditions.term-0",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "IBS",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q06-reportedConditions.term-1",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "hypertension",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q06-reportedConditions.term-2",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "nerve issues",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q06-reportedConditions.term-3",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "ovarian cysts",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q06-reportedConditions.term-4",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "bladder problems",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q06-reportedConditions.term-5",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "long covid",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q06-reportedConditions.term-6",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "a heart condition",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q10-familyHistory.condition-0",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "prostate cancer",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q10-familyHistory.condition-1",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "high blood pressure",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q10-familyHistory.condition-2",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "some kind of cancer",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q10-familyHistory.condition-3",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "a blood disorder",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q10-familyHistory.condition-4",
+   "topicId": "Q10",
+   "path": "familyHistory.condition",
+   "value": "bipolar disorder",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q10-familyHistory.relationship-0",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "my sister",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q10-familyHistory.relationship-1",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "people in my family",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q07-events.event-0",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "gastric bypass",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q07-events.event-1",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "a small surgery",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q07-events.event-2",
+   "topicId": "Q07",
+   "path": "events.event",
+   "value": "a stay for kidney stones",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q07-events.when-0",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "in 2022",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q07-events.when-1",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "a couple years back",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q07-events.when-2",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "when I was a teenager",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q09-reactions.substance-0",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "aspirin",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q09-reactions.substance-1",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "a shot I got",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q09-reactions.substance-2",
+   "topicId": "Q09",
+   "path": "reactions.substance",
+   "value": "strawberries",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q11-occasions.foods-0",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "a bagel with cream cheese",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q11-occasions.foods-1",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "something quick",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q11-occasions.foods-2",
+   "topicId": "Q11",
+   "path": "occasions.foods",
+   "value": "fast food",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q11-occasions.drinkAmounts-0",
+   "topicId": "Q11",
+   "path": "occasions.drinkAmounts",
+   "value": "a big glass",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q11-occasions.drinkAmounts-1",
+   "topicId": "Q11",
+   "path": "occasions.drinkAmounts",
+   "value": "quite a bit",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q14-frequency-0",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "every other day for an hour",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q14-frequency-1",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "here and there",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q17-substances.frequencyAmount-0",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "a joint on weekends",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q17-substances.frequencyAmount-1",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "every once in a while",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q19-clinicians.owner-0",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "my cardiologist",
+   "expect": "gap"
+  },
+  {
+   "id": "H2-Q19-clinicians.owner-1",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "Dr. Nguyen",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q19-clinicians.owner-2",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "Valley Health",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q15-quality-0",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "I fall asleep fine but wake at 4",
+   "expect": "specific"
+  },
+  {
+   "id": "H2-Q15-quality-1",
+   "topicId": "Q15",
+   "path": "quality",
+   "value": "pretty bad lately",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q11-occasions.foodAmounts-0",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "a small amount",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q11-occasions.foodAmounts-1",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "not a whole lot",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q11-occasions.foodAmounts-2",
+   "topicId": "Q11",
+   "path": "occasions.foodAmounts",
+   "value": "a small bowl",
+   "expect": "specific"
+  },
+  {
+   "id": "R-Q08-medicines.actualUse-0",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "whenever",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q08-medicines.actualUse-1",
+   "topicId": "Q08",
+   "path": "medicines.actualUse",
+   "value": "whenever I need it for pain",
+   "expect": "specific"
+  },
+  {
+   "id": "R-Q17-substances.frequencyAmount-0",
+   "topicId": "Q17",
+   "path": "substances.frequencyAmount",
+   "value": "2 drinks socially",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q14-frequency-0",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "2 pills sometimes",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q07-events.when-0",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "lately",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q07-events.when-1",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "a while ago, before my 2 surgeries",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q04-lastMeasuredWeight.measuredWhen-0",
+   "topicId": "Q04",
+   "path": "lastMeasuredWeight.measuredWhen",
+   "value": "lost 20 pounds",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q07-events.when-2",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "after my son was born",
+   "expect": "specific"
+  },
+  {
+   "id": "R-Q19-clinicians.owner-0",
+   "topicId": "Q19",
+   "path": "clinicians.owner",
+   "value": "my doctor is great",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q06-reportedConditions.term-0",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "my heart is bad",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q06-reportedConditions.term-1",
+   "topicId": "Q06",
+   "path": "reportedConditions.term",
+   "value": "My doctors said it was something with my heart",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q08-medicines.name-0",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "The blue one I got at CVS",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q08-medicines.name-1",
+   "topicId": "Q08",
+   "path": "medicines.name",
+   "value": "lisinopril from Walgreens",
+   "expect": "specific"
+  },
+  {
+   "id": "R-Q14-frequency-1",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "two pills",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q14-frequency-2",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "10 minutes",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q14-frequency-3",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "2x",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q14-frequency-4",
+   "topicId": "Q14",
+   "path": "frequency",
+   "value": "2x a day",
+   "expect": "specific"
+  },
+  {
+   "id": "R-Q07-events.when-3",
+   "topicId": "Q07",
+   "path": "events.when",
+   "value": "after",
+   "expect": "gap"
+  },
+  {
+   "id": "R-Q02-onset-0",
+   "topicId": "Q02",
+   "path": "onset",
+   "value": "No current difficulty",
+   "expect": "specific"
+  },
+  {
+   "id": "R-Q10-familyHistory.relationship-0",
+   "topicId": "Q10",
+   "path": "familyHistory.relationship",
+   "value": "my mother",
+   "expect": "specific"
+  }
+ ]
+}

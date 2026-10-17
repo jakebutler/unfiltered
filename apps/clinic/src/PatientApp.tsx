@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
 import { ArrowLeft, ArrowRight, Check, CheckCheck, CircleHelp, ClipboardList, Clock3, LogOut, RefreshCw, Send, X } from 'lucide-react';
 import type { AdaptiveTurnInput, AdaptiveTurnResult, ClinicConfig, ClinicSessionView, DeliveryView, PromptView, ReviewPreview, ScenarioId, SourceChannel, SourceTurn, TopicView, TurnInput } from '../../../packages/clinic-contract/src/index';
 import { conversationSpeech } from '../../../packages/clinic-contract/src/index';
@@ -8,14 +8,17 @@ import { useAdaptiveConversation } from './useAdaptiveConversation';
 import { isPendingInterpretation, metadataOnlyStreamAdvance } from './adaptive-state';
 import { AdaptiveReadback, AdaptiveStatus, AssistantActivity, ChatTranscript, UnresolvedSources } from './AdaptiveViews';
 import { useSpeechCapture, type CaptureMediaSource } from './useSpeechCapture';
+import { sessionKeyterms } from '../../../packages/speech/src/keyterms';
 import { useSpeechPlayback } from './useSpeechPlayback';
 import { VoiceControls } from './VoiceControls';
 import { useVoiceConversation } from './useVoiceConversation';
 import { promptAllowsFreeText } from './prompt-input';
 import type { VoiceChoiceCandidate } from './choice-voice';
 import { choiceConfirmationSpeech } from '../../../packages/clinic-contract/src/choice-voice';
+import { editGuidedChoiceDraft, isGuidedChoicePrompt, isScreeningChoicePrompt, typedGuidedChoice } from '../../../packages/clinic-contract/src/guided-choice';
 import type { CaptureScope } from './voice-capture';
 import { SafetyReviewQueue } from './safety-review-client';
+import { RenderedTurnTracker, type TurnPresentation } from './turn-timing';
 
 export function PatientApp({ captureMediaSource }: { captureMediaSource?: CaptureMediaSource } = {}) {
   const [config, setConfig] = useState<ClinicConfig>();
@@ -26,6 +29,9 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     sessionRef.current = value; setSessionState(value);
   }, []);
   const getSession = useCallback(() => sessionRef.current, []);
+  const turnTiming = useRef(new RenderedTurnTracker());
+  const timingForOperation = useCallback((id: string) => turnTiming.current.forOperation(id), []);
+  useEffect(() => () => turnTiming.current.cancel(), []);
   const [preview, setPreview] = useState<ReviewPreview>();
   const [booting, setBooting] = useState(true);
   const [busy, setBusy] = useState('');
@@ -37,6 +43,9 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
   const [identityRejected, setIdentityRejected] = useState(false);
   const [text, setText] = useState('');
   const [answerChannel, setAnswerChannel] = useState<SourceChannel>('text');
+  const [selectedControl, setSelectedControl] = useState<string>();
+  const [typedChoice, setTypedChoice] = useState<{ candidate: VoiceChoiceCandidate; sessionId: string; revision: number; promptId: string }>();
+  const [retainedChoiceSpeech, setRetainedChoiceSpeech] = useState<string>();
   const answerRequestId = useRef(crypto.randomUUID());
   const textRef = useRef(text); textRef.current = text;
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -54,29 +63,38 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
   const outlineTrigger = useRef<HTMLButtonElement>(null);
   const outlineRef = useRef<HTMLElement>(null);
   const activePrompt = heldPrompt ?? session?.currentPrompt;
+  // Authored IDs can be reused for scoped follow-ups. Keep an opaque identity for
+  // the actual displayed presentation; patient wording never enters timing metadata.
+  const promptPresentation = useMemo(() => Symbol(), [activePrompt?.id, activePrompt?.text, activePrompt?.purpose, JSON.stringify(activePrompt?.choices), JSON.stringify(activePrompt?.fields)]);
   const naturalAnswer = session?.adaptive?.mode === 'adaptive' && activePrompt?.mode !== 'guided';
-  const exactChoicePrompt = activePrompt?.choices?.length && !activePrompt.fields?.length && !promptAllowsFreeText(activePrompt, false) ? activePrompt : undefined;
-  const canCaptureAnswer = Boolean(exactChoicePrompt) || Boolean(activePrompt && promptAllowsFreeText(activePrompt, naturalAnswer) && !activePrompt.choices?.some(choice => choice.value === text) && !/^Q16:MH0[1-4](?:$|:)/.test(activePrompt.id));
+  const exactChoicePrompt = activePrompt && isGuidedChoicePrompt(activePrompt) && !isScreeningChoicePrompt(activePrompt) ? activePrompt : undefined;
+  const canCaptureAnswer = Boolean(exactChoicePrompt) || Boolean(activePrompt && promptAllowsFreeText(activePrompt, naturalAnswer) && !activePrompt.choices?.some(choice => choice.value === text) && !isScreeningChoicePrompt(activePrompt));
+  // Hands-free falls back to push-to-talk for the rest of the visit if its token or socket fails.
+  const [directFallback, setDirectFallback] = useState(false);
+  const voiceInput = config?.voice.input === 'direct' && directFallback ? 'upload' : config?.voice.input;
+  const directVoice = voiceInput === 'direct';
   const voiceScopeKey = `${verified}:${session?.id}:${session?.revision}:${activePrompt?.id}:${Boolean(preview)}:${Boolean(leftAt)}:${confirmationUnknown}`;
   const playback = useSpeechPlayback(`${voiceScopeKey}:${session?.adaptive?.reply?.id}`);
   const currentCaptureScope = (): CaptureScope | undefined => {
     const current = sessionRef.current;
-    if (!verified || !current?.currentPrompt || !canCaptureAnswer || heldPrompt || preview || leftAt || pendingTurn || pendingAdaptive || config?.voice.available !== true) return;
+    if (!verified || !current?.currentPrompt || !canCaptureAnswer || retainedChoiceSpeech || heldPrompt || preview || leftAt || pendingTurn || pendingAdaptive || config?.voice.available !== true) return;
     return { sessionId: current.id, promptId: current.currentPrompt.id, expectedRevision: current.revision, requestId: answerRequestId.current };
   };
   const voice = useVoiceConversation({
     context: () => ({
-      scope: currentCaptureScope(), eligible: Boolean(verified && (exactChoicePrompt || naturalAnswer && session?.adaptive?.available) && canCaptureAnswer && !preview && !leftAt && !confirmationUnknown && session?.phase === 'conversation'),
-      blocked: Boolean(busy || stale || heldPrompt || pendingTurn || pendingAdaptive || adaptive.answerBlocked),
-      choicePrompt: exactChoicePrompt,
+      scope: currentCaptureScope(), eligible: Boolean(verified && (exactChoicePrompt && !directVoice || naturalAnswer && session?.adaptive?.available) && canCaptureAnswer && !preview && !leftAt && !confirmationUnknown && session?.phase === 'conversation'),
+      blocked: Boolean(busy || stale || retainedChoiceSpeech || heldPrompt || pendingTurn || pendingAdaptive || adaptive.answerBlocked),
+      // Hands-free hosted voice keeps exact choices as buttons (D4).
+      choicePrompt: directVoice ? undefined : exactChoicePrompt,
       speech: conversationSpeech({ currentPrompt: activePrompt, adaptive: session?.adaptive }),
-      pauseReason: activePrompt?.mode === 'guided' ? 'Voice is paused. Use the exact answer choices or fields below, then resume when the guided questions are complete.' : 'Voice is paused. Review your answers or check the current conversation before resuming.',
+      pauseReason: directVoice && exactChoicePrompt ? 'Voice is paused. Choose an answer with the buttons below, then resume voice.' : activePrompt?.mode === 'guided' ? 'Voice is paused. Use the exact answer choices or fields below, then resume when the guided questions are complete.' : 'Voice is paused. Review your answers or check the current conversation before resuming.',
     }),
     startCapture: () => { void capture.start({ conversation: true }); }, finishCapture: () => capture.finish(),
     stopCapture: (reason, preserve) => capture.stop(reason, true, preserve), stopPlayback: playback.stop, speak: sourceId => listen(sourceId),
     prepareChoiceCapture: () => { answerRequestId.current = crypto.randomUUID(); textRef.current = ''; setText(''); setAnswerChannel('text'); },
     abandonCapture: () => capture.stop('', false),
     speakChoiceConfirmation: value => listen(activePrompt!.id, value),
+    restoreDraft: value => { textRef.current = value; setText(value); if (!value) setAnswerChannel('text'); },
     restoreChoiceDraft: candidate => { const value = candidate.optionTranscript + (textRef.current ? `\nConfirmation attempt: ${textRef.current}` : ''); textRef.current = value; setText(value); setAnswerChannel('unreviewed-transcript'); },
     saveChoiceAttempt: (value, scope, prior) => saveVoiceChoiceAttempt(value, scope, prior),
     saveChoice: (candidate, scope, confirmation) => saveVoiceChoice(candidate, scope, confirmation),
@@ -84,13 +102,13 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
   });
   const capture = useSpeechCapture({
     mediaSource: captureMediaSource,
-    scopeKey: voiceScopeKey, getScope: currentCaptureScope, getText: () => textRef.current, input: config?.voice.input,
+    scopeKey: voiceScopeKey, getScope: currentCaptureScope, getText: () => textRef.current, input: voiceInput, onFallback: () => setDirectFallback(true), getKeyterms: () => sessionKeyterms(sessionRef.current),
     onText: (value, hasTranscript, conversationCapture) => { textRef.current = value; setText(value); if (hasTranscript) setAnswerChannel(conversationCapture ? 'unreviewed-transcript' : 'confirmed-transcript'); },
     onInterruptPlayback: playback.stop, onEvent: event => voice.controller.event(event),
   });
   // Hosted upload voice is dictation only: no continuous conversation, and exact choices stay buttons.
-  const uploadVoice = config?.voice.input === 'upload';
-  const hasComposerDraft = Boolean(text.trim() || Object.values(fields).some(value => value.trim()) || pendingTurn || pendingAdaptive || capture.active);
+  const uploadVoice = voiceInput === 'upload';
+  const hasComposerDraft = Boolean(retainedChoiceSpeech || text.trim() || Object.values(fields).some(value => value.trim()) || pendingTurn || pendingAdaptive || capture.active || capture.retained);
   const hasDraft = hasComposerDraft || voice.active;
   const draftRef = useRef(hasComposerDraft);
   draftRef.current = hasComposerDraft;
@@ -104,7 +122,7 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     if (draftRef.current && previous && previous.id !== next.currentPrompt?.id) setHeldPrompt(held => held ?? previous);
     setSession(next);
   }, [setSession]);
-  const adaptive = useAdaptiveConversation({ session, getSession, onSession: acceptAdaptiveSession, onOperation: result => voice.controller.operation(result) });
+  const adaptive = useAdaptiveConversation({ session, getSession, onSession: acceptAdaptiveSession, onOperation: result => voice.controller.operation(result), timingForOperation });
   /** Browser output reads the same words the provider path would, resolved on the client. */
   const browserSpeechText = (sourceId: string, choiceValue?: string): string | undefined => {
     const adaptive = sessionRef.current?.adaptive;
@@ -136,6 +154,25 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
   useEffect(() => {
     if (!voice.active && ['review', 'interrupted'].includes(capture.status) && !heldPrompt) document.getElementById('answer-text')?.focus({ preventScroll: true });
   }, [capture.status, heldPrompt, voice.active]);
+
+  // Runs after DOM mutation, using exactly the prompt/reply selected by this render.
+  // The accepted/processing acknowledgement alone cannot complete an adaptive turn.
+  const timingPresentation = (): TurnPresentation | undefined => {
+    if (!session) return;
+    const op = session.adaptive?.operation;
+    const responseReady = !isPendingInterpretation(op) || op?.stream?.reply === 'saved';
+    return {
+      sessionId: session.id, revision: session.revision, promptId: activePrompt?.id, promptPresentation,
+      replyId: responseReady ? session.adaptive?.reply?.id : undefined,
+      operationId: op?.id, responseReady, urgent: session.notice?.tone === 'urgent',
+      visible: Boolean(config && !booting && verified && !leftAt && !identityRejected && !confirmationUnknown && session.phase !== 'identity' && session.phase !== 'confirmed' && (!preview || session.notice?.tone === 'urgent')),
+    };
+  };
+  useLayoutEffect(() => {
+    const view = timingPresentation();
+    if (view) turnTiming.current.commit(view);
+    else turnTiming.current.cancel();
+  });
 
   const boot = async () => {
     setBooting(true); setError('');
@@ -193,17 +230,21 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     if (topicOutline) { outlineRef.current?.focus({ preventScroll: true }); outlineRef.current?.scrollIntoView({ block: 'start' }); }
   }, [topicOutline]);
 
-  const run = async <T,>(name: string, fn: () => Promise<T>): Promise<T | undefined> => {
+  const run = async <T,>(name: string, fn: () => Promise<T>, timingMode: 'guided' | 'adaptive' = 'guided'): Promise<T | undefined> => {
     if (operation.current) return;
     operation.current = true; setBusy(name); setError('');
+    const baseline = timingPresentation();
+    if (name === 'answer' && baseline) turnTiming.current.begin(timingMode, baseline);
+    else if (name !== 'adaptive-status') turnTiming.current.cancel();
     try { return await fn(); }
     catch (e) {
+      if (name !== 'adaptive-status') turnTiming.current.cancel();
       setError(messageOf(e));
       if (e instanceof RequestError && e.status === 409) setStale(true);
       if (e instanceof RequestError && [401, 403].includes(e.status)) setVerified(false);
-    } finally { operation.current = false; setBusy(''); }
+    } finally { turnTiming.current.cancelUnaccepted(); operation.current = false; setBusy(''); }
   };
-  const clearComposer = () => { capture.stop(''); playback.stop(); answerRequestId.current = crypto.randomUUID(); setAnswerChannel('text'); draftRef.current = false; textRef.current = ''; setText(''); setFields({}); setHeldPrompt(undefined); };
+  const clearComposer = () => { capture.discard(); playback.stop(); answerRequestId.current = crypto.randomUUID(); setAnswerChannel('text'); setSelectedControl(undefined); setTypedChoice(undefined); setRetainedChoiceSpeech(undefined); draftRef.current = false; textRef.current = ''; setText(''); setFields({}); setHeldPrompt(undefined); };
   const start = (scenario: ScenarioId) => run('start', async () => {
     adaptive.invalidate();
     const value = await request<ClinicSessionView>('/api/clinic/sessions', { scenario, syntheticAcknowledged: true });
@@ -220,20 +261,29 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     await request('/api/clinic/reject-identity', {});
     setSession(undefined); setPreview(undefined); setIdentityRejected(true); clearComposer(); setPendingTurn(undefined); setPendingAdaptive(undefined);
   });
-  const updateTurn = (action: TurnInput['action']) => run('answer', async () => {
+  const updateTurn = (action: TurnInput['action'], confirmTyped = false) => run('answer', async () => {
+    const timingId = turnTiming.current.turnId;
     if (!session?.currentPrompt || heldPrompt || capture.active) return;
+    // Sending the answer releases any kept recording; the patient's typed answer is what gets saved.
+    capture.discard();
     playback.stop();
     const current = pendingTurn ? session : await adaptive.discardPending();
     if (!current?.currentPrompt) return;
     if (!pendingTurn && current.currentPrompt.id !== session.currentPrompt.id) throw new Error('The question changed while your saved answer was being interpreted. Check the current question before answering.');
+    const candidate = !pendingTurn && action === 'answer' && answerChannel === 'text' && selectedControl !== text ? typedGuidedChoice(current.currentPrompt, text) : undefined;
+    if (candidate) {
+      if (!confirmTyped) { setTypedChoice({ candidate, sessionId: current.id, revision: current.revision, promptId: current.currentPrompt.id }); return; }
+      if (!typedChoice || typedChoice.sessionId !== current.id || typedChoice.revision !== current.revision || typedChoice.promptId !== current.currentPrompt.id || typedChoice.candidate.optionTranscript !== text || typedChoice.candidate.value !== candidate.value) throw new Error('The question or answer changed. Check your choice before confirming it.');
+    } else if (confirmTyped && !pendingTurn) throw new Error('Check your choice before confirming it.');
     const input = pendingTurn ?? {
       requestId: action === 'answer' ? answerRequestId.current : crypto.randomUUID(), expectedRevision: current.revision, promptId: current.currentPrompt.id, action,
-      ...(action === 'answer' ? { text, fields, channel: answerChannel === 'unreviewed-transcript' ? 'confirmed-transcript' : answerChannel } : {}),
+      ...(action === 'answer' ? candidate ? { text: candidate.value, channel: 'text' as const, choiceConfirmation: { optionTranscript: candidate.optionTranscript, confirmationTranscript: '', confirmationMethod: 'control' as const }, ...(retainedChoiceSpeech ? { priorChoiceTranscript: retainedChoiceSpeech } : {}) } : { text, fields, channel: answerChannel === 'unreviewed-transcript' ? 'confirmed-transcript' : answerChannel, ...(retainedChoiceSpeech ? { priorChoiceTranscript: retainedChoiceSpeech } : {}) } : {}),
     };
     setPendingTurn(input);
     let next: ClinicSessionView;
-    try { next = await request<ClinicSessionView>('/api/clinic/turns', input); }
+    try { next = await request<ClinicSessionView>('/api/clinic/turns', input, { turnId: timingId }); }
     catch (e) { if (e instanceof RequestError && !e.uncertain) setPendingTurn(undefined); throw e; }
+    if (timingId) turnTiming.current.accept(timingId, next.revision);
     setSession(next); clearComposer(); setPendingTurn(undefined); setPreview(undefined); setStale(false);
     if (returnToReview) {
       const nextPreview = await request<ReviewPreview>('/api/clinic/review', { expectedRevision: next.revision });
@@ -247,27 +297,31 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     return fresh.session;
   };
   const saveVoiceChoiceAttempt = (value: string, scope: CaptureScope, priorChoiceTranscript?: string): Promise<ClinicSessionView | undefined> => run('answer', async () => {
+    const timingId = turnTiming.current.turnId;
     const current = getSession();
     if (!current?.currentPrompt || current.id !== scope.sessionId || current.revision !== scope.expectedRevision || current.currentPrompt.id !== scope.promptId || heldPrompt || pendingTurn || pendingAdaptive) return;
     const saved = await currentChoiceSaveSession(current);
     const input: TurnInput = { requestId: scope.requestId, expectedRevision: saved.revision, promptId: scope.promptId, action: 'answer', text: value, channel: 'unreviewed-transcript', choiceTranscriptOnly: true, ...(priorChoiceTranscript ? { priorChoiceTranscript } : {}) };
     setPendingTurn(input);
     let next: ClinicSessionView;
-    try { next = await request<ClinicSessionView>('/api/clinic/turns', input); }
+    try { next = await request<ClinicSessionView>('/api/clinic/turns', input, { turnId: timingId }); }
     catch (e) { if (e instanceof RequestError && !e.uncertain) setPendingTurn(undefined); throw e; }
     if (getSession()?.id !== current.id || (getSession()?.revision ?? 0) > next.revision) throw new Error('The saved conversation changed. Check the save status before continuing.');
+    if (timingId) turnTiming.current.accept(timingId, next.revision);
     setSession(next); clearComposer(); setPendingTurn(undefined); setStale(false); return next;
   });
   const saveVoiceChoice = (candidate: VoiceChoiceCandidate, scope: CaptureScope, confirmation: { method: 'voice' | 'control'; transcript: string }): Promise<ClinicSessionView | undefined> => run('answer', async () => {
+    const timingId = turnTiming.current.turnId;
     const current = getSession();
     if (!current?.currentPrompt || current.id !== scope.sessionId || current.revision !== scope.expectedRevision || current.currentPrompt.id !== scope.promptId || heldPrompt || pendingTurn || pendingAdaptive) return;
     const saved = await currentChoiceSaveSession(current);
     const input: TurnInput = { requestId: scope.requestId, expectedRevision: saved.revision, promptId: scope.promptId, action: 'answer', text: candidate.value, channel: 'confirmed-transcript', choiceConfirmation: { optionTranscript: candidate.optionTranscript, confirmationTranscript: confirmation.transcript, confirmationMethod: confirmation.method } };
     setPendingTurn(input);
     let next: ClinicSessionView;
-    try { next = await request<ClinicSessionView>('/api/clinic/turns', input); }
+    try { next = await request<ClinicSessionView>('/api/clinic/turns', input, { turnId: timingId }); }
     catch (e) { if (e instanceof RequestError && !e.uncertain) setPendingTurn(undefined); throw e; }
     if (getSession()?.id !== current.id || (getSession()?.revision ?? 0) > next.revision) throw new Error('The saved conversation changed. Check the save status before continuing.');
+    if (timingId) turnTiming.current.accept(timingId, next.revision);
     setSession(next); clearComposer(); setPendingTurn(undefined); setPreview(undefined); setStale(false);
     if (returnToReview) {
       const nextPreview = await request<ReviewPreview>('/api/clinic/review', { expectedRevision: next.revision });
@@ -276,8 +330,10 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     return next;
   });
   const saveAdaptive = (naturalTurn?: { text: string; scope: CaptureScope }): Promise<AdaptiveTurnResult | undefined> => run('answer', async () => {
+    const timingId = turnTiming.current.turnId;
     const displayed = getSession();
     if (!displayed || heldPrompt || (!naturalTurn && capture.active) || !(naturalTurn?.text ?? text).trim() || (!pendingAdaptive && displayed.adaptive?.available !== true)) return;
+    if (!naturalTurn) capture.discard();
     if (naturalTurn && (pendingAdaptive || naturalTurn.scope.sessionId !== displayed.id || naturalTurn.scope.expectedRevision !== displayed.revision || naturalTurn.scope.promptId !== displayed.currentPrompt?.id || naturalTurn.scope.requestId !== answerRequestId.current)) throw new Error('The question changed. Your transcript remains unsent; check it before continuing.');
     playback.stop();
     const recoveringSave = Boolean(pendingAdaptive);
@@ -292,14 +348,15 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
     const input: AdaptiveTurnInput = pendingAdaptive ?? { requestId: naturalTurn?.scope.requestId ?? answerRequestId.current, expectedRevision: current.revision, text: naturalTurn?.text ?? text, channel: naturalTurn ? 'unreviewed-transcript' : answerChannel === 'unreviewed-transcript' ? 'confirmed-transcript' : answerChannel };
     setPendingAdaptive(input);
     let result: AdaptiveTurnResult;
-    try { result = await request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', input); }
+    try { result = await request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', input, { turnId: timingId }); }
     catch (e) { if (e instanceof RequestError && !e.uncertain) setPendingAdaptive(undefined); throw e; }
     if (result.session.id !== getSession()?.id || result.session.revision < (getSession()?.revision ?? 0)) throw new Error('The saved conversation changed. Reload saved answers before continuing. Your text is still here.');
+    if (timingId) turnTiming.current.accept(timingId, result.session.revision, result.operation.id);
     setSession(result.session); clearComposer(); setPendingAdaptive(undefined); setPreview(undefined); setStale(false);
     // Natural conversation coordinates the same one-attempt interpretation after the durable acknowledgement.
     if (!naturalTurn && !recoveringSave && result.operation.status === 'accepted' && result.session.adaptive?.operation?.id === result.operation.id) void adaptive.interpret(result.operation);
     return result;
-  });
+  }, 'adaptive');
   const updateAdaptive = () => saveAdaptive();
   const changeMode = (mode: 'adaptive' | 'guided') => run('mode', async () => {
     if (hasDraft) return;
@@ -420,15 +477,17 @@ export function PatientApp({ captureMediaSource }: { captureMediaSource?: Captur
           {heldPrompt && <Notice tone="attention">The saved conversation has moved on. Your unsent answer for the earlier question is still shown below. Copy any text you need, then clear it to continue.</Notice>}
           {activePrompt ? <form className="answer-form" onSubmit={event => { event.preventDefault(); void (naturalAnswer ? updateAdaptive() : updateTurn('answer')); }}>
             <div className="question-block"><h2 ref={questionRef} tabIndex={-1}>{activePrompt.text}</h2><p className="current-topic">{session.topics.find(topic => topic.id === activePrompt.topicId)?.title}</p>{activePrompt.purpose && <details className="question-purpose"><summary><CircleHelp size={15} aria-hidden="true" />Why we’re asking</summary><p>{activePrompt.purpose}</p></details>}</div>
-            <VoiceControls available={config.voice.available} explanation={config.voice.explanation} conversation={voice} conversationAllowed={!uploadVoice && Boolean(exactChoicePrompt || naturalAnswer && session.adaptive?.available)} exactChoices={Boolean(exactChoicePrompt)} captureAllowed={uploadVoice ? canCaptureAnswer && !exactChoicePrompt : canCaptureAnswer} disabled={Boolean(busy || pendingTurn || pendingAdaptive || heldPrompt) || stale || adaptive.answerBlocked || (naturalAnswer && !session.adaptive?.available)} capture={capture} playback={playback} onListen={() => listen(activePrompt.id)} onListenReply={session.adaptive?.reply ? () => listen(session.adaptive!.reply!.id) : undefined} questionTooLong={(conversationSpeech({ currentPrompt: activePrompt })?.text.length ?? 0) > 1200} replyTooLong={(session.adaptive?.reply?.text.length ?? 0) > 1200} />
+            <VoiceControls available={config.voice.available} explanation={config.voice.explanation} conversation={voice} conversationAllowed={!uploadVoice && Boolean(exactChoicePrompt && !directVoice || naturalAnswer && session.adaptive?.available)} exactChoices={Boolean(exactChoicePrompt) && !directVoice} upload={uploadVoice} captureAllowed={uploadVoice || directVoice ? canCaptureAnswer && !exactChoicePrompt : canCaptureAnswer} disabled={Boolean(busy || retainedChoiceSpeech || pendingTurn || pendingAdaptive || heldPrompt) || stale || adaptive.answerBlocked || (naturalAnswer && !session.adaptive?.available)} capture={capture} playback={playback} onListen={() => listen(activePrompt.id)} onListenReply={session.adaptive?.reply ? () => listen(session.adaptive!.reply!.id) : undefined} questionTooLong={(conversationSpeech({ currentPrompt: activePrompt })?.text.length ?? 0) > 1200} replyTooLong={(session.adaptive?.reply?.text.length ?? 0) > 1200} />
             {config.voice.available && config.voice.output === 'browser' && <label className="voice-consent"><input type="checkbox" checked={readAloud} onChange={event => { setReadAloud(event.target.checked); if (!event.target.checked) playback.stop(); }} /><span>Read new questions aloud</span></label>}
             {exactChoicePrompt && voice.choice && <section className="voice-choice-confirmation" aria-label="Confirm recognized choice"><p>{choiceConfirmationSpeech(exactChoicePrompt, voice.choice.value)}</p><p className="metadata">Recognized answer: {voice.choice.optionTranscript}</p><Button disabled={Boolean(busy) || stale || voice.status === 'saving'} onClick={() => void voice.controller.confirmChoice('control')}>Confirm choice</Button><Button disabled={Boolean(busy) || voice.status === 'saving'} onClick={() => voice.controller.retryChoice()}>Choose again</Button></section>}
-            {exactChoicePrompt && text && !voice.choice && <Notice tone="attention">Recognized words: {text}. No choice has been recorded. Clear these words to try again, or choose an exact answer below.</Notice>}
+            {exactChoicePrompt && text && answerChannel !== 'text' && !voice.choice && <Notice tone="attention">Recognized words: {text}. No choice has been recorded. Clear these words to try again, or choose an exact answer below.</Notice>}
+            {retainedChoiceSpeech && <p className="metadata">Send or clear these words before recording another answer.</p>}
+            {typedChoice && typedChoice.promptId === activePrompt.id && <section className="voice-choice-confirmation" aria-label="Confirm typed choice"><p>You chose: {typedChoice.candidate.label}. Confirm this choice to save it.</p><Button disabled={Boolean(busy) || stale || Boolean(heldPrompt)} onClick={() => void updateTurn('answer', true)}>Confirm choice</Button><Button disabled={Boolean(busy)} onClick={() => setTypedChoice(undefined)}>Choose again</Button></section>}
             <fieldset disabled={Boolean(busy) || Boolean(pendingTurn || pendingAdaptive) || capture.active || voice.active} className="composer-fields"><legend className="sr-only">Answer the current question</legend>
               {!naturalAnswer && activePrompt.fields?.map(field => <div className="field" key={field.id}><label htmlFor={`field-${field.id}`}>{field.label}{field.required && <span className="required-label">Required for a complete answer</span>}</label>{field.kind === 'choice' ? <select id={`field-${field.id}`} value={fields[field.id] ?? ''} onChange={event => setFields({ ...fields, [field.id]: event.target.value })} aria-describedby={field.hint ? `hint-${field.id}` : undefined}><option value="">Choose an answer</option>{field.options?.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input id={`field-${field.id}`} type={field.kind === 'number' ? 'number' : 'text'} inputMode={field.kind === 'number' ? 'decimal' : undefined} step={field.kind === 'number' ? 'any' : undefined} value={fields[field.id] ?? ''} onChange={event => setFields({ ...fields, [field.id]: event.target.value })} aria-describedby={field.hint ? `hint-${field.id}` : undefined} autoComplete="off" />}{field.hint && <p className="field-hint" id={`hint-${field.id}`}>{field.hint}</p>}</div>)}
-              {!naturalAnswer && Boolean(activePrompt.choices?.length) && <div className="choice-list" role="group" aria-label="Answer choices">{activePrompt.choices!.map(choice => <button type="button" key={choice.value} className={`choice ${text === choice.value ? 'is-selected' : ''}`} aria-pressed={text === choice.value} onClick={() => { playback.stop(); setAnswerChannel('text'); const value = text === choice.value ? '' : choice.value; textRef.current = value; setText(value); }}>{choice.label}{text === choice.value && <Check size={16} aria-hidden="true" />}</button>)}</div>}
-              {promptAllowsFreeText(activePrompt, naturalAnswer) && <div className="field message-field"><label htmlFor="answer-text">{answerChannel !== 'text' ? 'Your transcript' : 'Your answer'}</label><textarea id="answer-text" value={!naturalAnswer && activePrompt.choices?.some(choice => choice.value === text) ? '' : text} onChange={event => { playback.stop(); textRef.current = event.target.value; setText(event.target.value); }} rows={naturalAnswer ? 4 : 3} maxLength={8000} placeholder={naturalAnswer ? 'Reply in your own words. Several details, a question, or a correction are all fine.' : 'Type your answer here…'} /></div>}
-              <div className="composer-actions"><span className="draft-label">{pendingTurn || pendingAdaptive ? 'Save not confirmed' : hasDraft ? 'Unsent answer' : !naturalAnswer && activePrompt.choices?.length ? 'Choose an answer' : 'Answer in your own words'}</span><Button type="submit" variant="primary" disabled={!hasDraft || Boolean(busy) || Boolean(heldPrompt) || stale || (naturalAnswer && !session.adaptive?.available)}>{busy === 'answer' ? 'Saving…' : returnToReview ? 'Save correction' : answerChannel !== 'text' ? 'Send reviewed answer' : 'Send answer'}<ArrowRight size={17} aria-hidden="true" /></Button></div>
+              {!naturalAnswer && Boolean(activePrompt.choices?.length) && <div className="choice-list" role="group" aria-label="Answer choices">{activePrompt.choices!.map(choice => <button type="button" key={choice.value} className={`choice ${selectedControl === choice.value && text === choice.value ? 'is-selected' : ''}`} aria-pressed={selectedControl === choice.value && text === choice.value} onClick={() => { playback.stop(); if (exactChoicePrompt) { const edited = editGuidedChoiceDraft(textRef.current, answerChannel, retainedChoiceSpeech); setRetainedChoiceSpeech(edited.retainedSpeech); } setAnswerChannel('text'); setTypedChoice(undefined); const value = selectedControl === choice.value && text === choice.value ? '' : choice.value; setSelectedControl(value || undefined); textRef.current = value; setText(value); }}>{choice.label}{selectedControl === choice.value && text === choice.value && <Check size={16} aria-hidden="true" />}</button>)}</div>}
+              {(promptAllowsFreeText(activePrompt, naturalAnswer) || Boolean(exactChoicePrompt)) && <div className="field message-field"><label htmlFor="answer-text">{answerChannel !== 'text' ? 'Your transcript' : 'Your answer'}</label><textarea id="answer-text" value={!naturalAnswer && selectedControl === text ? '' : text} onChange={event => { playback.stop(); setSelectedControl(undefined); setTypedChoice(undefined); if (exactChoicePrompt) { const edited = editGuidedChoiceDraft(textRef.current, answerChannel, retainedChoiceSpeech); setAnswerChannel(edited.channel); setRetainedChoiceSpeech(edited.retainedSpeech); } textRef.current = event.target.value; setText(event.target.value); }} rows={naturalAnswer ? 4 : 3} maxLength={8000} placeholder={naturalAnswer ? 'Reply in your own words. Several details, a question, or a correction are all fine.' : 'Type your answer here…'} /></div>}
+              <div className="composer-actions"><span className="draft-label">{pendingTurn || pendingAdaptive ? 'Save not confirmed' : hasDraft ? 'Unsent answer' : !naturalAnswer && activePrompt.choices?.length ? 'Choose an answer' : 'Answer in your own words'}</span><Button type="submit" variant="primary" disabled={!hasDraft || Boolean(retainedChoiceSpeech && !text.trim()) || Boolean(busy) || Boolean(heldPrompt) || stale || (naturalAnswer && !session.adaptive?.available) || capture.retained}>{busy === 'answer' ? 'Saving…' : returnToReview ? 'Save correction' : answerChannel !== 'text' ? 'Send reviewed answer' : 'Send answer'}<ArrowRight size={17} aria-hidden="true" /></Button></div>
               {hasDraft && !pendingTurn && !pendingAdaptive && <Button className="clear-answer" variant="text" onClick={clearComposer}>Clear unsent answer</Button>}
             </fieldset>
             <div className="alternative-actions" role="group" aria-label="Other ways to answer this question"><Button variant="text" disabled={Boolean(busy) || hasDraft || Boolean(heldPrompt) || stale} onClick={() => updateTurn('unknown')}>I don’t know</Button><Button variant="text" disabled={Boolean(busy) || hasDraft || Boolean(heldPrompt) || stale} onClick={() => updateTurn('decline')}>I’d rather not say</Button><Button variant="text" disabled={Boolean(busy) || hasDraft || Boolean(heldPrompt) || stale} onClick={() => updateTurn('move-on')}>Skip for now</Button></div>

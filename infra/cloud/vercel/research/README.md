@@ -10,6 +10,11 @@ Install the separately pinned hosted lifecycle dependency with scripts disabled.
 npm ci --prefix infra/cloud/vercel/research --ignore-scripts --omit=dev --omit=optional --legacy-peer-deps
 ```
 
+After the root and nested installs, run `npm run hosting:typecheck` from the repository root.
+This is the complete hosting typecheck gate: clinic modules use NodeNext, while research modules
+and all research hosting tests use ESNext/Bundler for the Convex ESM dependencies and `import.meta`.
+Running only `tsc -p tsconfig.hosting.json` checks the clinic portion, not the complete gate.
+
 The hosted composition injects supported `waitUntil` at peer attachment, while the upgrade request's async context is available. It retains the actual later terminal work through settlement and release acknowledgements. The promise is bounded by the native ingress lifetime plus the existing 5-second save and 10-second terminal ACK waits. Retention ending or timing out never establishes native drainage, releases an unknown hold, or changes provider charges. Local transport callers may omit the hook; the official API itself is a no-op outside the hosted request context.
 
 Build from this checkout with Node22 and the coordinator's execution window:

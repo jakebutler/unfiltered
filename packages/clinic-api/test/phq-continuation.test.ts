@@ -29,11 +29,11 @@ async function fixture(item = 'MH01') {
   let current = (await request('/api/clinic/confirm-identity', { confirmed:true })).view;
   current = (await request('/api/clinic/topics', { expectedRevision:current.revision, topicId:'Q16', slotPath:item })).view;
   const send = async (data: TurnInput) => { const result = await request('/api/clinic/turns', data); if (result.status === 200) current = result.view; return result; };
-  const choice = (value = '1'): TurnInput => ({ requestId:crypto.randomUUID(), expectedRevision:current.revision, promptId:current.currentPrompt!.id, action:'answer', text:value, channel:'confirmed-transcript', choiceConfirmation:{ optionTranscript:current.currentPrompt!.choices!.find(c => c.value === value)!.label, confirmationTranscript:'Yes', confirmationMethod:'voice' } });
+  const choice = (value = '1'): TurnInput => ({ requestId:crypto.randomUUID(), expectedRevision:current.revision, promptId:current.currentPrompt!.id, action:'answer', text:value, channel:'text' });
   return { send, choice, current:() => current, writes:() => writes, draft:() => decodeDocument<Draft>(native!), propose };
 }
 describe('actual handler PHQ battery continuation', () => {
-  it('continues four separately confirmed exact items and calculates only after the fourth; replay makes no write', async () => {
+  it('continues four exact button-selected items and calculates only after the fourth; replay makes no write', async () => {
     const f = await fixture();
     for (let index = 0; index < 4; index++) {
       expect(f.current().currentPrompt?.id).toBe(`Q16:MH0${index + 1}`);
@@ -44,8 +44,8 @@ describe('actual handler PHQ battery continuation', () => {
       expect(screen.scores).toEqual(index === 3 ? { gad2:1, phq2:4, phq4:5 } : null);
     }
     expect(f.current().currentPrompt?.id).not.toMatch(/^Q16:MH0/);
-    expect(f.draft().turns.filter(t => t.role === 'patient')).toHaveLength(8);
-    expect(Object.values(f.draft().topics.Q16.answers).map(a => a.sourceIds.length)).toEqual([2,2,2,2]);
+    expect(f.draft().turns.filter(t => t.role === 'patient')).toHaveLength(4);
+    expect(Object.values(f.draft().topics.Q16.answers).map(a => a.sourceIds.length)).toEqual([1,1,1,1]);
     expect(f.current().topics.find(t => t.id === 'Q16')!.screening).toMatchObject({ status:'complete', clinicianReviewRequired:true, clinicalClearance:false });
     expect(f.propose).not.toHaveBeenCalled();
   });

@@ -1,5 +1,6 @@
 import type { AdaptiveOperationView, AdaptiveTurnResult, ClinicSessionView, PromptView } from '../../../packages/clinic-contract/src/index';
 import { exactChoiceConfirmation, exactSpokenChoice, type VoiceChoiceCandidate } from './choice-voice';
+import { isScreeningChoicePrompt } from '../../../packages/clinic-contract/src/guided-choice';
 import type { RecognitionSegment } from '../../../packages/speech/src/index';
 import type { CaptureScope } from './voice-capture';
 
@@ -7,7 +8,8 @@ export type ConversationVoiceState = { active: boolean; status: 'off' | 'connect
 export type CaptureEvent =
   | { type: 'ready' | 'voice'; scope: CaptureScope }
   | { type: 'recognition'; scope: CaptureScope; segment: RecognitionSegment; interim: string }
-  | { type: 'completed'; scope: CaptureScope; text: string; clean: boolean }
+  /** `utterance` is this recording's words alone; `prefix` is the draft that was already in the box. */
+  | { type: 'completed'; scope: CaptureScope; text: string; clean: boolean; utterance?: string; prefix?: string }
   | { type: 'interrupted'; scope: CaptureScope; reason: string };
 export interface ConversationVoiceContext {
   scope?: CaptureScope; eligible: boolean; blocked: boolean;
@@ -23,6 +25,8 @@ export interface ConversationVoicePorts {
   prepareChoiceCapture?(): void;
   abandonCapture?(): void;
   speakChoiceConfirmation?(value: string): void;
+  /** Puts the composer back to the draft it held before a command utterance. */
+  restoreDraft?(text: string): void;
   saveChoice?(candidate: VoiceChoiceCandidate, scope: CaptureScope, confirmation: { method: 'voice' | 'control'; transcript: string }): Promise<ClinicSessionView | undefined>;
   restoreChoiceDraft?(candidate: VoiceChoiceCandidate): void;
   saveChoiceAttempt?(text: string, scope: CaptureScope, priorChoiceTranscript?: string): Promise<ClinicSessionView | undefined>;
@@ -31,6 +35,27 @@ export interface ConversationVoicePorts {
 interface Clock { after(ms: number, fn: () => void): unknown; clear(timer: unknown): void; }
 const browserClock: Clock = { after: (ms, fn) => setTimeout(fn, ms), clear: timer => clearTimeout(timer as ReturnType<typeof setTimeout>) };
 const sameScope = (a?: CaptureScope, b?: CaptureScope) => Boolean(a && b && a.sessionId === b.sessionId && a.promptId === b.promptId && a.expectedRevision === b.expectedRevision && a.requestId === b.requestId);
+const endpointCues = new Set(['um', 'uh', 'er', 'erm', 'hmm', 'wait', 'no wait', 'hold on', 'i mean', 'actually', 'sorry', 'let me think', 'and', 'or', 'but', 'so', 'like']);
+const pauseCommands = new Set(['stop', 'stop listening', 'pause', 'wait', 'hold on', 'wait a moment', 'wait a second']);
+/** Backchannels and fillers. Answer words (okay, yes, no, sure) are deliberately absent: each can be the whole answer. */
+const backchannels = new Set(['uh', 'um', 'er', 'erm', 'hmm', 'hm', 'mm', 'mmm', 'mhm', 'mm-hmm', 'mmhmm', 'uh-huh', 'ah', 'oh', 'uhh', 'umm']);
+const spokenCommand = (text: string) => text.trim().toLowerCase().replace(/[\p{P}\s]+$/u, '').replace(/(^|\s)please$/, '').replace(/[\p{P}\s]+$/u, '');
+/** Silence after the provider's endpoint before a turn is taken. Conservative: a cut-off answer costs more than a wait, and Done skips it. */
+export const endpointGrace = Object.freeze({ base: 1000, hold: 2500 });
+/** Amounts and units: "ten milligrams" is often followed by a correction or the frequency. */
+const amountEnding = /(?:\d|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|hundred|thousand|half|mg|mcg|milligrams?|micrograms?|grams?|units?|ml|milliliters?|tablets?|pills?|capsules?|puffs?|drops?|pounds?|lbs?|kg|kilos?|kilograms?|feet|foot|inches|cm|centimeters?))$/;
+/** A filler, continuation cue or amount at the end of the latest final segment means the speaker may still be talking. */
+export function endpointGraceMs(text: string): number {
+  const raw = text.trim();
+  if (/[,…]$|\.\.\.$/.test(raw)) return endpointGrace.hold;
+  const tail = raw.toLowerCase().replace(/[\p{P}\s]+$/u, ''), words = tail.split(/\s+/);
+  return [1, 2, 3].some(n => endpointCues.has(words.slice(-n).join(' '))) || amountEnding.test(tail) ? endpointGrace.hold : endpointGrace.base;
+}
+/** True when every recognized word is a backchannel or filler, so no answer has been given yet. */
+export function fillerOnly(text: string): boolean {
+  const words = text.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').split(/\s+/).map(word => word.replace(/^-+|-+$/g, '')).filter(Boolean);
+  return words.length > 0 && words.every(word => backchannels.has(word));
+}
 
 /** Explicit opt-in coordinator. Speech final events alone never submit in dictation mode. */
 export class VoiceConversation {
@@ -40,8 +65,9 @@ export class VoiceConversation {
   private grace?: unknown;
   private idle?: unknown;
   private submitted = new Set<string>();
-  private finals = new Map<string, string>();
+  private finals = new Map<string, { start: number; text: string; speechFinal: boolean }>();
   private latestFinalEnd = -1;
+  private latestFinalText = '';
   private endpointEnd?: number;
   private heardVoice = false;
   private awaiting?: { sessionId: string; revision: number; promptId?: string };
@@ -52,16 +78,23 @@ export class VoiceConversation {
   constructor(private ports: ConversationVoicePorts, private clock = browserClock) {}
   private set(status: ConversationVoiceState['status'], message = '') { this.state = { active: !['off', 'paused'].includes(status), status, message, ...(this.choice ? { choice: this.choice.candidate } : {}) }; this.ports.changed(this.state); }
   private clearTimers() { this.clock.clear(this.grace); this.clock.clear(this.idle); this.grace = undefined; this.idle = undefined; }
+  private screening(context: ConversationVoiceContext) { return Boolean(context.choicePrompt && isScreeningChoicePrompt(context.choicePrompt) || context.scope && isScreeningChoicePrompt({ id: context.scope.promptId })); }
   start() {
     if (this.state.active) return;
     const context = this.ports.context();
-    if (!context.eligible || context.blocked || !context.scope) { this.set('paused', context.pauseReason || 'Check the current question and saved status before resuming voice.'); return; }
+    if (!context.eligible || context.blocked || !context.scope || this.screening(context)) { this.set('paused', context.pauseReason || 'Check the current question and saved status before resuming voice.'); return; }
     if (this.submitted.has(context.scope.requestId)) { this.set('paused', 'Review or clear the unsent answer before starting another conversation turn.'); return; }
     this.generation++; this.awaiting = undefined; this.interpretation = undefined; this.begin(context);
   }
   private begin(context: ConversationVoiceContext) {
-    this.clearTimers(); this.scope = context.scope; this.finals.clear(); this.latestFinalEnd = -1; this.endpointEnd = undefined; this.heardVoice = false; this.startingSpeech = false;
+    if (this.screening(context)) { this.stop('Choose an answer with the buttons for this screening question.'); return; }
+    this.clearTimers(); this.scope = context.scope; this.finals.clear(); this.latestFinalEnd = -1; this.latestFinalText = ''; this.endpointEnd = undefined; this.heardVoice = false; this.startingSpeech = false;
     this.set('connecting', 'Connecting the microphone…'); this.ports.startCapture();
+  }
+  /** "Done speaking": take the turn now instead of waiting out the endpoint grace. */
+  done() {
+    if (!['listening', 'speaking'].includes(this.state.status) || !this.heardVoice || fillerOnly(this.finalText())) return;
+    this.clearTimers(); this.set('finishing', 'Finishing your words · microphone off'); this.ports.stopPlayback(); this.ports.finishCapture();
   }
   stop(reason = 'Voice conversation paused. Your available words remain in the draft.', preservePlayback = false) {
     const candidate = this.choice?.candidate;
@@ -94,8 +127,11 @@ export class VoiceConversation {
     this.awaiting = { sessionId: result.session.id, revision: result.session.revision, promptId: result.session.currentPrompt?.id };
     this.ports.changed({ ...this.state });
   }
+  /** Final words of this capture in audio order. Network delivery order is not audio order. */
+  private finalText() { return [...this.finals.values()].sort((a, b) => a.start - b.start).map(segment => segment.text.trim()).filter(Boolean).join(' '); }
   private valid(scope: CaptureScope) { return this.state.active && sameScope(scope, this.scope) && sameScope(scope, this.ports.context().scope); }
   event(event: CaptureEvent) {
+    if (this.state.active && this.screening(this.ports.context())) { this.stop('Choose an answer with the buttons for this screening question.'); return; }
     if (!this.valid(event.scope)) return;
     if (event.type === 'interrupted') { this.stop(event.reason); return; }
     if (event.type === 'ready') {
@@ -121,21 +157,23 @@ export class VoiceConversation {
       if (!['listening', 'speaking'].includes(this.state.status)) return;
       const { segment } = event;
       if (segment.text.trim()) { this.heardVoice = true; this.clock.clear(this.idle); this.idle = undefined; }
-      const key = `${segment.start}:${segment.duration}`;
-      const changedFinal = segment.isFinal && this.finals.get(key) !== JSON.stringify([segment.text, segment.speechFinal]);
-      if (segment.isFinal) this.finals.set(key, JSON.stringify([segment.text, segment.speechFinal]));
+      const key = `${segment.start}:${segment.duration}`, previous = this.finals.get(key);
+      const changedFinal = segment.isFinal && (previous?.text !== segment.text || previous?.speechFinal !== segment.speechFinal);
+      if (segment.isFinal) this.finals.set(key, { start: segment.start, text: segment.text, speechFinal: segment.speechFinal });
       // Network delivery order is not audio order. Only a new latest final or
       // unresolved words in the production reducer invalidate an existing endpoint.
       if (changedFinal && segment.start + segment.duration >= this.latestFinalEnd) {
-        this.latestFinalEnd = segment.start + segment.duration;
+        this.latestFinalEnd = segment.start + segment.duration; this.latestFinalText = segment.text;
         this.endpointEnd = segment.speechFinal && segment.text.trim() ? this.latestFinalEnd : undefined;
         this.clock.clear(this.grace); this.grace = undefined;
       }
       if (event.interim) { this.clock.clear(this.grace); this.grace = undefined; }
       if (this.endpointEnd !== undefined && !event.interim && this.grace === undefined) {
-        this.grace = this.clock.after(600, () => {
+        this.grace = this.clock.after(endpointGraceMs(this.latestFinalText), () => {
           this.grace = undefined;
           if (!this.valid(event.scope) || !['listening', 'speaking'].includes(this.state.status)) return;
+          // A backchannel is not an answer: keep listening, with the quiet timeout re-armed.
+          if (fillerOnly(this.finalText())) { this.endpointEnd = undefined; this.armIdle(); return; }
           this.clearTimers(); this.set('finishing', 'Finishing your words · microphone off'); this.ports.stopPlayback(); this.ports.finishCapture();
         });
       }
@@ -162,6 +200,11 @@ export class VoiceConversation {
         this.heardVoice = false;
         this.choiceCapturePending = true; this.set('thinking', 'Your choice is not saved yet. Confirm it by voice or with the controls below.'); this.ports.prepareChoiceCapture?.(); return;
       }
+      // A spoken pause is a command, not an answer: its words leave the draft so a resumed answer can't absorb them.
+      if (pauseCommands.has(spokenCommand(event.utterance ?? event.text))) {
+        if (event.prefix !== undefined) this.ports.restoreDraft?.(event.prefix);
+        this.stop("Voice paused. Resume when you’re ready, or keep typing."); return;
+      }
       this.submitted.add(event.scope.requestId); void this.submit(event.text, event.scope);
     }
   }
@@ -181,6 +224,7 @@ export class VoiceConversation {
   }
   async confirmChoice(method: 'voice' | 'control', transcript = '') {
     const selected = this.choice, context = this.ports.context();
+    if (this.screening(context)) { if (this.state.active) this.stop('Choose an answer with the buttons for this screening question.'); return; }
     if (!selected || !this.state.active || this.state.status === 'saving' || context.blocked || !context.eligible
       || context.scope?.sessionId !== selected.scope.sessionId || context.scope.promptId !== selected.scope.promptId || context.scope.expectedRevision !== selected.scope.expectedRevision
       || this.submitted.has(selected.scope.requestId) || method === 'voice' && exactChoiceConfirmation(transcript) !== 'confirm') return;
@@ -224,7 +268,7 @@ export class VoiceConversation {
   reconcile() {
     if (!this.state.active) return;
     const context = this.ports.context();
-    if (!context.eligible) { this.stop(context.pauseReason || 'Voice is paused. Review your answers or use the choices for this question.'); return; }
+    if (!context.eligible || this.screening(context)) { this.stop(context.pauseReason || 'Voice is paused. Review your answers or use the choices for this question.'); return; }
     if (this.choiceCapturePending) {
       if (context.blocked) return;
       if (!context.scope || !this.scope || context.scope.sessionId !== this.scope.sessionId || context.scope.promptId !== this.scope.promptId || context.scope.expectedRevision !== this.scope.expectedRevision) { this.stop('The question changed. This choice remains unsaved.'); return; }

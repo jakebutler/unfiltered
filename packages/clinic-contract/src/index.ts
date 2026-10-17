@@ -1,5 +1,7 @@
 /** Browser-safe clinic API views. Secrets, FHIR credentials and trusted assessments never cross this boundary. */
+// Kept literal so the browser contract has no runtime dependencies; checked in content/workflows.ts.
 export type ScenarioId = 'first-intake' | 'pre-visit' | 'non-visit' | 'post-visit' | 'billing' | 'scheduling' | 'refill';
+export type { InvitationOptionsView, InvitationIssueView } from './invitations.js';
 export type TopicStatus = 'not-started' | 'more-detail-needed' | 'ready-for-review' | 'stopped-with-gaps';
 export type AnswerState = 'answered' | 'negative' | 'unknown' | 'declined' | 'uncertain' | 'not-asked' | 'conflicting';
 export const sourceChannels = ['text', 'confirmed-transcript', 'unreviewed-transcript'] as const;
@@ -9,10 +11,10 @@ export interface ClinicConfig {
   syntheticOnly: true;
   scenarios: { id: ScenarioId; title: string; description: string }[];
   conversation: { mode: 'guided' | 'adaptive'; explanation?: string };
-  voice: { available: boolean; explanation?: string; input?: 'stream' | 'upload'; output?: 'provider' | 'browser' };
+  voice: { available: boolean; explanation?: string; input?: 'stream' | 'upload' | 'direct'; output?: 'provider' | 'browser' };
 }
 /** Channel records how these original words entered the draft; summary confirmation never relabels it. */
-export interface SourceTurn { id: string; role: 'patient' | 'assistant'; text: string; at: string; corrects?: string; channel?: SourceChannel; displayedPromptId?: string; }
+export interface SourceTurn { id: string; role: 'patient' | 'assistant'; text: string; at: string; corrects?: string; channel?: SourceChannel; displayedPromptId?: string; displayedPromptText?: string; }
 export interface SourceSpan { sourceId: string; start: number; end: number; transform: string; role?: 'value' | 'support'; evidenceProtocol?: 'contextual-values-v5'; }
 export interface AdaptiveOperationView {
   id: string; requestId: string; sourceId: string;
@@ -39,7 +41,9 @@ export interface TopicView {
   missingDetails: string[];
   /** Interpreter limitations, never patient-reported uncertainty or a clinical conclusion. */
   interpretationGaps?: { id: string; reason: 'ambiguous' | 'unsupported-target' | 'capacity' | 'conflict' | 'ownership' | 'invalid-type' | 'unsupported-state' | 'unsupported-unknown' | 'value-not-in-source' | 'temporal-crop' | 'recognition-unreviewed' | 'unaddressed-source'; evidence: Omit<SourceSpan, 'transform'>[] }[];
-  details?: { id: string; label: string; state: AnswerState; text?: string; sourceIds: string[]; editable?: boolean; provenance?: SourceSpan[]; interpretation?: { qualified: boolean; status: 'proposed' | 'conflicting' } }[];
+  details?: { id: string; label: string; state: AnswerState; text?: string; sourceIds: string[]; editable?: boolean; provenance?: SourceSpan[]; interpretation?: { qualified: boolean; status: 'proposed' | 'conflicting' };
+    /** Answer specificity (SP-0.1): detail still missing, and a reference code attached only to an exact, authored-synonym or patient-confirmed name. */
+    specificity?: { needsDetail?: string; settled?: 'will-provide' | 'unknown' | 'declined'; code?: { system: string; code: string; display: string; basis: 'exact' | 'synonym' | 'patient-confirmed' } } }[];
   screening?: {
     title: string; text: string; status: 'complete' | 'incomplete';
     scores: null | { gad2: number; phq2: number; phq4: number };
@@ -81,11 +85,11 @@ export interface TurnInput {
   action: 'answer' | 'unknown' | 'decline' | 'move-on';
   text?: string; fields?: Record<string, string>;
   channel?: SourceChannel;
-  /** An explicit confirmation of the choice for this exact displayed prompt/revision. */
+  /** An explicit confirmation for this exact prompt/revision. Typed choices use text + control; PHQ uses buttons without this payload. */
   choiceConfirmation?: { optionTranscript: string; confirmationTranscript: string; confirmationMethod: 'voice' | 'control' };
   /** Retain recognized choice-attempt words without interpreting or filling any answer. */
   choiceTranscriptOnly?: true;
-  /** Separate initial words when a confirmation attempt remains unscored. */
+  /** Separate original speech for an unscored attempt or a typed choice correction. */
   priorChoiceTranscript?: string;
 }
 
@@ -105,6 +109,8 @@ export interface StaffQueueItem {
   responsibility: 'medical' | 'nutrition' | 'administrative';
 }
 export interface StaffHandoffView {
+  workflow?: { completion: string; contextRequirement: string };
+  contextSources?: { kind: 'appointment' | 'plan' | 'prior-submission'; reference: string; recordedAt: string; truncated?: boolean }[];
   id: string; patientName: string; title: string; receivedAt?: string; version: number;
   completeness?: 'partial' | 'complete'; topics: TopicView[]; sources: SourceTurn[];
   deliveryState?: DeliveryView['state']; anchorsVerified?: boolean; canResume?: boolean;
@@ -116,6 +122,9 @@ export interface StaffRecoveryItem { id: string; patientName: string; scenarioTi
 
 /** Same-origin JSON API contract. All mutation calls require Origin verification and an HttpOnly session. */
 export interface ClinicApiContract {
+  'GET /api/clinic/staff/invitations': { response: import('./invitations.js').InvitationOptionsView };
+  'POST /api/clinic/staff/invitations': { body: { patient: string; scenario: ScenarioId; requestId: string }; response: import('./invitations.js').InvitationIssueView };
+  'POST /api/clinic/invitations/redeem': { body: { token: string; syntheticAcknowledged: true }; response: ClinicSessionView };
   'GET /api/clinic/config': { response: ClinicConfig };
   'POST /api/clinic/sessions': { body: { scenario: ScenarioId; syntheticAcknowledged: true }; response: ClinicSessionView };
   'GET /api/clinic/session': { response: ClinicSessionView };
@@ -136,7 +145,7 @@ export interface ClinicApiContract {
   'POST /api/staff/login': { body: { email: string; password: string }; response: StaffIdentity };
   'GET /api/staff/me': { response: StaffIdentity };
   'POST /api/staff/logout': { body: Record<string, never>; response: { loggedOut: true } };
-  'GET /api/staff/queue': { response: { items: StaffQueueItem[]; recovery: StaffRecoveryItem[]; nextCursor?: string; recoveryCursor?: string } };
+  'GET /api/staff/queue': { response: { items: StaffQueueItem[]; recovery: StaffRecoveryItem[]; /** Handoffs captured under an earlier questionnaire version, kept in the record but not readable by this release. */ earlierVersion?: number; nextCursor?: string; recoveryCursor?: string } };
   'GET /api/staff/handoffs/:id': { response: StaffHandoffView };
   'POST /api/staff/handoffs/:id/resume': { body: Record<string, never>; response: StaffHandoffView };
   'POST /api/staff/handoffs/:id/actions': { body: { actionId: string; workId: string; expectedVersion: number; expectedWorkVersion: string; outcome: 'reviewed' | 'needs-information' | 'declined' | 'resolved'; note: string }; response: StaffHandoffView };
@@ -153,3 +162,12 @@ export interface StaffSafetyReview {
 }
 export interface StaffSafetyAction { actionId: string; signalId?: string; outcome: 'no-concern' | 'contacted-patient' | 'escalated'; note: string; by: string; role: string; at: string; }
 export interface StaffSafetyView { sessionId: string; patientName: string; scenario: string; reviews: StaffSafetyReview[]; actions: StaffSafetyAction[]; }
+
+/** Display labels for structured administrative choices. Unlisted values display as-is. */
+export const administrativeChoiceLabels: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  issueType: { 'bill-question': 'A bill question', 'coverage-question': 'A coverage question', 'payment-question': 'A payment question', 'other-request': 'Another billing request' },
+  requestedResolution: { explanation: 'An explanation', 'review-possible-error': 'Review a possible error', 'payment-options': 'Discuss payment options', 'contact-me': 'Contact me' },
+  intent: { request: 'Request a visit', change: 'Change a visit', cancel: 'Cancel a visit' },
+  visitCategory: { 'first-visit': 'First visit', 'follow-up': 'Follow-up visit', 'not-sure': 'Not sure' },
+  timezone: { 'America/New_York': 'Eastern time', 'America/Chicago': 'Central time', 'America/Denver': 'Mountain time', 'America/Los_Angeles': 'Pacific time', 'America/Anchorage': 'Alaska time', 'Pacific/Honolulu': 'Hawaii time' },
+};

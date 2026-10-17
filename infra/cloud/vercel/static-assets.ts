@@ -31,14 +31,16 @@ const headers = {
   'Permissions-Policy': 'microphone=(self), camera=(), display-capture=()',
   'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
 };
-export function serveClinicAsset(request: Request, assets: ClinicAssets, canonicalOrigin?: string): Response {
+/** `connect` adds fixed provider origins (hosted hands-free voice opens Deepgram directly). */
+export function serveClinicAsset(request: Request, assets: ClinicAssets, canonicalOrigin?: string, connect: readonly string[] = []): Response {
   const path = new URL(request.url).pathname;
   if (!['GET', 'HEAD'].includes(request.method)) return new Response(null, { status: 405, headers: { ...headers, Allow: 'GET, HEAD', 'Cache-Control': 'no-store' } });
-  const asset = assets.get(path === '/' || path === '/staff' || path === '/staff/' ? '/index.html' : path);
+  const asset = assets.get(path === '/' || path === '/staff' || path === '/staff/' || path === '/join' ? '/index.html' : path);
   if (!asset) return new Response('Not found', { status: 404, headers: { ...headers, 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } });
   const etag = `"${asset.digest}"`, cache = asset.immutable ? 'public, max-age=31536000, immutable' : 'no-cache';
   const socketOrigin = canonicalOrigin ? canonicalOrigin.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:') : undefined;
-  const responseHeaders = { ...headers, ...(socketOrigin ? { 'Content-Security-Policy': headers['Content-Security-Policy'].replace("connect-src 'self'", `connect-src 'self' ${socketOrigin}`) } : {}), 'Content-Type': asset.contentType, 'Cache-Control': cache, ETag: etag };
+  const sources = [socketOrigin, ...connect].filter(Boolean).join(' ');
+  const responseHeaders = { ...headers, ...(sources ? { 'Content-Security-Policy': headers['Content-Security-Policy'].replace("connect-src 'self'", `connect-src 'self' ${sources}`) } : {}), 'Content-Type': asset.contentType, 'Cache-Control': cache, ETag: etag };
   if (request.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers: responseHeaders });
   return new Response(request.method === 'HEAD' ? null : new Uint8Array(asset.body), { headers: { ...responseHeaders, 'Content-Length': String(asset.body.byteLength) } });
 }

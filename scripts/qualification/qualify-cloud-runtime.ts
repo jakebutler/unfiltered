@@ -36,7 +36,8 @@ const projectResponse = await fetcher(new URL(`fhir/R4/Project/${config.projectI
 if (!projectResponse.ok) throw new Error(`local-project-read-${projectResponse.status}`);
 const project = await projectResponse.json();
 if (project.id !== config.projectId || !project.meta?.versionId) throw new Error('local-project-feature-not-observed');
-const observation = { projectId: project.id, projectVersion: project.meta.versionId, features: project.features ?? [], observedAt: new Date().toISOString() };
+// Local calibration: the super-admin Project read must agree with the runtime /auth/me projection sealed below.
+const observation = { projectId: project.id, projectVersion: project.meta.versionId, features: [...(project.features ?? [])].sort(), observedAt: new Date().toISOString() };
 const accessToken = await token(config.clientId, config.clientSecret);
 const medplum = { baseUrl: new URL('fhir/R4/', config.medplumBaseUrl).href, accessToken, mode: 'local' as const, timeoutMs: 10000 };
 const patient = config.patients['first-intake'];
@@ -48,7 +49,8 @@ const actors: QualifiedActor[] = [], sessions: Request[] = [], appEvidence: unkn
 for (const user of qualificationUsers) { const auth = staffAuthentication(config, fetcher, cookies(config.cookieSecret, false)); const login = await auth.login(user.email, user.password); const request = new Request(new URL('api/staff/me', config.origin), { headers: { cookie: login.cookie.split(';')[0] } }); sessions.push(request); actors.push(await auth.read(request)); }
 let application;
 try { application = await qualifyConditionalClinic(config, new MedplumClient(medplum, fetcher), report.qualification, actors, fetcher, value => appEvidence.push(value)); } finally { for (const request of sessions) await staffAuthentication(config, fetcher, cookies(config.cookieSecret, false)).logout(request); }
-const attestation = await sealDeploymentQualification(config, medplum, report, observation, fetcher, application);
+const attestation = await sealDeploymentQualification(config, medplum, report, fetcher, application);
+if (JSON.stringify(attestation.payload.projectFeature.features) !== JSON.stringify(observation.features)) throw new Error('local-auth-me-project-features-calibration-mismatch');
 const qualifiedConfig = { ...config, storageQualification: attestation };
 phase = 'runtime-cold-start';
 await runtimeProvider(qualifiedConfig, fetcher)();

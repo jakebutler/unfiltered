@@ -1,24 +1,32 @@
+import { draftPatientFixture } from './patient-fixture.js';
+import { scenarioForWorkflowTopic } from '../../clinic-content/src/scenarios.js';
 import { typedCaptureBound } from './provisional-draft.js';
 import { prepareFinalRepresentation, type FinalRepresentationQualification } from './final-representation.js';
 import { nativeRepresentationAuthority, type TrustedRepresentationAuthority } from '../../clinical-core/src/representation-review.js';
 import { buildNativeQuestionnaireCapture, projectNativeQuestionnaireState } from '../../clinical-core/src/questionnaire-response.js';
-import { nativeCaptureComplete, nativeTopics, nativeScenarioTopics, nativeRoutingDecisions, deriveNativeRoutingContext, nextNativeGuidedField, guardNativePrompt, NATIVE_QUESTIONNAIRE_CANONICAL, NATIVE_QUESTIONNAIRE_VERSION, type NativeRoutingContext } from '../../clinic-content/src/native-questionnaire.js';
+import { nativeCaptureComplete, nativeTopics, nativeScenarioTopics, nativeRoutingDecisions, deriveNativeRoutingContext, nextNativeGuidedField, activeNativeGuidedPrompt, guardNativePrompt, NATIVE_QUESTIONNAIRE_CANONICAL, NATIVE_QUESTIONNAIRE_VERSION, type NativeRoutingContext } from '../../clinic-content/src/native-questionnaire.js';
 import { administrativeLogisticsSchema, type AdministrativeLogistics } from '../../clinical-core/src/domain.js';
 import { streamSpeechScopeDigest } from './adaptive-stream-session.js';
 import { choiceConfirmationSpeech, exactSpokenChoice, exactChoiceConfirmation } from '../../clinic-contract/src/choice-voice.js';
+import { chooseOptionInstruction, isGuidedChoicePrompt } from '../../clinic-contract/src/guided-choice.js';
 import { scorePhq4, scenarioTopics, guidedFieldForPath, aggregateTargets, applyGuidedAnswer, addCollectionItem, finishCollection, createClinicContent, diabetesBranchApplicability, evaluateTopic, nextGuidedField, parseGuidedValue, mentalHealthOptions, type GuidedField, type TopicDefinition, type TopicResponse, type SlotAnswer, type SlotAnswers, type SlotDefinition } from '../../clinic-content/src/index.js';
 import { canonicalJson, digest, confirmSubmission, unresolvedRecognitionSourceIds, type ContentContract, type Submission, type SufficiencyAssessment } from '../../clinical-core/src/domain.js';
-import { conversationSpeech } from '../../clinic-contract/src/index.js';
+import { administrativeChoiceLabels, conversationSpeech } from '../../clinic-contract/src/index.js';
 import type { ClinicSessionView, PromptView, TopicView, TurnInput, ScenarioId, SourceSpan } from '../../clinic-contract/src/index.js';
-import { escalation, escalationCopy } from './safety.js';
-import { screenSafety } from './safety-screen.js';
+import { escalation, escalationCopy, safetyVersion } from './safety.js';
+import { safetySignalSeed } from './safety-screen.js';
 import { ApiFailure, type Draft, type ClinicApiConfig } from './types.js';
 import { adaptiveView, requireNoPendingInterpretation } from './adaptive-session.js';
 import { scopedQuestion } from './dialogue.js';
+import { specificityFindings, specificityGaps, specificityNote, specificityTerminalText } from './specificity.js';
+import { specificityQuote } from '../../clinic-content/src/specificity.js';
 import { interpretationReview } from './interpretation-review.js';
 import { projectProvisional, policyQualified, focusedPolicyRevision, typedPolicyRevision, type ProvisionalQualification } from './provisional-projection.js';
-export const scenarioTitles: Record<ScenarioId, string> = { 'first-intake': 'First visit intake', 'pre-visit': 'Before your visit', 'non-visit': 'Check in with your care team', 'post-visit': 'After your visit', billing: 'Billing help', scheduling: 'Scheduling help', refill: 'Prescription refill request' };
-const choiceLabels: Record<string, string> = { 'bill-question': 'A bill question', 'coverage-question': 'A coverage question', 'payment-question': 'A payment question', 'other-request': 'Another billing request', explanation: 'An explanation', 'review-possible-error': 'Review a possible error', 'payment-options': 'Discuss payment options', 'contact-me': 'Contact me', 'first-visit': 'First visit', 'follow-up': 'Follow-up visit', 'not-sure': 'Not sure', 'America/New_York': 'Eastern time', 'America/Chicago': 'Central time', 'America/Denver': 'Mountain time', 'America/Los_Angeles': 'Pacific time', 'America/Anchorage': 'Alaska time', 'Pacific/Honolulu': 'Hawaii time' };
+import { scenarioTitles } from '../../clinic-content/src/workflows.js';
+export { scenarioTitles } from '../../clinic-content/src/workflows.js';
+// Intent has staff-only display labels; patient choices retain their raw labels.
+const choiceLabels: Record<string, string> = Object.fromEntries(Object.entries(administrativeChoiceLabels).filter(([field]) => field !== 'intent').flatMap(([, labels]) => Object.entries(labels)));
+
 const titles: Record<string, string> = { Q01: 'Your priorities', Q02: 'Current symptoms', Q03: 'Weight through your life', Q04: 'Height and weight', Q05: 'Prior approaches', Q06: 'Medical conditions', Q07: 'Surgery and hospital care', Q08: 'Medicines and supplements', Q09: 'Allergies and reactions', Q10: 'Family history', Q11: 'A day of food and drink', Q12: 'Eating concerns', Q13: 'Access to food', Q14: 'Movement and function', Q15: 'Sleep', Q16: 'Mood, anxiety and support', Q17: 'Substance use', Q18: 'Pregnancy and reproductive context', Q19: 'Care team and records', Q20: 'Access to care', Q21: 'Communication preferences', Q22: 'Other questions', DM: 'Diabetes and prediabetes' };
 function detailProvenance(d: Draft, topicId: string, path: string, sourceIds: string[]): SourceSpan[] {
     return Object.values(d.adaptive?.operations ?? {}).flatMap(op => op.provenance ?? []).filter(p => p.topicId === topicId && p.path === path).flatMap(p => {
@@ -32,7 +40,8 @@ function detailProvenance(d: Draft, topicId: string, path: string, sourceIds: st
 export function conversation(config: ClinicApiConfig, options: { provisionalQualification?: ProvisionalQualification; finalRepresentationQualification?: FinalRepresentationQualification } = {}) {
     const register = createClinicContent({ mentalHealth: config.mentalHealth });
     const native = config.mentalHealth === 'phq4';
-    const nativeContext = (d: Draft): NativeRoutingContext | undefined => native ? deriveNativeRoutingContext(d.topics, { validSourceIds: new Set(d.turns.filter(t => t.role === 'patient' && t.channel !== 'unreviewed-transcript').map(t => t.id)) }, config.patients[d.scenario].nativeContext) : undefined;
+    const recordContext = (d: Draft): NativeRoutingContext => ({ ...d.priorContext?.context, ...draftPatientFixture(config, d).nativeContext });
+    const nativeContext = (d: Draft): NativeRoutingContext | undefined => native ? deriveNativeRoutingContext(d.topics, { validSourceIds: new Set(d.turns.filter(t => t.role === 'patient' && t.channel !== 'unreviewed-transcript').map(t => t.id)) }, recordContext(d)) : undefined;
     const evidence = (d: Draft) => ({ validSourceIds: new Set(d.turns.filter(t => t.role === 'patient').map(t => t.id)) });
     const focusedQualified = policyQualified(options.provisionalQualification, focusedPolicyRevision);
     const typedQualified = policyQualified(options.provisionalQualification, typedPolicyRevision);
@@ -136,7 +145,9 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
             const r = topicResponse(d, topic);
             if (topic.id === 'Q18' && !r.presented)
                 return { topic, field: { path: '__applicability', label: 'Is this topic relevant for your clinician to consider?', kind: 'choice', choices: ['__applicable', '__topic-not-applicable'], promptIds: ['Q18'], acceptsNegative: false, acceptsNotApplicable: false, action: 'answer', allowedStates: ['known', 'unknown', 'declined'] } };
-            const field = activeTopic === topic.id && activeSlot ? fieldAt(topic, r, activeSlot) : native ? nextNativeGuidedField(topic, r, evidence(d), { topics: effective(d, true).responses as Record<string, TopicResponse>, context: nativeContext(d) }) : nextGuidedField(topic, r, evidence(d));
+            let field = activeTopic === topic.id && activeSlot ? fieldAt(topic, r, activeSlot) : native ? nextNativeGuidedField(topic, r, evidence(d), { topics: effective(d, true).responses as Record<string, TopicResponse>, context: nativeContext(d) }) : nextGuidedField(topic, r, evidence(d));
+            if (native && activeSlot && topic.id === register.scenarios[d.scenario].workflowId && field && !activeNativeGuidedPrompt(topic, field, { ...nativeNavigation(d)!, scenario: d.scenario }, evidence(d)))
+                field = nextNativeGuidedField(topic, r, evidence(d), { topics: effective(d, true).responses as Record<string, TopicResponse>, context: nativeContext(d) });
             if (field)
                 return { topic, field };
         }
@@ -146,12 +157,11 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         if (!c)
             return;
         const { topic, field } = c;
-        let text = register.promptsById[field.promptIds[0]]?.text ?? field.label;
-        const selectedPromptId = native && topic.id === 'W02' && field.promptIds[0] === 'S01' && !nativeContext(d)?.appointment ? 'S01a' : native && topic.id === 'W04' && field.promptIds[0] === 'S03' && !nativeContext(d)?.plan ? 'S03a' : field.promptIds[0];
-        text = register.promptsById[selectedPromptId]?.text ?? text;
-        const verifiedContext = nativeContext(d);
-        if (selectedPromptId === 'S01' && verifiedContext?.appointment) text = text.replace('[verified date/time/timezone]', `${verifiedContext.appointment.startsAt} ${verifiedContext.appointment.timezone}`).replace('[dated prior update]', verifiedContext.appointment.priorUpdateAt);
-        if (selectedPromptId === 'S03' && verifiedContext?.plan) text = text.replace('[demo author/role]', verifiedContext.plan.author).replace('[date]', verifiedContext.plan.recordedAt);
+        const workflow = native && topic.id === register.scenarios[d.scenario].workflowId;
+        const selected = workflow ? activeNativeGuidedPrompt(topic, field, { ...nativeNavigation(d)!, scenario: d.scenario }, evidence(d)) : undefined;
+        if (workflow && !selected) return;
+        const selectedPromptId = selected?.promptId ?? field.promptIds[0];
+        let text = selected?.text ?? register.promptsById[selectedPromptId]?.text ?? field.label;
         if (native && field.path !== '__applicability' && !/^MH0[1-4]$/.test(field.path)) {
             const readiness = evaluateTopic(topic, topicResponse(d, topic), evidence(d));
             const alreadySatisfied = readiness.slots.some(slot => slot.id !== field.path && slot.state === 'sufficient' && slot.promptIds.includes(selectedPromptId));
@@ -207,27 +217,32 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         const projected = effective(d), required = definitions(d), requiredIds = new Set(required.map(topic => topic.id));
         const admittedSources = new Set(Object.values(d.adaptive?.operations ?? {}).filter(op => op.status === 'applied' && op.stream?.capture === 'saved' && typedCaptureBound(d,op) && op.stream.provisional?.policy === options.provisionalQualification?.policy && (op.stream.provisional?.interpretationProfile ?? op.stream.sourceInterpretation?.protocol) === (typedQualified ? 'turn-bound-typed-v1' : focusedQualified ? 'source-first-focused-v1' : undefined)).map(op => op.sourceId));
         const shown = [...required, ...captureDefinitions(d).filter(topic => !requiredIds.has(topic.id) && projected.claims.some(claim => claim.topicId === topic.id && claim.status !== 'superseded'))];
+        const findings = specificityFindings(projected.responses, d.specificity);
         return shown.map(t => {
             const r = projected.responses[t.id] ?? { presented: false, answers: {} }, ready = evaluateTopic(t, topicResponse(d, t), evidence(d));
             const details = rows(t.slots, r.answers).map(row => {
                 const proposed = projected.provenance.filter(item => item.topicId === t.id && item.path === row.id);
                 const provenance = [...detailProvenance(d, t.id, row.id, row.sourceIds), ...proposed.flatMap(item => [...item.evidence.map(span => ({ ...span, transform: 'provisional-patient-report' })), ...(item.supersededEvidence ?? []).map(span => ({ ...span, transform: 'superseded-patient-report' }))])];
-                return { ...row, sourceIds: [...new Set([...row.sourceIds, ...proposed.flatMap(item => item.sourceIds)])], ...(provenance.length ? { provenance } : {}), ...(proposed.length ? { interpretation: { qualified: qualified && proposed.every(item => item.sourceIds.every(id => admittedSources.has(id))), status: row.state === 'conflicting' ? 'conflicting' as const : 'proposed' as const } } : {}) };
+                const finding = findings.find(item => item.topicId === t.id && item.path === row.id), specificity = finding && specificityNote(finding);
+                return { ...row, sourceIds: [...new Set([...row.sourceIds, ...proposed.flatMap(item => item.sourceIds)])], ...(provenance.length ? { provenance } : {}), ...(proposed.length ? { interpretation: { qualified: qualified && proposed.every(item => item.sourceIds.every(id => admittedSources.has(id))), status: row.state === 'conflicting' ? 'conflicting' as const : 'proposed' as const } } : {}), ...(specificity ? { specificity } : {}) };
             });
+            const vague = specificityGaps(findings.filter(item => item.topicId === t.id));
             const answered = details.filter(detail => detail.state !== 'not-asked');
             const sourceIds = [...new Set([...details.flatMap(detail => detail.sourceIds), ...(r.applicabilitySourceIds ?? [])])];
             const gaps = projected.gaps.filter(gap => gap.topicId ? gap.topicId === t.id : gap.evidence.some(span => projected.claims.some(claim => claim.topicId === t.id && claim.sourceId === span.sourceId)));
             const directScreen = d.topics.Q16 ?? { presented: false, answers: {} }; // PHQ is direct exact choice only.
             return { id: t.id, title: titles[t.id] ?? scenarioTitles[d.scenario], required: requiredIds.has(t.id) && t.presentation !== 'O', ...(r.stopped ? { stopReason: r.stopped } : {}),
-                status: requiredIds.has(t.id) && ready.sufficient ? 'ready-for-review' : r.stopped || gaps.length ? 'stopped-with-gaps' : answered.length || r.presented ? 'more-detail-needed' : 'not-started',
-                missingDetails: [...ready.unresolvedSlotIds.map(id => details.find(detail => detail.id === id)?.label ?? id), ...(details.some(detail => detail.interpretation?.qualified === false) ? ['Proposed interpretation has not been qualified for completeness.'] : [])], details,
+                status: requiredIds.has(t.id) && ready.sufficient && !vague.length ? 'ready-for-review' : r.stopped || gaps.length || vague.length && vague.every(item => item.state?.terminal) ? 'stopped-with-gaps' : answered.length || r.presented ? 'more-detail-needed' : 'not-started',
+                missingDetails: [...ready.unresolvedSlotIds.map(id => details.find(detail => detail.id === id)?.label ?? id), ...vague.map(item => `${item.contract.missing}: “${specificityQuote(item.value)}”`), ...(details.some(detail => detail.interpretation?.qualified === false) ? ['Proposed interpretation has not been qualified for completeness.'] : [])], details,
                 ...(t.id === 'Q16' ? { screening: { ...scorePhq4(directScreen.answers, screenContext(d, directScreen)), title: 'PHQ-4 for clinician review', text: screenText(d, t, directScreen).trim() } } : {}),
                 ...(r.applicability === 'not-applicable' ? { answer: { text: 'Patient explicitly marked this topic not applicable.', state: 'negative' as const, sourceIds } }
-                    : answered.length ? { answer: { text: answered.map(detail => `${detail.label}: ${detail.interpretation ? 'Proposed patient report — ' : ''}${detail.text ?? detail.state}`).join('\n') + screenText(d, t, directScreen),
+                    : answered.length ? { answer: { text: answered.map(detail => `${detail.label}: ${detail.interpretation ? 'Proposed patient report — ' : ''}${detail.text ?? detail.state}${detail.specificity?.needsDetail ? ` [needs detail: ${detail.specificity.needsDetail}${detail.specificity.settled ? ` (${specificityTerminalText[detail.specificity.settled]})` : ''}]` : ''}`).join('\n') + screenText(d, t, directScreen),
                         state: (ready.sufficient ? 'answered' : answered.every(detail => detail.state === 'declined') ? 'declined' : answered.every(detail => detail.state === 'unknown') ? 'unknown' : answered.some(detail => detail.state === 'conflicting') ? 'conflicting' : 'answered') as NonNullable<TopicView['answer']>['state'], sourceIds } } : {}) };
         });
     }
-    function complete(d: Draft) { return !unresolvedRecognitionSourceIds(d.turns.filter(turn => turn.role === 'patient').map(turn => ({ id: turn.id, patient: d.patient, kind: turn.corrects ? 'patient-correction' as const : 'patient-statement' as const, text: turn.text, capturedAt: turn.at, ...(turn.channel ? { channel: turn.channel } : {}), ...(turn.corrects ? { corrects: turn.corrects } : {}), ...(turn.displayedPromptId ? { displayedPromptId: turn.displayedPromptId } : {}) })), effective(d, true).responses).length && !d.safety && !unresolvedSources(d).length && !effective(d, true).gaps.length && definitions(d).filter(t => t.presentation !== 'O').every(t => evaluateTopic(t, topicResponse(d, t), evidence(d)).sufficient); }
+    function complete(d: Draft) { return !unresolvedRecognitionSourceIds(d.turns.filter(turn => turn.role === 'patient').map(turn => ({ id: turn.id, patient: d.patient, kind: turn.corrects ? 'patient-correction' as const : 'patient-statement' as const, text: turn.text, capturedAt: turn.at, ...(turn.channel ? { channel: turn.channel } : {}), ...(turn.corrects ? { corrects: turn.corrects } : {}), ...(turn.displayedPromptId ? { displayedPromptId: turn.displayedPromptId } : {}) })), effective(d, true).responses).length && !d.safety && !unresolvedSources(d).length && !effective(d, true).gaps.length && definitions(d).filter(t => t.presentation !== 'O').every(t => evaluateTopic(t, topicResponse(d, t), evidence(d)).sufficient) && !specificityIncomplete(d); }
+    /** A vague answer to a required question keeps the intake partial, on every completeness path. */
+    function specificityIncomplete(d: Draft) { return specificityGaps(specificityFindings(effective(d, true).responses, d.specificity)).some(gap => definitions(d).some(t => t.id === gap.topicId && t.presentation !== 'O')); }
     function view(d: Draft, identity = true, adaptiveAvailable = false): ClinicSessionView {
         let exchange = d.adaptive?.exchange?.prompt;
         if (native && exchange) {
@@ -245,7 +260,7 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
                 }
             } catch { exchange = undefined; }
         }
-        const natural = adaptiveAvailable && d.adaptive?.mode === 'adaptive' && !d.activeSlot && d.phase === 'conversation' && !d.safety?.paused; const currentPrompt: PromptView | undefined = natural ? exchange ? exchange.kind === 'instrument' ? prompt(d) : { id: `${exchange.topicId}:${exchange.promptId}`, topicId: exchange.topicId, text: exchange.text, purpose: exchange.labels.join('; '), mode: 'adaptive' } : prompt(d) : prompt(d); return { id: d.id, scenario: d.scenario, title: scenarioTitles[d.scenario], persona: { displayName: config.patients[d.scenario].displayName, description: config.patients[d.scenario].description }, phase: identity ? d.phase : 'identity', revision: d.revision, savedAt: d.savedAt, completeness: identity ? d.confirmed?.confirmation.submission.completeness ?? d.preview?.confirmation.submission.completeness ?? (complete(d) ? 'complete' : 'partial') : 'partial', topics: identity ? (d.phase === 'review' && d.preview ? d.preview.topics : d.confirmed ? d.confirmed.topics : topics(d)) : [], turns: identity ? d.turns : [], ...(identity ? { speechScopeDigest: streamSpeechScopeDigest(d), currentPrompt, ...(d.safetySignals?.some(signal => !signal.review) && !d.confirmed ? { safetyReview: { pendingSignalIds: d.safetySignals.filter(signal => !signal.review).map(signal => signal.id) } } : {}), adaptive: adaptiveView(d, adaptiveAvailable), delivery: d.delivery, previousDelivery: d.previousDelivery, notice: d.safety ? { tone: d.safety.rule === 'E05' ? 'attention' as const : 'urgent' as const, text: d.safety.text + (d.delivery?.state === 'received' ? ' Your confirmed handoff was received. See the actual staff work below; receipt does not mean care was provided.' : d.confirmed ? ' Delivery is not confirmed. Help does not depend on sending this handoff.' : ' Your draft has not been sent. You can review and send a partial handoff, or leave now.') } : d.notice ?? { tone: 'info' as const, text: config.patients[d.scenario].context ?? 'This conversation is saved for your review. It does not replace urgent care.' } } : {}) }; }
+        const natural = adaptiveAvailable && d.adaptive?.mode === 'adaptive' && !d.activeSlot && d.phase === 'conversation' && !d.safety?.paused; const currentPrompt: PromptView | undefined = natural ? exchange ? exchange.kind === 'instrument' ? prompt(d) : { id: `${exchange.topicId}:${exchange.promptId}`, topicId: exchange.topicId, text: exchange.text, purpose: exchange.labels.join('; '), mode: 'adaptive' } : prompt(d) : prompt(d); return { id: d.id, scenario: d.scenario, title: scenarioTitles[d.scenario], persona: { displayName: draftPatientFixture(config, d).displayName, description: draftPatientFixture(config, d).description }, phase: identity ? d.phase : 'identity', revision: d.revision, savedAt: d.savedAt, completeness: identity ? d.confirmed?.confirmation.submission.completeness ?? d.preview?.confirmation.submission.completeness ?? (complete(d) ? 'complete' : 'partial') : 'partial', topics: identity ? (d.phase === 'review' && d.preview ? d.preview.topics : d.confirmed ? d.confirmed.topics : topics(d)) : [], turns: identity ? d.turns : [], ...(identity ? { speechScopeDigest: streamSpeechScopeDigest(d), currentPrompt, ...(d.safetySignals?.some(signal => !signal.review) && !d.confirmed ? { safetyReview: { pendingSignalIds: d.safetySignals.filter(signal => !signal.review).map(signal => signal.id) } } : {}), adaptive: adaptiveView(d, adaptiveAvailable), delivery: d.delivery, previousDelivery: d.previousDelivery, notice: d.safety && (d.safety.paused || !d.safetyBanner || d.confirmed) ? { tone: d.safety.rule === 'E05' ? 'attention' as const : 'urgent' as const, text: d.safety.text + (d.delivery?.state === 'received' ? ' Your confirmed handoff was received. See the actual staff work below; receipt does not mean care was provided.' : d.confirmed ? ' Delivery is not confirmed. Help does not depend on sending this handoff.' : ' Your draft has not been sent. You can review and send a partial handoff, or leave now.') } : d.safetyBanner && !d.confirmed ? { tone: 'attention' as const, text: `${escalationCopy[d.safetyBanner.rule]} You can keep going with the intake; this message will be flagged for clinician review.` } : d.notice ?? { tone: 'info' as const, text: draftPatientFixture(config, d).context ?? 'This conversation is saved for your review. It does not replace urgent care.' } } : {}) }; }
     function change(d: Draft) { const n = structuredClone(d); if (n.confirmed) {
         n.questionnaireHistory = structuredClone(n.confirmed.confirmation.submission.questionnaireCapture?.inactiveHistory ?? []);
         n.prior = { version: n.version, digest: n.confirmed.digest };
@@ -281,7 +296,7 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
             throw new ApiFailure('stale-prompt', 409, true);
         const speech = input.channel === 'confirmed-transcript' || input.channel === 'unreviewed-transcript';
         if (input.expectedRevision !== d.revision) throw new ApiFailure('stale-session', 409);
-        if (speech && input.action === 'answer' && /^MH0[1-4]$/.test(c.field.path) && !input.choiceConfirmation && !input.choiceTranscriptOnly) throw new ApiFailure('explicit-screening-choice-required', 409);
+        if ((speech || input.choiceConfirmation) && input.action === 'answer' && /^MH0[1-4]$/.test(c.field.path) && !input.choiceTranscriptOnly) throw new ApiFailure('explicit-screening-choice-required', 409);
         const p = prompt(n)!, id = crypto.randomUUID(), last = n.turns.at(-1), now = new Date(Math.max(Date.now(), last ? Date.parse(last.at) + 1 : 0)).toISOString();
         let text = input.text?.trim() ?? input.fields?.value?.trim() ?? '';
         const normalListing = c.field.kind === 'collection' && input.action === 'answer' && ['__add', '__done'].includes(text);
@@ -291,59 +306,80 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
           ? n.turns.filter(t => t.role === 'patient' && t.channel === 'unreviewed-transcript' && t.displayedPromptId === c.topic.id + ':' + c.field.path && t.text.trim() !== input.text!.trim() && !n.turns.some(later => later.channel === 'confirmed-transcript' && later.displayedPromptId === t.displayedPromptId && Date.parse(later.at) > Date.parse(t.at))).at(-1)?.id : undefined;
         const prior = normalListing || input.choiceTranscriptOnly ? undefined : rows(c.topic.slots, effective(n).responses[c.topic.id]?.answers ?? {}).find(r => r.id === c.field.path)?.sourceIds.at(-1) ?? unreviewedRaw;
         const selected = p.choices?.find(x => x.value === text);
+        const choiceOnly = isGuidedChoicePrompt(p);
+        if (choiceOnly && input.action === 'answer' && input.channel === 'confirmed-transcript' && !input.choiceConfirmation && !input.choiceTranscriptOnly) throw new ApiFailure('explicit-choice-confirmation-required', 409);
         if (input.choiceTranscriptOnly && (input.action !== 'answer' || input.channel !== 'unreviewed-transcript' || !p.choices?.length || !input.text?.trim() || input.choiceConfirmation || input.fields)) throw new ApiFailure('invalid-choice-transcript');
-        if (input.priorChoiceTranscript && (!input.choiceTranscriptOnly || !exactSpokenChoice(p, input.priorChoiceTranscript))) throw new ApiFailure('invalid-choice-transcript');
         const confirmation = input.choiceConfirmation;
-        if (confirmation && (input.action !== 'answer' || input.channel !== 'confirmed-transcript' || !selected
+        const typedCorrection = choiceOnly && input.channel === 'text' && input.action === 'answer' && Boolean(input.priorChoiceTranscript);
+        if (input.priorChoiceTranscript && !(input.choiceTranscriptOnly && exactSpokenChoice(p, input.priorChoiceTranscript) || typedCorrection)) throw new ApiFailure('invalid-choice-transcript');
+        if (confirmation && (input.action !== 'answer' || !(input.channel === 'confirmed-transcript' || input.channel === 'text' && confirmation.confirmationMethod === 'control') || !selected
           || exactSpokenChoice(p, confirmation.optionTranscript)?.value !== selected.value
           || confirmation.confirmationMethod === 'voice' && exactChoiceConfirmation(confirmation.confirmationTranscript) !== 'confirm'
           || confirmation.confirmationMethod === 'control' && confirmation.confirmationTranscript !== '')) throw new ApiFailure('explicit-choice-confirmation-required', 409);
         const confirmationId = confirmation ? `confirmation-${id}` : undefined;
+        const answerSourceIds = confirmationId ? [id, confirmationId] : [id];
+        const safetyCandidates = [...(typedCorrection ? [{ sourceId: `initial-${id}`, text: input.priorChoiceTranscript! }] : []), { sourceId: id, text }];
         // Speech source text stays verbatim; interpreted field values remain separate below.
-        const sourceText = speech && input.action === 'answer' && input.text !== undefined ? confirmation?.optionTranscript ?? input.text : input.action === 'answer' ? `${c.field.label}: ${selected?.label ?? text}${input.fields?.feet ? ` (${input.fields.feet} ft ${input.fields.inches ?? ''} in)` : ''}` : `${c.field.label}: ${input.action === 'move-on' ? 'Move on from this topic' : input.action === 'unknown' ? "I don't know" : 'Prefer not to answer'}`;
-        n.turns.push({ id: `p-${id}`, role: 'assistant', text: speech && p.choices?.length ? conversationSpeech({ currentPrompt: p })!.text : p.text, at: now }, { id, role: 'patient', text: sourceText, at: now, channel: input.channel ?? 'text', ...(speech ? { displayedPromptId: p.id } : {}), ...(prior ? { corrects: prior } : {}) });
+        const unselectedChoice = choiceOnly && input.action === 'answer' && !selected;
+        const sourceText = confirmation?.optionTranscript ?? (speech && input.action === 'answer' && input.text !== undefined ? input.text : unselectedChoice ? input.text ?? text : input.action === 'answer' ? `${c.field.label}: ${selected?.label ?? text}${input.fields?.feet ? ` (${input.fields.feet} ft ${input.fields.inches ?? ''} in)` : ''}` : `${c.field.label}: ${input.action === 'move-on' ? 'Move on from this topic' : input.action === 'unknown' ? "I don't know" : 'Prefer not to answer'}`);
+        if (!unselectedChoice) n.turns.push({ id: `p-${id}`, role: 'assistant', text: speech && p.choices?.length ? conversationSpeech({ currentPrompt: p })!.text : p.text, at: now });
+        if (typedCorrection && input.priorChoiceTranscript) n.turns.push({ id: `initial-${id}`, role: 'patient', text: input.priorChoiceTranscript, at: now, channel: 'unreviewed-transcript', displayedPromptId: p.id, displayedPromptText: p.text });
+        n.turns.push({ id, role: 'patient', text: sourceText, at: now, channel: input.channel ?? 'text', ...(speech || confirmation || unselectedChoice ? { displayedPromptId: p.id } : {}), ...(unselectedChoice ? { displayedPromptText: p.text } : {}), ...(prior ? { corrects: prior } : {}) });
         if (confirmation && confirmationId) n.turns.push(
-          { id: `prompt-${confirmationId}`, role: 'assistant', text: choiceConfirmationSpeech(p, selected!.value)!, at: now },
+          { id: `prompt-${confirmationId}`, role: 'assistant', text: speech ? choiceConfirmationSpeech(p, selected!.value)! : `You chose: ${selected!.label}. Confirm this choice to save it.`, at: now },
           { id: confirmationId, role: 'patient', text: confirmation.confirmationMethod === 'voice' ? confirmation.confirmationTranscript : 'Confirmed the displayed choice using Confirm choice.', at: now, channel: confirmation.confirmationMethod === 'voice' ? 'confirmed-transcript' : 'text', displayedPromptId: p.id });
         const ev = evidence(n);
         let r = { ...(n.topics[c.topic.id] ?? { presented: false, answers: {} }), presented: true };
-        const rule = input.action === 'answer' ? escalation(text) : undefined;
+        const ruleSource = input.action === 'answer' ? safetyCandidates.find(candidate => escalation(candidate.text)) : undefined;
+        const rule = ruleSource ? escalation(ruleSource.text) : undefined;
         if (input.choiceTranscriptOnly) {
             if (input.priorChoiceTranscript) n.turns.push({ id: `initial-${id}`, role: 'patient', text: input.priorChoiceTranscript, at: now, channel: 'unreviewed-transcript', displayedPromptId: p.id });
             const candidateRule = escalation(input.text!);
             if (candidateRule) {
-                n.safety = { rule: candidateRule, version: 'E-0.1', sourceId: id, text: escalationCopy[candidateRule], at: now, paused: true };
+                n.safety = { rule: candidateRule, version: safetyVersion, sourceId: id, text: escalationCopy[candidateRule], at: now, paused: true };
                 r = { ...r, stopped: 'safety-interruption' };
             }
             n.topics[c.topic.id] = r;
             delete n.preview; n.phase = 'conversation';
             return synchronize(n);
         }
-        // Tier 1: typed or spoken free text (never a selected choice) queues a background model review.
-        const screen = !rule && input.action === 'answer' && !selected && !text.startsWith('__') ? screenSafety(input.text ?? text) : undefined;
-        if (screen) n.safetySignals = [...(n.safetySignals ?? []), { id: crypto.randomUUID(), sourceId: id, categories: screen.categories, terms: screen.terms, at: now, version: screen.version }];
+        // Tier 1 and scoped floor hits on free text (never a selected choice) become a signal for the model gate.
+        for (const candidate of safetyCandidates) {
+            const screen = !rule && input.action === 'answer' && (!selected || candidate.sourceId !== id) && !candidate.text.startsWith('__') ? safetySignalSeed(candidate.text) : undefined;
+            if (screen) n.safetySignals = [...(n.safetySignals ?? []), { id: crypto.randomUUID(), sourceId: candidate.sourceId, categories: screen.categories, terms: screen.terms, at: now, version: screen.version, ...(screen.floor ? { floor: screen.floor } : {}) }];
+        }
+        if (unselectedChoice || choiceOnly && input.action === 'answer' && input.channel === 'unreviewed-transcript') {
+            if (rule) {
+                n.safety = { rule, version: safetyVersion, sourceId: ruleSource!.sourceId, text: escalationCopy[rule], at: now, paused: true };
+                r = { ...r, stopped: 'safety-interruption' };
+            } else n.notice = { tone: 'info', text: chooseOptionInstruction };
+            n.topics[c.topic.id] = r;
+            delete n.preview; n.phase = 'conversation';
+            return synchronize(n);
+        }
+        if (n.notice?.text === chooseOptionInstruction) delete n.notice;
         if (rule)
             r = { ...r, stopped: 'safety-interruption' };
         else if (c.field.path === '__applicability')
-            r = { ...r, applicability: input.action === 'answer' && text === '__applicable' ? 'applicable' : input.action === 'answer' && text === '__topic-not-applicable' ? 'not-applicable' : 'unknown', applicabilitySourceIds: [id] };
+            r = { ...r, applicability: input.action === 'answer' && text === '__applicable' ? 'applicable' : input.action === 'answer' && text === '__topic-not-applicable' ? 'not-applicable' : 'unknown', applicabilitySourceIds: answerSourceIds };
         else if (input.action === 'move-on')
             r = { ...r, stopped: 'patient-moves-on' };
         else if (input.action === 'answer' && c.field.kind === 'collection' && text === '__add')
-            r = addCollectionItem(c.topic, r, { path: c.field.path, itemId: `i${id.replaceAll('-', '').slice(0, 12)}`, sourceIds: [id] }, ev);
+            r = addCollectionItem(c.topic, r, { path: c.field.path, itemId: `i${id.replaceAll('-', '').slice(0, 12)}`, sourceIds: answerSourceIds }, ev);
         else if (input.action === 'answer' && c.field.kind === 'collection' && text === '__done')
-            r = finishCollection(c.topic, r, { path: c.field.path, sourceIds: [id] }, ev);
+            r = finishCollection(c.topic, r, { path: c.field.path, sourceIds: answerSourceIds }, ev);
         else {
-            if (input.action === 'answer' && ((c.topic.id === 'W05' && c.field.path === 'serviceDate') || (c.topic.id === 'W06' && c.field.path === 'requestedDate')) && (!/^\d{4}-\d{2}-\d{2}$/.test(text) || !Number.isFinite(Date.parse(text)) || new Date(text).toISOString().slice(0, 10) !== text))
+            if (input.action === 'answer' && scenarioForWorkflowTopic(c.topic.id)?.behaviour?.dateSlotIds?.includes(c.field.path) && (!/^\d{4}-\d{2}-\d{2}$/.test(text) || !Number.isFinite(Date.parse(text)) || new Date(text).toISOString().slice(0, 10) !== text))
                 throw new ApiFailure('invalid-logistics-date');
             let a: SlotAnswer;
             if (input.action === 'unknown' || input.action === 'decline')
                 a = { state: input.action === 'unknown' ? 'unknown' : 'declined', sourceIds: [id] };
             else if (text === '__uncertain')
-                a = { state: 'uncertain', sourceIds: [id], note: 'Patient is uncertain; not a confirmed diagnosis.' };
+                a = { state: 'uncertain', sourceIds: answerSourceIds, note: 'Patient is uncertain; not a confirmed diagnosis.' };
             else if (text === '__negative' || text === '__not-applicable')
-                a = { state: text === '__negative' ? 'negative' : 'not-applicable', sourceIds: [id], note: selected?.label };
+                a = { state: text === '__negative' ? 'negative' : 'not-applicable', sourceIds: answerSourceIds, note: selected?.label };
             else
-                a = { state: 'known', value: parseGuidedValue(c.field, c.field.kind === 'height-value' && input.fields?.feet ? { feet: input.fields.feet, inches: input.fields.inches ?? '' } : text), sourceIds: confirmationId ? [id, confirmationId] : [id] };
+                a = { state: 'known', value: parseGuidedValue(c.field, c.field.kind === 'height-value' && input.fields?.feet ? { feet: input.fields.feet, inches: input.fields.inches ?? '' } : text), sourceIds: answerSourceIds };
             r = applyGuidedAnswer(c.topic, r, { path: c.field.path, answer: a }, ev);
             if (c.field.path === 'currentWeightEstimate.value' && a.state === 'known')
                 r = { ...r, answers: { ...r.answers, 'currentWeightEstimate.statedAt': { state: 'known', value: now, sourceIds: [id] } } };
@@ -351,7 +387,7 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         if (input.action === 'decline')
             r = { ...r, stopped: 'patient-declines' };
         if (rule) {
-            n.safety = { rule, version: 'E-0.1', sourceId: id, text: escalationCopy[rule], at: now, paused: true };
+            n.safety = { rule, version: safetyVersion, sourceId: ruleSource!.sourceId, text: escalationCopy[rule], at: now, paused: true };
             n.notice = { tone: rule === 'E05' ? 'attention' : 'urgent', text: escalationCopy[rule] + ' Your draft has not been sent. You can review and send a partial handoff, or leave now.' };
             r = { ...r, stopped: 'safety-interruption' };
         }
@@ -370,7 +406,7 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
         return synchronize(n);
     }
     async function preview(d: Draft, confirmedAt = new Date().toISOString()) { requireNoPendingInterpretation(d); if (!d.turns.some(t => t.role === 'patient'))
-        throw new ApiFailure('answer-required-before-review'); const prepared = native ? await prepareFinalRepresentation(d, captureDefinitions(d), options.provisionalQualification, options.finalRepresentationQualification) : undefined; let representationAuthority: TrustedRepresentationAuthority | undefined; const tv = topics(d), requiredDefs = definitions(d), defs = [...requiredDefs, ...captureDefinitions(d).filter(topic => tv.some(view => view.id === topic.id) && !requiredDefs.some(required => required.id === topic.id))], scenario = register.scenarios[d.scenario]; const owners = [...new Set([...scenario.owners, ...(scenario.missingContextOwner ? [scenario.missingContextOwner] : []), ...(d.safety || ['billing', 'scheduling'].includes(d.scenario) || safetyReviewTopics(d).length ? ['medical' as const] : []), ...(d.safety?.rule === 'E05' ? ['nutrition' as const] : [])])]; const logistics: AdministrativeLogistics = { kind: ['billing', 'scheduling'].includes(d.scenario) ? d.scenario as 'billing' | 'scheduling' : 'other' }; for (const detail of tv.find(topic => topic.id === (d.scenario === 'billing' ? 'W05' : 'W06'))?.details ?? []) { if (detail.state !== 'answered') continue; const candidate = administrativeLogisticsSchema.safeParse({ ...logistics, [detail.id]: detail.text }); if (candidate.success) Object.assign(logistics, candidate.data); } const s: Submission = { submissionId: d.id, version: d.version, patient: d.patient, scenario: d.scenario, contentVersion: `${register.provenance.version}.${register.mentalHealth}`, questionnaire: native ? `${NATIVE_QUESTIONNAIRE_CANONICAL}|${NATIVE_QUESTIONNAIRE_VERSION}` : `https://corvo.example/Questionnaire/clinic/${register.provenance.version}/${d.scenario}/${register.mentalHealth}`, confirmedAt, completeness: complete(d) ? 'complete' : 'partial', ...(d.prior ? { previous: { submissionId: d.id, ...d.prior } } : {}), sources: d.turns.filter(t => t.role === 'patient').map(t => ({ id: t.id, patient: d.patient, kind: t.corrects ? 'patient-correction' : 'patient-statement', text: t.text, capturedAt: t.at, ...(t.channel !== undefined ? { channel: t.channel } : {}), ...(t.corrects ? { corrects: t.corrects } : {}), ...(t.displayedPromptId ? { displayedPromptId: t.displayedPromptId } : {}) })), ...(owners.includes('admin') ? { administrativeLogistics: logistics } : {}), answers: tv.map(t => ({ questionId: t.id, state: t.answer?.state ?? 'not-asked', ...(t.answer ? { text: t.answer.text } : {}), sourceIds: t.answer?.sourceIds ?? [] })), work: owners.map(owner => { const responsibility = owner === 'admin' ? 'administrative' : owner; return { id: responsibility, kind: responsibility === 'administrative' ? 'administrative' : 'clinical', responsibility, owner: config.patients[d.scenario].careTeams[responsibility] }; }) }; if (native) s.questionnaireCapture = await buildNativeQuestionnaireCapture({ scenario: d.scenario, relevantTopicIds: effectiveRelevantTopicIds(d), topics: effective(d, true).responses, validSourceIds: evidence(d).validSourceIds, unreviewedSourceIds: [...new Set([...unresolvedRecognitionSourceIds(s.sources, effective(d, true).responses), ...unresolvedSources(d).map(source => source.sourceId)])], context: prepared ? deriveNativeRoutingContext(prepared.projection.responses, { validSourceIds: new Set(s.sources.filter(source => source.channel !== 'unreviewed-transcript').map(source => source.id)), reviewedFact: prepared.preparingAuthority.reviewedFact }, config.patients[d.scenario].nativeContext) : nativeContext(d), ...(prepared ? { representationAuthority: prepared.preparingAuthority } : {}), inactiveHistory: d.questionnaireHistory ?? d.confirmed?.confirmation.submission.questionnaireCapture?.inactiveHistory });
+        throw new ApiFailure('answer-required-before-review'); const prepared = native ? await prepareFinalRepresentation(d, captureDefinitions(d), options.provisionalQualification, options.finalRepresentationQualification) : undefined; let representationAuthority: TrustedRepresentationAuthority | undefined; const tv = topics(d), requiredDefs = definitions(d), defs = [...requiredDefs, ...captureDefinitions(d).filter(topic => tv.some(view => view.id === topic.id) && !requiredDefs.some(required => required.id === topic.id))], scenario = register.scenarios[d.scenario]; const owners = [...new Set([...scenario.owners, ...(scenario.missingContextOwner ? [scenario.missingContextOwner] : []), ...(scenario.behaviour?.alwaysOwners ?? []), ...(d.safety || safetyReviewTopics(d).length ? ['medical' as const] : []), ...(d.safety?.rule === 'E05' ? ['nutrition' as const] : [])])]; const lg = scenario.behaviour?.logistics; const logistics: AdministrativeLogistics = { kind: lg?.kind ?? 'other' }; for (const detail of lg ? tv.find(topic => topic.id === scenario.workflowId)?.details ?? [] : []) { if (detail.state !== 'answered') continue; const candidate = administrativeLogisticsSchema.safeParse({ ...logistics, [detail.id]: detail.text }); if (candidate.success) Object.assign(logistics, candidate.data); } const s: Submission = { submissionId: d.id, version: d.version, patient: d.patient, scenario: d.scenario, contentVersion: `${register.provenance.version}.${register.mentalHealth}`, questionnaire: native ? `${NATIVE_QUESTIONNAIRE_CANONICAL}|${NATIVE_QUESTIONNAIRE_VERSION}` : `https://corvo.example/Questionnaire/clinic/${register.provenance.version}/${d.scenario}/${register.mentalHealth}`, confirmedAt, completeness: complete(d) ? 'complete' : 'partial', ...(d.prior ? { previous: { submissionId: d.id, ...d.prior } } : {}), sources: d.turns.filter(t => t.role === 'patient').map(t => ({ id: t.id, patient: d.patient, kind: t.corrects ? 'patient-correction' : 'patient-statement', text: t.text, capturedAt: t.at, ...(t.channel !== undefined ? { channel: t.channel } : {}), ...(t.corrects ? { corrects: t.corrects } : {}), ...(t.displayedPromptId ? { displayedPromptId: t.displayedPromptId } : {}), ...(t.displayedPromptText ? { displayedPromptText: t.displayedPromptText } : {}) })), ...(owners.includes('admin') ? { administrativeLogistics: logistics } : {}), answers: tv.map(t => ({ questionId: t.id, state: t.answer?.state ?? 'not-asked', ...(t.answer ? { text: t.answer.text } : {}), sourceIds: t.answer?.sourceIds ?? [] })), work: owners.map(owner => { const responsibility = owner === 'admin' ? 'administrative' : owner; return { id: responsibility, kind: responsibility === 'administrative' ? 'administrative' : 'clinical', responsibility, owner: draftPatientFixture(config, d).careTeams[responsibility] }; }) }; if (native) s.questionnaireCapture = await buildNativeQuestionnaireCapture({ scenario: d.scenario, relevantTopicIds: effectiveRelevantTopicIds(d), topics: effective(d, true).responses, validSourceIds: evidence(d).validSourceIds, unreviewedSourceIds: [...new Set([...unresolvedRecognitionSourceIds(s.sources, effective(d, true).responses), ...unresolvedSources(d).map(source => source.sourceId)])], context: prepared ? deriveNativeRoutingContext(prepared.projection.responses, { validSourceIds: new Set(s.sources.filter(source => source.channel !== 'unreviewed-transcript').map(source => source.id)), reviewedFact: prepared.preparingAuthority.reviewedFact }, recordContext(d)) : nativeContext(d), ...(prepared ? { representationAuthority: prepared.preparingAuthority } : {}), inactiveHistory: d.questionnaireHistory ?? d.confirmed?.confirmation.submission.questionnaireCapture?.inactiveHistory });
         if (prepared && s.questionnaireCapture) {
             representationAuthority = await prepared.bind(s.contentVersion, s.questionnaireCapture);
             if (!representationAuthority) s.questionnaireCapture = await buildNativeQuestionnaireCapture({ scenario: d.scenario, relevantTopicIds: effectiveRelevantTopicIds(d), topics: effective(d, true).responses, validSourceIds: evidence(d).validSourceIds, unreviewedSourceIds: [...new Set([...unresolvedRecognitionSourceIds(s.sources, effective(d, true).responses), ...unresolvedSources(d).map(source => source.sourceId)])], context: nativeContext(d), inactiveHistory: d.questionnaireHistory });
@@ -379,7 +415,7 @@ export function conversation(config: ClinicApiConfig, options: { provisionalQual
             s.questionnaireCapture.reviewBinding = representationAuthority.expected.digest;
             const authority = nativeRepresentationAuthority(representationAuthority), reviewEvidence = { validSourceIds: new Set(s.sources.filter(source => source.channel !== 'unreviewed-transcript').map(source => source.id)), reviewedFact: authority.reviewedFact, reviewedSourceAccountedFor: authority.reviewedSourceAccountedFor };
             const remainingGaps = effective(d, true).gaps.filter(gap => gap.reason !== 'recognition-unreviewed' || !authority.reviewedSourceAccountedFor(gap.sourceId));
-            s.completeness = !d.safety && !unresolvedSources(d).some(source => !authority.reviewedSourceAccountedFor(source.sourceId)) && !remainingGaps.length && nativeCaptureComplete(s.questionnaireCapture, reviewEvidence) ? 'complete' : 'partial';
+            s.completeness = !d.safety && !unresolvedSources(d).some(source => !authority.reviewedSourceAccountedFor(source.sourceId)) && !remainingGaps.length && !specificityIncomplete(d) && nativeCaptureComplete(s.questionnaireCapture, reviewEvidence) ? 'complete' : 'partial';
             }
         }
         const hash = await digest(s); const assessment: SufficiencyAssessment = { submissionDigest: hash, contentVersion: s.contentVersion, assessedBy: qualified ? `corvo-${options.provisionalQualification!.projection}:${options.provisionalQualification!.evidenceDigest}` : 'corvo-guided-content-validation', assessedAt: s.confirmedAt, questions: defs.map(t => ({ questionId: t.id, targets: topicResponse(d, t).applicability === 'not-applicable' ? t.slots.filter(x => !x.optional).map(x => ({ id: x.id, state: 'sufficient' as const, sourceIds: [...(topicResponse(d, t).applicabilitySourceIds ?? [])] })) : aggregateTargets(t, evaluateTopic(t, topicResponse(d, t), evidence(d))) })) }; const content: ContentContract = { version: s.contentVersion, questionnaire: s.questionnaire, approval: { approvedBy: 'Jake: synthetic demonstration scope including PHQ-4 with clinician review; no clinical protocol approval', approvedAt: '2026-10-09T00:00:00.000Z' }, questions: defs.map(t => ({ id: t.id, requiredForComplete: requiredDefs.some(required => required.id === t.id && required.presentation !== 'O'), requiresAnsweredValue: t.id === 'Q04', detailTargets: t.slots.filter(s => !s.optional).map(s => s.id), stopWhen: [...t.stopWhen] })) }; const confirmation = await confirmSubmission(s, { patient: d.patient, submissionId: d.id, scenario: d.scenario }, content, hash, assessment, representationAuthority); return { digest: hash, confirmation, topics: [...(d.safety ? [...tv, { id: d.safety.rule, title: 'Help guidance shown', required: false, status: 'stopped-with-gaps' as const, missingDetails: ['Human medical review remains required'], answer: { text: `${d.safety.version} ${d.safety.rule}: ${d.safety.text}`, state: 'answered' as const, sourceIds: [d.safety.sourceId] } }] : tv), ...safetyReviewTopics(d)].concat(interpretationReview(d, unresolvedSources(d).filter(source => !representationAuthority?.expected.accountedSourceIds.includes(source.sourceId)), { ...effective(d), gaps: effective(d).gaps.filter(gap => gap.reason !== 'recognition-unreviewed' || !representationAuthority?.expected.accountedSourceIds.includes(gap.sourceId)) })) }; }

@@ -85,12 +85,16 @@ export interface ClinicApiConfig {
     staff: StaffAssignment[];
     nativeQuestionnaire?: import('../../clinic-content/src/native-questionnaire.js').NativeBinding & { reference: string };
     mentalHealth: 'pending' | 'phq4' | 'unscored';
+    /** Server-only synthetic email configuration. Omitted means copy-link only. */
+    invitationEmail?: import('./invitation-email-config.js').ConfiguredInvitationEmail;
 }
 export interface Draft {
     schema: 1;
     id: string;
     patient: string;
     scenario: ScenarioId;
+    /** Server-issued invitation authority, also bound into the signed patient session. */
+    invitationId?: string;
     revision: number;
     savedAt: string;
     createdAt: string;
@@ -100,26 +104,35 @@ export interface Draft {
     activeSlot?: string;
     relevantTopicIds?: string[];
     questionnaireHistory?: import('../../clinic-content/src/native-questionnaire.js').NativeInactiveAnswer[];
+    /** Loaded once for a new session; record changes do not alter saved/resumed prompts. */
+    priorContext?: import('./prior-context.js').FrozenPriorContext;
     safety?: {
         rule: import('./safety.js').EscalationRule;
-        version: 'E-0.1';
+        version: 'E-0.1' | 'E-0.2';
         sourceId: string;
         text: string;
         at: string;
         paused: boolean;
-        /** Set when a tier-2 model review (not the E-0.1 predicates) found high or imminent risk. */
+        /** Set when the model gate (not the deterministic floor) found high or imminent risk. */
         via?: 'model-review';
     };
-    /** Tier-1 screen hits (S1-0.1). Each queues one tier-2 review; terminal outcomes are copied in at review time. */
+    /** Tier-1 screen hits and scoped floor hits. Each gets one model review, normally on the same turn; terminal outcomes are copied in. */
     safetySignals?: Array<{
         id: string;
         sourceId: string;
         categories: import('./safety-screen.js').SafetyCategory[];
         terms: string[];
         at: string;
-        version: 'S1-0.1';
+        /** S1-0.x: liberal screen or scoped floor hit; safety-gate-v1: a concern the model gate found on an unflagged turn. */
+        version: 'S1-0.1' | 'S1-0.2' | 'safety-gate-v1';
+        /** Hard-stop wording the floor downgraded (negated, someone else's, historical, hypothetical, question, media). */
+        floor?: { rule: import('./safety.js').EscalationRule; scope: Exclude<import('./safety.js').SafetyScope, 'direct'> }[];
         review?: { status: 'cleared' | 'needs-human-review'; level: 'none' | 'low' | 'moderate' | 'high' | 'imminent' };
     }>;
+    /** Fail-safe: the model gate could not decide on an urgent flag, so authored help copy is shown without pausing. */
+    safetyBanner?: { rule: import('./safety.js').EscalationRule; sourceId: string; at: string };
+    /** Answer specificity follow-ups (SP-0.1): per recorded answer, follow-ups asked and how the patient settled it. */
+    specificity?: import('./specificity.js').SpecificityStates;
     topics: Record<string, TopicResponse>;
     requests: Record<string, {
         fingerprint: string;

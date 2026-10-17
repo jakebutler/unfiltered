@@ -2,7 +2,7 @@ import type { topicText } from './content.js';
 
 export type TopicId = typeof topicText[number]['id'];
 export type MentalHealthChoice = 'phq4' | 'unscored' | 'pending';
-export type ScenarioId = 'first-intake' | 'pre-visit' | 'non-visit' | 'post-visit' | 'billing' | 'scheduling' | 'refill';
+export type { ScenarioId } from './workflows.js';
 export type StopReason = 'target-met' | 'does-not-know' | 'not-applicable' | 'patient-declines' | 'patient-moves-on' | 'resistance-after-purpose' | 'safety-interruption';
 export type AnswerState = 'known' | 'negative' | 'unknown' | 'declined' | 'uncertain' | 'skipped' | 'not-asked' | 'not-applicable' | 'conflicting';
 export type Scalar = string | number | boolean | { readonly feet: number; readonly inches: number };
@@ -36,6 +36,8 @@ export interface TopicDefinition {
   readonly minimumDetailText: string;
   readonly stopWhen: readonly StopReason[];
   readonly visibility: 'assigned-clinical-full';
+  /** Authored dialogue copy; operational metadata, outside the native Questionnaire definition. */
+  readonly corvo?: { readonly scopedQuestions?: Readonly<Record<string, string>> };
 }
 export interface TopicResponse {
   readonly presented: boolean;

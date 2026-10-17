@@ -4,9 +4,11 @@ import { canonicalJson, digest } from '../../clinical-core/src/domain.js';
 import { AdaptiveError, applyValidatedTurn, validateAdaptiveProposal, type AdaptiveContext, type AdaptiveOutcome } from './adaptive-validation.js';
 import { AdaptiveProposalFailure, buildAdaptiveMessages, type AdaptiveProposer, type AdaptiveProposalReceipt } from './adaptive.js';
 import { eligibleAdaptiveProbes, selectAdaptiveDialogue } from './dialogue.js';
+import { countSpecificityAsk, settleSpecificityReply, specificityFindings } from './specificity.js';
 import type { conversation } from './conversation.js';
-import { escalation, escalationCopy } from './safety.js';
-import { screenSafety } from './safety-screen.js';
+import { escalation, escalationCopy, safetyVersion } from './safety.js';
+import { safetySignalSeed } from './safety-screen.js';
+import { applyGateOutcome, type SafetyReviewEntry } from './safety-review.js';
 import { ApiFailure, type AdaptiveOperation, type AdaptiveRawProposalAudit, type Draft, type StoredDraft } from './types.js';
 import { runAdaptiveStreamOperation, type AdaptiveStreamProposer } from './adaptive-stream-session.js';
 import { runGroupedExtractionOperation, type GroupedExtractionProposer } from './adaptive-extraction-grouped-session-v2.js';
@@ -85,6 +87,8 @@ type Content = ReturnType<typeof conversation>;
 export interface AdaptiveDraftStore {
     read(): Promise<StoredDraft>;
     save(previous: StoredDraft, next: Draft): Promise<StoredDraft>;
+    /** Model safety gate for one free-text turn. The single-call interpreter waits before extraction. Undefined: nothing to record. */
+    safetyGate?(draft: Draft, sourceId: string): Promise<{ signal?: NonNullable<Draft['safetySignals']>[number]; entry: SafetyReviewEntry; unsaved?: true } | undefined>;
 }
 const pending = (op: AdaptiveOperation) => op.status === 'accepted' || op.status === 'processing';
 export function requireNoPendingInterpretation(d: Draft, allowDirectCorrection = false) {
@@ -152,6 +156,8 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             displayed: op?.displayed ?? d.adaptive?.exchange?.prompt,
             dialogue: op?.dialogue ?? d.adaptive?.exchange?.state,
             safetyPaused: d.safety?.paused,
+            // Specificity follow-ups run with the single-call interpreter, which settles their replies.
+            ...(interpreter ? { specificity: d.specificity ?? {} } : {}),
             displayedText: content.view(d).currentPrompt?.text,
             ...(content.register.mentalHealth === 'phq4' ? { nativeRouting: content.nativeNavigation(d) } : {}),
         };
@@ -182,7 +188,10 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         const context = baseContext(next);
         // Explicit topic/detail selection is trusted UI state, never a model binding.
         if (next.activeTopic) context.dialogue = { activeTopicId: next.activeTopic };
+        const shown = next.adaptive!.exchange?.prompt?.specificity?.key;
         next.adaptive!.exchange = selectAdaptiveDialogue(context, outcome);
+        const asked = next.adaptive!.exchange.prompt?.specificity;
+        if (asked && asked.key !== shown) next.specificity = countSpecificityAsk(next.specificity ?? {}, asked, specificityFindings(next.topics).find(finding => finding.key === asked.key)?.value);
         return next;
     }
     function initialize(d: Draft) {
@@ -214,7 +223,7 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             ? { kind: 'question' as const, topicId: fallback.topic.id, promptId: fallback.field.promptIds[0], targetPaths: [fallback.field.path], text: fallbackText, labels: [fallback.field.label], optional: false } : undefined);
         if (displayed) n.turns.push({ id: `p-${sourceId}`, role: 'assistant', text: displayed.text, at: time });
         n.turns.push({ id: sourceId, role: 'patient', text: input.text, at: time, channel: input.channel, ...(displayed ? { displayedPromptId: displayed.promptId } : {}) });
-        const op: AdaptiveOperation = { id, requestId: input.requestId, sourceId, fingerprint, status: 'accepted', acceptedAt: time, updatedAt: time, binding: { operationId: id, sessionId: n.id, patient: n.patient, scenario: n.scenario, revision: d.revision + 1, contentVersion: `${content.register.provenance.version}.${content.register.mentalHealth}`, snapshotDigest: '' }, ...(displayed ? { displayed: { topicId: displayed.topicId, promptId: displayed.promptId, targetPaths: [...displayed.targetPaths], ...(displayed.wording ? { wording: structuredClone(displayed.wording) } : {}) } } : {}), dialogue: structuredClone(n.adaptive!.exchange?.state) };
+        const op: AdaptiveOperation = { id, requestId: input.requestId, sourceId, fingerprint, status: 'accepted', acceptedAt: time, updatedAt: time, binding: { operationId: id, sessionId: n.id, patient: n.patient, scenario: n.scenario, revision: d.revision + 1, contentVersion: `${content.register.provenance.version}.${content.register.mentalHealth}`, snapshotDigest: '' }, ...(displayed ? { displayed: { topicId: displayed.topicId, promptId: displayed.promptId, targetPaths: [...displayed.targetPaths], ...(displayed.wording ? { wording: structuredClone(displayed.wording) } : {}), ...('specificity' in displayed && displayed.specificity ? { specificity: structuredClone(displayed.specificity) } : {}) } } : {}), dialogue: structuredClone(n.adaptive!.exchange?.state) };
         const predecessor = Object.values(d.adaptive!.operations).find(candidate => pending(candidate));
         if (predecessor) { op.queuedAfter = predecessor.id; op.queuedWaiting = true; }
         n.adaptive!.operations[id] = op;
@@ -235,18 +244,30 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
                     // Revoking admission does not assert provider termination.
                 }
             }
-            if (rule) n.safety = { rule, version: 'E-0.1', sourceId, text: escalationCopy[rule], at: time, paused: true };
+            if (rule) n.safety = { rule, version: safetyVersion, sourceId, text: escalationCopy[rule], at: time, paused: true };
             if (displayed) n.topics[displayed.topicId] = { ...(n.topics[displayed.topicId] ?? { presented: true, answers: {} }), stopped: 'safety-interruption' };
         }
-        // Tier 1: a liberal screen queues a background model review in this same commit; it never pauses the intake.
-        const screen = rule ? undefined : screenSafety(input.text);
-        if (screen) n.safetySignals = [...(n.safetySignals ?? []), { id: crypto.randomUUID(), sourceId, categories: screen.categories, terms: screen.terms, at: time, version: screen.version }];
+        // Tier 1 and scoped floor hits become a signal in this same commit; interpretation runs the model gate on it.
+        const screen = rule ? undefined : safetySignalSeed(input.text);
+        if (screen) n.safetySignals = [...(n.safetySignals ?? []), { id: crypto.randomUUID(), sourceId, categories: screen.categories, terms: screen.terms, at: time, version: screen.version, ...(screen.floor ? { floor: screen.floor } : {}) }];
         op.binding.snapshotDigest = await snapshotDigest(baseContext(n, op));
         // Leave 64KiB inside the existing 500KiB document ceiling for a claim,
         // bounded provisional result, receipt and terminal/queued settlement.
         if (durableStreaming && Buffer.byteLength(canonicalJson(n), 'utf8') > 434464) throw new ApiFailure('session-size-limit', 413);
         const saved = await commit(store, stored, n);
         return { draft: saved.draft, operation: operation(saved.draft, id) };
+    }
+    /** Applies a safety-gate verdict on its own save (bounded stale-session retry), outside any interpretation result. */
+    async function settleGate(store: AdaptiveDraftStore, gated: { signal?: NonNullable<Draft['safetySignals']>[number]; entry: SafetyReviewEntry; unsaved?: true }) {
+        for (let attempt = 0; attempt < 6; attempt++) {
+            const stored = await store.read(), n = structuredClone(stored.draft);
+            applyGateOutcome(n, gated.entry, gated.signal, gated.unsaved);
+            if (canonicalJson(n) === canonicalJson(stored.draft)) return;
+            try { await commit(store, stored, n); return; }
+            catch (error) { if (!(error instanceof ApiFailure) || error.code !== 'stale-session') throw error; }
+        }
+        // Never continue as if the verdict were applied: the caller surfaces this and the patient retries.
+        throw new ApiFailure('safety-verdict-unsaved', 503, true);
     }
     async function reconcile(store: AdaptiveDraftStore, id: string) {
         const stored = await store.read(), op = operation(stored.draft, id);
@@ -310,13 +331,33 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
         op = operation(stored.draft, id);
         if (op.status !== 'processing' || op.attemptId !== attemptId || op.processingRevision !== stored.draft.revision)
             throw new ApiFailure('processing-claim-unverified', 503);
-        if (options.groupedExtractor) {
-            const saved = await runGroupedExtractionOperation(store, stored, context, options.groupedExtractor, { now, timeoutMs, onReplySaved: options.onReplySaved, recognitionContinuation: true,
-                navigationContext: draft => ({ responses: content.effective(draft, true).responses, nativeRouting: content.nativeNavigation(draft), qualification: content.navigationQualification }) });
-            return { draft: saved.stored.draft, operation: operation(saved.stored.draft, id) };
+        // The single-call intake interpreter must screen the patient's words before extraction.
+        // Legacy proposer concurrency and the already-gated streaming protocols retain their existing ordering.
+        const gate = store.safetyGate ? store.safetyGate(stored.draft, op.sourceId).catch(() => undefined) : undefined;
+        if (interpreter && gate) {
+            const screened = await gate;
+            if (screened?.entry.escalated) {
+                await settleGate(store, screened);
+                const paused = await store.read();
+                return { draft: paused.draft, operation: operation(paused.draft, id) };
+            }
+            // A stop or discard while screening was pending must prevent a new provider dispatch.
+            const screenedDraft = await store.read(), screenedOperation = operation(screenedDraft.draft, id);
+            if (screenedOperation.status !== 'processing' || screenedOperation.attemptId !== attemptId || screenedDraft.draft.revision !== op.processingRevision) {
+                if (screened) await settleGate(store, screened);
+                return reconcile(store, id);
+            }
         }
-        if (options.streamProposer) {
-            const saved = await runAdaptiveStreamOperation(store, stored, context, options.streamProposer, { now, timeoutMs, onReplySaved: options.onReplySaved, fullCapture: options.fullCapture });
+        if (options.groupedExtractor || options.streamProposer) {
+            // These paths save (and may publish) their next question themselves, so the gate decides first.
+            const gated = gate ? await gate : undefined;
+            if (gated) await settleGate(store, gated);
+            if (gated?.entry.escalated) { const paused = await store.read(); return { draft: paused.draft, operation: operation(paused.draft, id) }; }
+            const onReplySaved = options.onReplySaved;
+            const saved = options.groupedExtractor
+                ? (await runGroupedExtractionOperation(store, stored, context, options.groupedExtractor, { now, timeoutMs, onReplySaved, recognitionContinuation: true,
+                    navigationContext: draft => ({ responses: content.effective(draft, true).responses, nativeRouting: content.nativeNavigation(draft), qualification: content.navigationQualification }) })).stored
+                : await runAdaptiveStreamOperation(store, stored, context, options.streamProposer!, { now, timeoutMs, onReplySaved, fullCapture: options.fullCapture });
             return { draft: saved.draft, operation: operation(saved.draft, id) };
         }
         let receipt: AdaptiveProposalReceipt | undefined, outcome: AdaptiveOutcome | undefined, rawProposalAudit: AdaptiveRawProposalAudit | undefined;
@@ -344,12 +385,15 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             errorCode = error instanceof AdaptiveError ? error.code : 'provider-outcome-unknown';
             if (status === 'unresolved') void proposal.then(result => lateReceipt(store, id, attemptId, op, result.receipt, auditAdaptiveRawProposal(result.rawProposal)), failure => failure instanceof AdaptiveProposalFailure ? lateReceipt(store, id, attemptId, op, failure.receipt, auditAdaptiveRawProposal(failure.rawProposal)) : undefined);
         } finally { if (timer) clearTimeout(timer); }
+        const gated = gate ? await gate : undefined;
         let fresh: StoredDraft;
         try { fresh = await store.read(); }
         catch (error) { await lateReceipt(store, id, attemptId, op, receipt, rawProposalAudit); throw error; }
         const current = operation(fresh.draft, id);
         if (current.status !== 'processing' || current.attemptId !== attemptId || current.sourceId !== op.sourceId || current.fingerprint !== op.fingerprint || canonicalJson(current.binding) !== canonicalJson(op.binding) || fresh.draft.revision !== op.processingRevision) {
             await lateReceipt(store, id, attemptId, op, receipt, rawProposalAudit);
+            // A stopped or superseded interpretation never drops the safety verdict for the patient's words.
+            if (gated) await settleGate(store, gated);
             return reconcile(store, id);
         }
         try { await trustedContext(fresh.draft, current); }
@@ -362,16 +406,24 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             Object.assign(result, { updates: outcome.updates, provenance: outcome.provenance, clarifications: outcome.clarifications, ...(outcome.coveredCandidates ? { coveredCandidates: outcome.coveredCandidates } : {}), ...(outcome.unresolvedQuestions ? { unresolvedQuestions: outcome.unresolvedQuestions } : {}), ...(outcome.unmapped ? { unmapped: outcome.unmapped } : {}), ...(outcome.rejectedCandidates ? { rejectedCandidates: outcome.rejectedCandidates } : {}), hasUnresolvedInterpretation: outcome.hasUnresolvedInterpretation, resultDigest: await digest(outcome) });
             content.synchronize(n);
             outcome = { ...outcome, responses: n.topics };
-            const dialogueContext = { ...context, nativeRouting: content.nativeNavigation(n) };
+            // A reply to a specificity follow-up that added no new detail may still settle it ("I'll bring the bottle", "yes").
+            const mark = op.displayed?.specificity;
+            if (interpreter && mark) n.specificity = settleSpecificityReply(n.specificity ?? {}, mark, { sourceId: op.sourceId, text: context.source.text, updatedPath: outcome.updates.some(update => update.topicId === op.displayed!.topicId && op.displayed!.targetPaths.includes(update.path)), value: specificityFindings(n.topics).find(finding => finding.key === mark.key)?.value });
+            const dialogueContext = { ...context, nativeRouting: content.nativeNavigation(n), ...(interpreter ? { specificity: n.specificity ?? {} } : {}) };
             n.adaptive!.exchange = selectAdaptiveDialogue(dialogueContext, outcome);
+            // With no alternative authored question, leave the interrupted topic for review;
+            // the guided fallback must not immediately repeat it or fabricate an answer.
+            if (outcome.acknowledgement && outcome.unmapped?.length && !n.adaptive!.exchange.prompt && context.displayed)
+                n.adaptive!.parkedTopicIds = [...new Set([...(n.adaptive!.parkedTopicIds ?? []), context.displayed.topicId])];
             // Interpreter path: never show the same question a third time, in a short window (A/B cycles) or for the same topic all session.
             // Park that topic for now and continue with others; its gaps stay visible in review.
             const recentPrompts = n.turns.filter(turn => turn.role === 'assistant').slice(-12).map(turn => turn.text);
             const parked = new Set<string>();
             for (let guard = 0; interpreter && guard <= dialogueContext.topics.length; guard++) { // one topic parked per pass
                 const cycling = n.adaptive!.exchange.prompt;
-                const shownForTopic = Object.values(n.adaptive!.operations ?? {}).filter(op => op.displayed?.topicId === cycling?.topicId && op.displayed?.promptId === cycling?.promptId).length;
-                if (!cycling || cycling.kind === 'instrument' || recentPrompts.filter(text => text === cycling.text).length < 2 && shownForTopic < 2) break;
+                // Specificity follow-ups reuse their field's prompt id but have their own budget; they are not repeats.
+                const shownForTopic = Object.values(n.adaptive!.operations ?? {}).filter(op => !op.displayed?.specificity && op.displayed?.wording?.version !== 'spoken-number-confirm.1' && op.displayed?.topicId === cycling?.topicId && op.displayed?.promptId === cycling?.promptId).length;
+                if (!cycling || cycling.kind === 'instrument' || cycling.specificity || recentPrompts.filter(text => text === cycling.text).length < 2 && shownForTopic < 2) break;
                 parked.add(cycling.topicId);
                 const remaining = outcome.clarifications.filter(item => !parked.has(item.topicId));
                 n.adaptive!.exchange = selectAdaptiveDialogue({ ...dialogueContext, topics: dialogueContext.topics.filter(topic => !parked.has(topic.id)), dialogue: { ...dialogueContext.dialogue, activeTopicId: undefined, suspended: undefined, lastUnsuccessful: undefined } },
@@ -383,11 +435,14 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
                 if (!next || !text || /^MH0[1-4]$/.test(next.field.path) || n.turns.filter(turn => turn.role === 'assistant' && turn.text === text).length < 2) break;
                 n.adaptive!.parkedTopicIds = [...new Set([...(n.adaptive!.parkedTopicIds ?? []), next.topic.id])];
             }
+            const asked = n.adaptive!.exchange.prompt?.specificity;
+            if (asked) n.specificity = countSpecificityAsk(n.specificity ?? {}, asked, specificityFindings(n.topics).find(finding => finding.key === asked.key)?.value);
             // A guarded acknowledgement precedes the next AUTHORED question; approved replies always win.
-            if (outcome.acknowledgement && !n.adaptive!.exchange.reply && n.adaptive!.exchange.prompt && n.adaptive!.exchange.status === 'question')
+            if (outcome.acknowledgement && !n.adaptive!.exchange.reply && ['question', 'review-available', 'interpretation-review'].includes(n.adaptive!.exchange.status))
                 n.adaptive!.exchange.reply = { id: `ack-${outcome.sourceId}`, text: outcome.acknowledgement };
             delete n.activeTopic; delete n.activeSlot; delete n.preview;
         }
+        if (gated) applyGateOutcome(n, gated.entry, gated.signal, gated.unsaved);
         try {
             const saved = await commit(store, fresh, n);
             return { draft: saved.draft, operation: operation(saved.draft, id) };
@@ -396,9 +451,16 @@ export function adaptiveSession(content: Content, proposer?: AdaptiveProposer, o
             // readback: accept the exact result, or retain processing/terminal status; never re-infer.
             try {
                 const saved = await store.read(), recovered = operation(saved.draft, id);
-                if (recovered.status !== 'processing') return { draft: saved.draft, operation: recovered };
+                // A stop or discard that won the race keeps its status, but never drops the safety verdict.
+                if (recovered.status !== 'processing') {
+                    if (!gated) return { draft: saved.draft, operation: recovered };
+                    await settleGate(store, gated);
+                    const settled = await store.read();
+                    return { draft: settled.draft, operation: operation(settled.draft, id) };
+                }
                 if (recovered.attemptId === attemptId && recovered.sourceId === op.sourceId && recovered.fingerprint === op.fingerprint && canonicalJson(recovered.binding) === canonicalJson(op.binding) && saved.draft.revision === fresh.draft.revision) {
                     const unresolved = structuredClone(saved.draft);
+                    if (gated) applyGateOutcome(unresolved, gated.entry, gated.signal, gated.unsaved);
                     Object.assign(operation(unresolved, id), { status: 'unresolved', errorCode: 'result-save-outcome-unknown', updatedAt: at(), ...(receipt ? { receipt } : {}), ...(rawProposalAudit ? { rawProposalAudit: fitAdaptiveRawAudit(unresolved, id, rawProposalAudit) } : {}), ...(result.resultDigest ? { resultDigest: result.resultDigest } : {}) });
                     const recoveredSave = await commit(store, saved, unresolved);
                     return { draft: recoveredSave.draft, operation: operation(recoveredSave.draft, id) };

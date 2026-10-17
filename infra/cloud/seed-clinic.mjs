@@ -64,21 +64,27 @@ export async function seedClinic({ baseUrl = CLOUD_API_BASE, projectId = CLOUD_P
     return found;
   }
   async function update(key, resource, changes) {
-    const desired = { ...resource, ...changes }, fingerprint = hash(changes);
+    const fingerprint = hash(changes);
     const existing = journal.operations[key];
     if (existing && existing.fingerprint !== fingerprint) throw new Error('seed-update-intent-changed');
     let current = guard(await request(`fhir/R4/${ref(resource)}`));
     if (!subset(changes, current)) {
       if (existing?.state === 'intent') throw new Error(`seed-unresolved-intent-${key}`);
       journal.operations[key] = { state: 'intent', reference: ref(resource), fingerprint, at: new Date().toISOString() }; persist();
-      current = guard(await request(`fhir/R4/${ref(resource)}`, { ...desired, meta: current.meta }, 'PUT', { 'If-Match': `W/"${current.meta.versionId}"` }));
+      // Built from the version being replaced, so a concurrent edit to other fields is never silently erased.
+      current = guard(await request(`fhir/R4/${ref(resource)}`, { ...current, ...changes }, 'PUT', { 'If-Match': `W/"${current.meta.versionId}"` }));
     }
     if (!subset(changes, current)) throw new Error('seed-update-not-confirmed');
     journal.operations[key] = { state: 'confirmed', reference: ref(current), fingerprint, version: current.meta.versionId }; persist();
     return current;
   }
   async function createPolicy(key, name, rules) {
-    return ensure(`policy-${key}`, { resourceType: 'AccessPolicy', name: `${name} [${DEMO_NAMESPACE}]`, resource: rules }, `name:exact=${encodeURIComponent(`${name} [${DEMO_NAMESPACE}]`)}`);
+    const resource = { resourceType: 'AccessPolicy', name: `${name} [${DEMO_NAMESPACE}]`, resource: rules }, query = `name:exact=${encodeURIComponent(resource.name)}`;
+    // A re-qualified questionnaire changes the rules' Questionnaire id. The named policy is updated in place
+    // (journaled, version-checked), so staff memberships keep pointing at the same policy.
+    const found = journal.operations[`policy-${key}`]?.reference ? undefined : await search('AccessPolicy', query);
+    if (found && !subset(resource, found)) await update(`policy-${key}-rules`, found, { resource: rules });
+    return ensure(`policy-${key}`, resource, query);
   }
   try {
     const auth = await request('oauth2/token', new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret, scope: 'openid' }).toString(), 'POST', { 'Content-Type': 'application/x-www-form-urlencoded' });
@@ -94,11 +100,15 @@ export async function seedClinic({ baseUrl = CLOUD_API_BASE, projectId = CLOUD_P
     if (observedMembership.id !== me.membership.id || observedMembership.project?.reference !== `Project/${projectId}` || observedMembership.profile?.reference !== `ClientApplication/${clientId}`) throw new Error('seed-membership-identity-mismatch');
     membership = observedMembership;
     if (membership.admin !== true) throw new Error('temporary-project-admin-required');
+    // Medplum's admin flag does not bypass a custom access policy; a leftover runtime policy would deny the new Questionnaire.
+    if (membership.accessPolicy || membership.access?.length) throw new Error('temporary-admin-access-policy-must-be-cleared');
     journal.cleanup = 'temporary-admin-needs-demotion'; persist();
     const project = await request(`fhir/R4/Project/${projectId}`);
     if (project.id !== projectId || !project.meta?.versionId) throw new Error('native-project-identity-required-before-seeding');
     const projectFeatures = project.features === undefined ? [] : project.features;
     if (!Array.isArray(projectFeatures) || projectFeatures.some(feature => typeof feature !== 'string')) throw new Error('seed-project-features-invalid');
+    // Re-seed record only. Qualification (schema 3) no longer reads this admin file: it seals the runtime
+    // client's own /auth/me Project projection inline. Admin calibration lives in medplum-preflight observe-features --calibrate.
     save(`${directory}/project-feature-observation.json`, { projectId, projectVersion: project.meta.versionId, features: projectFeatures, observedAt: new Date().toISOString() });
     // The fixed authored definition is compiled locally; no model, Bot or server rule engine is involved.
     const { getNativeQuestionnaireDefinition } = await import('../../.qualification-build/packages/clinic-content/src/native-questionnaire.js');

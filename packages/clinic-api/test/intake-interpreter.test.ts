@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildIntakeInterpreterMessages, createIntakeInterpreter, interpretIntakeResponse, intakeKnownAnswers, intakeRequestBytes, type IntakeInterpreter } from '../src/intake-interpreter.js';
+import { buildIntakeInterpreterMessages, createIntakeInterpreter, disclosureAcknowledgement, interpretIntakeResponse, intakeKnownAnswers, intakeRequestBytes, type IntakeInterpreter } from '../src/intake-interpreter.js';
 import { AdaptiveProposalFailure } from '../src/adaptive.js';
 import { eligibleAdaptiveProbes, selectAdaptiveDialogue } from '../src/dialogue.js';
 import type { AdaptiveContext, AdaptiveOutcome } from '../src/adaptive-validation.js';
@@ -7,6 +7,7 @@ import { createClinicHandler } from '../src/handler.js';
 import { decodeDocument } from '../src/store.js';
 import type { ClinicApiConfig, Draft } from '../src/types.js';
 import type { Runtime } from '../src/runtime.js';
+import type { SafetyReviewer } from '../src/safety-review.js';
 import type { FhirResource } from '../../clinical-core/src/fhir.js';
 import type { AdaptiveTurnResult, ClinicSessionView, ReviewPreview } from '../../clinic-contract/src/index.js';
 import { context, register, source } from './fixtures/adaptive.js';
@@ -265,7 +266,7 @@ describe('intake-interpreter-v1 per-fact validation', () => {
 const origin = 'http://127.0.0.1:5173';
 const patient = { reference: 'Patient/test', displayName: 'Synthetic Patient', description: 'Synthetic only', careTeams: { medical: 'CareTeam/md', nutrition: 'CareTeam/rd', administrative: 'CareTeam/admin' } };
 const config = { origin, cookieSecret: 'test-secret-'.repeat(5), mentalHealth: 'phq4', patients: Object.fromEntries(['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill'].map(id => [id, patient])) } as ClinicApiConfig;
-function handlerFixture(interpreter: IntakeInterpreter) {
+function handlerFixture(interpreter: IntakeInterpreter, options: { safetyReviewer?: SafetyReviewer } = {}) {
   const records = new Map<string, FhirResource>();
   let sequence = 0;
   const client = {
@@ -289,7 +290,7 @@ function handlerFixture(interpreter: IntakeInterpreter) {
     deliver: vi.fn(async () => ({ receipt: { state: 'unknown', present: 0 }, write: 'outcome-unknown' })),
   };
   const runtime = async () => ({ client, qualification: {} } as unknown as Runtime);
-  const handler = createClinicHandler(config, { runtime, adaptiveInterpreter: interpreter });
+  const handler = createClinicHandler(config, { runtime, adaptiveInterpreter: interpreter, ...options });
   let cookie = '';
   async function request<T = ClinicSessionView>(path: string, data?: unknown) {
     const response = await handler(new Request(`${origin}${path}`, { method: data === undefined ? 'GET' : 'POST', headers: { ...(cookie ? { cookie } : {}), ...(data === undefined ? {} : { origin, 'Content-Type': 'application/json' }) }, ...(data === undefined ? {} : { body: JSON.stringify(data) }) }));
@@ -417,6 +418,53 @@ describe('intake-interpreter-v1 conflicts', () => {
     expect(outcome.clarifications).toEqual([]);
   });
 
+  it('a correction inside one message replaces the earlier value instead of joining or conflicting', () => {
+    const ctx = context('Metformin 500 mg, no wait, 850 mg. I weigh 200, sorry, 210 pounds.', ['Q04', 'Q08']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [
+      // Out of text order on purpose: position decides, not output order.
+      { topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 210, quote: '210 pounds' },
+      { topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 200, quote: 'I weigh 200' },
+    ], items: [{ topic: 'Q08', list: 'medicines', existing: null, fields: [
+      { field: 'name', state: 'known', value: 'Metformin', quote: 'Metformin 500 mg' },
+      { field: 'strength', state: 'known', value: '500 mg', quote: '500 mg' },
+      { field: 'strength', state: 'known', value: '850 mg', quote: '850 mg' },
+    ] }] }, ctx);
+    expect(itemsOf(outcome, 'Q08', 'medicines')[0].answers.strength).toMatchObject({ state: 'known', value: '850 mg' });
+    expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 210 });
+    expect(outcome.clarifications).toEqual([]);
+    // Both values stay on record, the earlier one marked superseded within the same message.
+    const strength = outcome.provenance.filter(entry => entry.path.endsWith('.strength'));
+    expect(strength.map(entry => [entry.sourceText.join(' '), entry.transform])).toEqual([['500 mg', 'interpreted-v1-superseded-in-message'], ['850 mg', 'interpreted-v1-in-message-correction']]);
+    expect(outcome.provenance.filter(entry => entry.path === 'lastMeasuredWeight.value').map(entry => entry.transform)).toEqual(['interpreted-v1', 'interpreted-v1-superseded-in-message']);
+  });
+  it('a corrected measurement takes the unit of the corrected value, not the superseded one', () => {
+    const outcome = interpretIntakeResponse({ ...empty, facts: [
+      { topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: '200 lb', quote: '200 lb' },
+      { topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: '90 kg', quote: '90 kg' },
+    ] }, context('I weigh 200 lb, no wait, 90 kg.', ['Q04']));
+    expect(answers(outcome, 'Q04')).toMatchObject({ 'lastMeasuredWeight.value': { state: 'known', value: 90 }, 'lastMeasuredWeight.unit': { state: 'known', value: 'kg' } });
+    expect(outcome.clarifications).toEqual([]);
+  });
+  it.each([
+    ['I take one tablet in the morning, then wait until bedtime. At night I take two tablets.', 'one tablet in the morning', 'two tablets'],
+    ['One in the morning. Sorry, I am a bit nervous about all this. Two at night as well.', 'One in the morning', 'Two at night'],
+  ])('ordinary "wait" or "sorry" between two facts is not a correction: %s', (text, first, second) => {
+    const outcome = interpretIntakeResponse({ ...empty, items: [{ topic: 'Q08', list: 'medicines', existing: null, fields: [
+      { field: 'name', state: 'known', value: 'metformin', quote: null },
+      { field: 'actualUse', state: 'known', value: first, quote: first },
+      { field: 'actualUse', state: 'known', value: second, quote: second },
+    ] }] }, context(`Metformin. ${text}`, ['Q08']));
+    expect(outcome.provenance.some(entry => entry.transform.endsWith('superseded-in-message'))).toBe(false);
+    expect(itemsOf(outcome, 'Q08', 'medicines')[0]?.answers.actualUse).toMatchObject({ state: 'known', value: `${first}; ${second}` });
+  });
+  it('"and ... actually" adds to a text answer rather than correcting it', () => {
+    const ctx = context('More energy, and actually to sleep better too.', ['Q01']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [
+      { topic: 'Q01', field: 'reason', state: 'known', value: 'more energy', quote: 'More energy' },
+      { topic: 'Q01', field: 'reason', state: 'known', value: 'sleep better', quote: 'to sleep better' },
+    ] }, ctx);
+    expect(answers(outcome, 'Q01').reason).toMatchObject({ state: 'known', value: 'more energy; sleep better' });
+  });
   it('an answer to a field marked conflicting resolves it and keeps the earlier sources on record', () => {
     const first = context('I want more energy.', ['Q01']);
     const conflicted = { ...first.responses, Q01: { presented: true, answers: { reason: { state: 'conflicting' as const, sourceIds: [first.source.id], note: 'Patient statements differ; clarification is needed.' } } } };
@@ -507,4 +555,591 @@ describe('intake-interpreter-v1 list identity and cycle guard', () => {
     // Long enough to exhaust adaptive questions and reach the guided fallback, which must not loop either.
     expect(shown.length).toBeGreaterThan(30);
   }, 60000);
+});
+
+describe('intake-interpreter-v1 answer specificity', () => {
+  it('a medicine described by its purpose is a medicine, never the condition it is for', () => {
+    const ctx = context('I take some pills for my heart and arthritis meds.', ['Q06', 'Q08']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [
+      { topic: 'Q06', field: 'conditions.heartDisease', state: 'known', value: true, quote: 'pills for my heart' },
+      { topic: 'Q06', field: 'conditions.joint', state: 'known', value: true, quote: 'arthritis meds' },
+    ], items: [
+      { topic: 'Q08', list: 'medicines', existing: null, fields: [{ field: 'name', state: 'known', value: 'pills for my heart', quote: 'pills for my heart' }] },
+      { topic: 'Q08', list: 'medicines', existing: null, fields: [{ field: 'name', state: 'known', value: 'arthritis meds', quote: 'arthritis meds' }] },
+    ] }, ctx);
+    expect(answers(outcome, 'Q06')['conditions.heartDisease']).toBeUndefined();
+    expect(answers(outcome, 'Q06')['conditions.joint']).toBeUndefined();
+    expect(outcome.rejectedCandidates?.map(candidate => candidate.reason)).toEqual(['condition-from-medicine-purpose', 'condition-from-medicine-purpose']);
+    expect(itemsOf(outcome, 'Q08', 'medicines').map(item => item.answers.name)).toMatchObject([{ value: 'pills for my heart' }, { value: 'arthritis meds' }]);
+  });
+  it('a purpose clause ends at "because": the condition reported after it is still recorded', () => {
+    const ctx = context('I take pills for my heart because I had a heart attack.', ['Q06']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q06', field: 'conditions.heartDisease', state: 'known', value: true, quote: 'pills for my heart because I had a heart attack' }] }, ctx);
+    expect(answers(outcome, 'Q06')['conditions.heartDisease']).toMatchObject({ state: 'known' });
+  });
+  it('"I don\'t take heart meds" is not a "no" to heart disease, and "arthritis meds" is not a reported condition', () => {
+    const negative = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q06', field: 'conditions.heartDisease', state: 'negative', value: false, quote: "I don't take heart meds" }] }, context("I don't take heart meds.", ['Q06']));
+    expect(answers(negative, 'Q06')['conditions.heartDisease']).toBeUndefined();
+    const term = interpretIntakeResponse({ ...empty, items: [{ topic: 'Q06', list: 'reportedConditions', existing: null, fields: [{ field: 'term', state: 'known', value: 'arthritis', quote: 'arthritis meds' }] }] }, context('I take arthritis meds.', ['Q06']));
+    expect(itemsOf(term, 'Q06', 'reportedConditions')).toEqual([]);
+  });
+  it('a condition named outright next to a medicine purpose is still recorded', () => {
+    const ctx = context('I have heart disease, so I take pills for my heart.', ['Q06']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q06', field: 'conditions.heartDisease', state: 'known', value: true, quote: 'I have heart disease' }] }, ctx);
+    expect(answers(outcome, 'Q06')['conditions.heartDisease']).toMatchObject({ state: 'known' });
+  });
+  it('the prompt carries a REFERENCE block of exact names in this message only', () => {
+    const [system] = buildIntakeInterpreterMessages(context('I take Ozempic and metformin for type 2 diabetes. Lots of water too.', ['Q08']));
+    const text = String(system!.content);
+    expect(text).toContain('REFERENCE (exact name matches in this message)\n"ozempic" = medication name\n"metformin" = medication name\n"type 2 diabetes" = condition name (Type 2 diabetes mellitus without complications)');
+    expect(text).not.toContain('"water"');
+    expect(String(buildIntakeInterpreterMessages(context('I walk every day.', ['Q14']))[0]!.content)).not.toContain('REFERENCE (exact');
+  });
+  const followUp = (text: string) => {
+    const ctx = context(text, ['Q08']);
+    ctx.sources = [{ id: 'prior', role: 'patient', text: 'I take some pills for my heart.', at: '2026-10-09T11:00:00.000Z' }, ...ctx.sources];
+    ctx.responses = { Q08: { presented: true, answers: { medicines: { state: 'known', complete: false, sourceIds: ['prior'], items: [{ id: 'm1', answers: { name: { state: 'known', value: 'pills for my heart', sourceIds: ['prior'] } } }] } } } };
+    ctx.displayed = { topicId: 'Q08', promptId: 'B02', targetPaths: ['medicines[m1].name'], specificity: { key: 'Q08:medicines[m1].name' } };
+    return ctx;
+  };
+  it('a named reply to a follow-up adds to the description even when the model calls it a correction (recorded live output)', () => {
+    const ctx = followUp("Oh, it's metoprolol, 25 mg.");
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q08', field: 'medicines[m1].name', state: 'known', value: 'metoprolol', quote: "it's metoprolol", corrects: 1 }],
+      items: [{ topic: 'Q08', list: 'medicines', existing: 'm1', fields: [{ field: 'name', state: 'known', value: 'metoprolol', quote: "it's metoprolol" }, { field: 'strength', state: 'known', value: '25 mg', quote: '25 mg' }] }] }, ctx);
+    expect(outcome.clarifications).toEqual([]);
+    expect(itemsOf(outcome, 'Q08', 'medicines')[0]!.answers).toMatchObject({ name: { state: 'known', value: 'pills for my heart; metoprolol' }, strength: { value: '25 mg' } });
+  });
+  it('"I\'ll bring the bottle" to a follow-up keeps the description and is not an unresolved turn (recorded live output)', () => {
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q08', field: 'medicines[m1].name', state: 'unknown', value: null, quote: "I'm not sure" }] }, followUp("I'm not sure, I'll bring the bottle next time."));
+    expect(outcome.updates).toEqual([]);
+    expect(outcome.clarifications).toEqual([]);
+    expect(outcome.hasUnresolvedInterpretation).toBe(false);
+  });
+  it('"Yes" to a spelling question is settled even when the model restates the name with a quote it cannot support', () => {
+    const ctx = followUp('Yes');
+    ctx.displayed = { ...ctx.displayed!, specificity: { key: 'Q08:medicines[m1].name', spelling: { system: 'rxnorm', code: '6809', display: 'metformin' } } };
+    const outcome = interpretIntakeResponse({ ...empty, items: [{ topic: 'Q08', list: 'medicines', existing: 'm1', fields: [{ field: 'name', state: 'known', value: 'metformin', quote: 'metformin' }] }] }, ctx);
+    expect(itemsOf(outcome, 'Q08', 'medicines')[0]!.answers.name).toMatchObject({ value: 'pills for my heart' });
+    expect(outcome.hasUnresolvedInterpretation).toBe(false);
+  });
+  it('"Yes" to a spelling question is settled even when the model files it under another question (recorded live output)', () => {
+    const ctx = followUp('Yes');
+    ctx.displayed = { ...ctx.displayed!, specificity: { key: 'Q08:medicines[m1].name', spelling: { system: 'rxnorm', code: '6809', display: 'metformin' } } };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q02', field: 'concern', state: 'known', value: 'yes', quote: 'Yes' }] }, { ...ctx, topics: [...ctx.topics, ...context('x', ['Q02']).topics] });
+    expect(outcome.updates).toEqual([]);
+    expect(outcome.hasUnresolvedInterpretation).toBe(false);
+  });
+  it('"I don\'t know" to a follow-up is never filed as an answer to a different question', () => {
+    const ctx = followUp("I don't know what it was exactly.");
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q02', field: 'concern', state: 'unknown', value: null, quote: "I don't know what it was exactly" }] }, { ...ctx, topics: [...ctx.topics, ...context('x', ['Q02']).topics] });
+    expect(outcome.updates).toEqual([]);
+    expect(outcome.rejectedCandidates?.map(entry => entry.reason)).toEqual(['follow-up-reply-elsewhere']);
+    expect(outcome.hasUnresolvedInterpretation).toBe(false);
+  });
+  it.each([
+    ["I'll bring the bottle. I don't know my height.", { topic: 'Q04', field: 'height.value', state: 'unknown', value: null, quote: "I don't know my height" }],
+    ["I'll bring it. I get a rash from penicillin.", { topic: 'Q09', field: 'allergy', state: 'known', value: 'penicillin rash', quote: "I'll bring it. I get a rash from penicillin." }],
+  ])('a follow-up reply that also says something new keeps that content: %s', (text, fact) => {
+    const ctx = followUp(text);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [fact] }, { ...ctx, topics: [...ctx.topics, ...context('x', ['Q04', 'Q09']).topics] });
+    expect(outcome.updates.length > 0 || outcome.hasUnresolvedInterpretation).toBe(true);
+  });
+  it('an unrelated reply to a spelling question is not settled by the question alone', () => {
+    const ctx = followUp('No, and I get a rash from antibiotics.');
+    ctx.displayed = { ...ctx.displayed!, specificity: { key: 'Q08:medicines[m1].name', spelling: { system: 'rxnorm', code: '6809', display: 'metformin' } } };
+    expect(interpretIntakeResponse(empty, ctx).hasUnresolvedInterpretation).toBe(true);
+  });
+  it('an explicit correction in reply to a follow-up replaces the earlier words, with lineage', () => {
+    const ctx = context('No, actually daily now, I was wrong about occasionally.', ['Q14']);
+    ctx.sources = [{ id: 'prior', role: 'patient', text: 'I walk occasionally.', at: '2026-10-09T11:00:00.000Z' }, ...ctx.sources];
+    ctx.responses = { Q14: { presented: true, answers: { frequency: { state: 'known', value: 'occasionally', sourceIds: ['prior'] } } } };
+    ctx.displayed = { topicId: 'Q14', promptId: 'B02', targetPaths: ['frequency'], specificity: { key: 'Q14:frequency' } };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q14', field: 'frequency', state: 'known', value: 'daily', quote: 'actually daily now', corrects: 1 }] }, ctx);
+    expect(answers(outcome, 'Q14').frequency).toMatchObject({ state: 'known', value: 'daily' });
+    expect(outcome.provenance.find(entry => entry.path === 'frequency')?.correctsSourceIds).toEqual(['prior']);
+  });
+});
+
+// --- Hosted regression: an emotional disclosure made while another question is outstanding ---
+const hopeless = "Honestly I've been feeling hopeless most days lately.";
+describe('intake-interpreter-v1 emotional disclosure on another question', () => {
+  const recorded = { ...empty, facts: [{ topic: 'Q16', field: 'stress', state: 'known', value: 'feeling hopeless most days lately', quote: hopeless.replace(/\.$/, '') }], ack: null };
+
+  it('never files a mood-only statement under Q16 stress (or any PHQ item); keeps it unplaced for review with a neutral ack', () => {
+    const ctx = { ...context(hopeless, ['Q04', 'Q16']), displayed: { topicId: 'Q04', promptId: 'Q04a', targetPaths: ['lastMeasuredWeight.value', 'lastMeasuredWeight.unit', 'lastMeasuredWeight.measuredWhen'] } };
+    const outcome = interpretIntakeResponse(recorded, ctx);
+    expect(answers(outcome, 'Q16')).toEqual({});
+    expect(outcome.updates).toEqual([]);
+    expect(outcome.rejectedCandidates?.map(entry => `${entry.topicId}:${entry.path}:${entry.reason}`)).toEqual(['Q16:stress:mood-statement-not-answer']);
+    // The exact words stay saved as an unplaced statement for clinician review.
+    expect(outcome.unmapped).toEqual([{ reason: 'unsupported-target', evidence: [{ sourceId: ctx.source.id, start: 0, end: hopeless.length }] }]);
+    expect(outcome.hasUnresolvedInterpretation).toBe(true);
+    // Proposed neutral acknowledgement (rule 14: <= 20 words, no question or clinical interpretation).
+    expect(outcome.acknowledgement).toBe(disclosureAcknowledgement.text);
+    expect(disclosureAcknowledgement.wordingStatus).toBe('proposed-detail');
+    expect(disclosureAcknowledgement.text.split(/\s+/).length).toBeLessThanOrEqual(20);
+    expect(disclosureAcknowledgement.text).not.toMatch(/\?|hopeless|depress|anxi|diagnos|risk|normal/i);
+    expect(disclosureAcknowledgement.text).toMatch(/continue/i);
+    // The original gap stays open; continue with another authored prompt without counting a failed attempt.
+    const dialogue = selectAdaptiveDialogue(ctx, outcome);
+    expect(dialogue.status).toBe('question');
+    expect(dialogue.prompt?.topicId).toBe('Q04');
+    expect(dialogue.prompt?.promptId).not.toBe(ctx.displayed.promptId);
+    expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    expect(dialogue.reply).toBeUndefined();
+    expect(dialogue.state.lastUnsuccessful).toBeUndefined();
+  });
+
+  it('keeps the disclosure unplaced even when the model proposes nothing or tries a PHQ item or a history field', () => {
+    const ctx = { ...context(hopeless, ['Q04', 'Q01', 'Q16']), displayed: { topicId: 'Q04', promptId: 'Q04a', targetPaths: ['lastMeasuredWeight.value'] } };
+    for (const proposal of [empty, { ...empty, facts: [
+      { topic: 'Q16', field: 'MH02', state: 'known', value: 3, quote: 'feeling hopeless most days' },
+      { topic: 'Q16', field: 'depressionHistory', state: 'known', value: true, quote: 'feeling hopeless most days lately' },
+      { topic: 'Q01', field: 'reason', state: 'known', value: 'feeling hopeless', quote: 'feeling hopeless most days lately' },
+    ], ack: 'Noted that you have been feeling hopeless most days.' }]) {
+      const outcome = interpretIntakeResponse(proposal, ctx);
+      expect(outcome.updates).toEqual([]);
+      expect(answers(outcome, 'Q16')).toEqual({});
+      expect(answers(outcome, 'Q01')).toEqual({});
+      expect(outcome.unmapped).toHaveLength(1);
+      expect(outcome.acknowledgement).toBe(disclosureAcknowledgement.text);
+    }
+  });
+
+  it('still records mood words that answer the question asked, or a described stressor', () => {
+    const asked = { ...context("I've been feeling hopeless most days.", ['Q16']), displayed: { topicId: 'Q16', promptId: 'Q16a', targetPaths: ['stress', 'impact'] } };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q16', field: 'stress', state: 'known', value: 'feeling hopeless most days', quote: "I've been feeling hopeless most days" }] }, asked);
+    expect(answers(outcome, 'Q16').stress).toMatchObject({ state: 'known' });
+    expect(outcome.unmapped).toBeUndefined();
+    const stressor = { ...context('Work has been crushing me and I feel hopeless about it.', ['Q04', 'Q16']), displayed: { topicId: 'Q04', promptId: 'Q04a', targetPaths: ['lastMeasuredWeight.value'] } };
+    const volunteered = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q16', field: 'stress', state: 'known', value: 'work has been crushing me', quote: 'Work has been crushing me' }] }, stressor);
+    expect(answers(volunteered, 'Q16').stress).toMatchObject({ state: 'known', value: 'work has been crushing me' });
+    expect(volunteered.unmapped).toBeUndefined();
+  });
+
+  it('a disclosure alongside an answer keeps the answer, saves the disclosure and acknowledges it without a lead-back', () => {
+    const text = `It was 212 pounds last week. ${hopeless}`;
+    const ctx = { ...context(text, ['Q04', 'Q16']), displayed: { topicId: 'Q04', promptId: 'Q04a', targetPaths: ['lastMeasuredWeight.value', 'lastMeasuredWeight.unit', 'lastMeasuredWeight.measuredWhen'] } };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [
+      { topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: '212 pounds' },
+      { topic: 'Q04', field: 'lastMeasuredWeight.unit', state: 'known', value: 'lb', quote: '212 pounds' },
+      { topic: 'Q16', field: 'stress', state: 'known', value: 'feeling hopeless', quote: "I've been feeling hopeless most days lately" },
+    ], ack: 'Noted 212 pounds.' }, ctx);
+    expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 212 });
+    expect(answers(outcome, 'Q16')).toEqual({});
+    const start = text.indexOf('Honestly');
+    expect(outcome.unmapped).toEqual([{ reason: 'unsupported-target', evidence: [{ sourceId: ctx.source.id, start, end: text.length }] }]);
+    expect(outcome.acknowledgement).toBe(disclosureAcknowledgement.answeredText);
+  });
+
+  it('reproduces the hosted turn: no pause, neutral ack, next authored question with the original gap open and no Q16 or PHQ answer', async () => {
+    const interpret = vi.fn(async (ctx: AdaptiveContext) => ({ outcome: interpretIntakeResponse(recorded, ctx), receipt: { requestId: 'p1', model: 'qwen3.8-max', evidenceProtocol: 'intake-interpreter-v1' as const } }));
+    const f = handlerFixture({ interpret });
+    await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
+    const session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
+    const before = session.currentPrompt!;
+    const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text: hopeless, channel: 'text' });
+    expect(accepted.status).toBe(202);
+    const applied = await f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+    expect(applied.status, JSON.stringify(applied.body)).toBe(200);
+    expect(interpret).toHaveBeenCalledTimes(1);
+    expect(applied.body.operation.status).toBe('applied');
+    expect(f.draft().safety?.paused).toBeFalsy();
+    const q16 = f.draft().topics.Q16?.answers ?? {};
+    expect(q16.stress).toBeUndefined();
+    for (const id of ['MH01', 'MH02', 'MH03', 'MH04']) expect(q16[id]).toBeUndefined();
+    expect(applied.body.session.adaptive?.reply?.text).toBe(disclosureAcknowledgement.text);
+    expect(applied.body.session.currentPrompt).toBeDefined();
+    expect(applied.body.session.currentPrompt?.text).not.toBe(before.text);
+    expect(f.draft().topics[before.topicId]?.answers ?? {}).toEqual({});
+    const next = f.draft().adaptive!.exchange!.prompt!;
+    expect(next.text).toBe(register.promptsById[next.promptId].text);
+    expect(applied.body.session.adaptive?.unresolvedSources?.map(entry => entry.sourceId)).toContain(applied.body.operation.sourceId);
+  });
+
+  it.each(["I've been feeling hopeless lately", 'honestly kind of hopeless about the weight thing'])(
+    'screens before extracting a non-crisis disclosure: %s', async text => {
+      let finishReview!: (value: Awaited<ReturnType<SafetyReviewer['review']>>) => void;
+      const review = vi.fn(() => new Promise<Awaited<ReturnType<SafetyReviewer['review']>>>(resolve => { finishReview = resolve; }));
+      const interpret = vi.fn(async (ctx: AdaptiveContext) => ({ outcome: interpretIntakeResponse({ ...empty,
+        facts: [{ topic: 'Q16', field: 'stress', state: 'known', value: text, quote: text }],
+      }, ctx) }));
+      const f = handlerFixture({ interpret }, { safetyReviewer: { review } });
+      await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
+      const session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
+      const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text, channel: 'text' });
+      const applying = f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+      await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(1));
+      expect(interpret).not.toHaveBeenCalled();
+      finishReview({ concern: true, level: 'moderate', categories: ['mental-distress'], rationale: 'Clinician review requested.', model: 'synthetic-reviewer' });
+      const applied = await applying;
+      expect(applied.status).toBe(200);
+      expect(interpret).toHaveBeenCalledTimes(1);
+      expect(f.draft().topics.Q16?.answers.stress).toBeUndefined();
+      for (const id of ['MH01', 'MH02', 'MH03', 'MH04']) expect(f.draft().topics.Q16?.answers[id]).toBeUndefined();
+      expect(applied.body.session.adaptive?.reply?.text).toBe(disclosureAcknowledgement.text);
+      expect(applied.body.session.currentPrompt?.text).not.toBe(session.currentPrompt?.text);
+      expect(f.draft().safetySignals?.[0].review).toEqual({ status: 'needs-human-review', level: 'moderate' });
+    },
+  );
+
+  it('routes the specified crisis disclosure through the existing safety gate without extracting or changing crisis keywords', async () => {
+    const interpret = vi.fn(async (ctx: AdaptiveContext) => ({ outcome: interpretIntakeResponse(empty, ctx) }));
+    const review = vi.fn(async () => ({ concern: true, level: 'high' as const, categories: ['self-harm' as const], rationale: 'Current self-harm concern.', model: 'synthetic-reviewer' }));
+    const f = handlerFixture({ interpret }, { safetyReviewer: { review } });
+    await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
+    const session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
+    const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text: "I feel hopeless and don't want to be here anymore", channel: 'text' });
+    const paused = await f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+    expect(paused.status).toBe(200);
+    expect(review).toHaveBeenCalledTimes(1);
+    expect(interpret).not.toHaveBeenCalled();
+    expect(f.draft().safety).toMatchObject({ rule: 'E04', paused: true, via: 'model-review' });
+    expect(paused.body.session.currentPrompt).toBeUndefined();
+    expect(paused.body.session.notice?.text).toContain('988');
+    expect(f.draft().topics.Q16?.answers ?? {}).toEqual({});
+  });
+
+  it('does not repeat the interrupted prompt when no other authored probe remains', () => {
+    const base = context(hopeless, ['Q04']);
+    const slot = base.topics[0].slots.find(slot => slot.id === 'lastMeasuredWeight.value')!;
+    const ctx = { ...base, topics: [{ ...base.topics[0], slots: [slot] }],
+      displayed: { topicId: 'Q04', promptId: 'Q04a', targetPaths: [slot.id] } };
+    const outcome = interpretIntakeResponse(empty, ctx);
+    const dialogue = selectAdaptiveDialogue(ctx, outcome);
+    expect(outcome.acknowledgement).toBe(disclosureAcknowledgement.text);
+    expect(outcome.updates).toEqual([]);
+    expect(dialogue.status).toBe('review-available');
+    expect(dialogue.prompt).toBeUndefined();
+    expect(answers(outcome, 'Q04')[slot.id]).toBeUndefined();
+  });
+
+  it('does not dispatch extraction after a discard while the safety gate is pending, and retains the safety verdict', async () => {
+    let finishReview!: (value: Awaited<ReturnType<SafetyReviewer['review']>>) => void;
+    const review = vi.fn(() => new Promise<Awaited<ReturnType<SafetyReviewer['review']>>>(resolve => { finishReview = resolve; }));
+    const interpret = vi.fn(async (ctx: AdaptiveContext) => ({ outcome: interpretIntakeResponse(empty, ctx) }));
+    const f = handlerFixture({ interpret }, { safetyReviewer: { review } });
+    await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
+    const session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
+    const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text: hopeless, channel: 'text' });
+    const applying = f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+    await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(1));
+    const discarded = await f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/discard`, { expectedRevision: f.draft().revision });
+    expect(discarded.body.operation.status).toBe('discarded');
+    finishReview({ concern: true, level: 'moderate', categories: ['mental-distress'], rationale: 'Clinician review requested.', model: 'synthetic-reviewer' });
+    const applied = await applying;
+    expect(applied.status).toBe(200);
+    expect(applied.body.operation.status).toBe('discarded');
+    expect(interpret).not.toHaveBeenCalled();
+    expect(f.draft().safetySignals?.[0].review).toEqual({ status: 'needs-human-review', level: 'moderate' });
+  });
+});
+
+// --- Voice: colloquial spoken numbers are proposed, confirmed, then recorded ---
+describe('intake-interpreter-v1 spoken numbers need explicit confirmation', () => {
+  const weightAsked = { topicId: 'Q04', promptId: 'Q04a', targetPaths: ['lastMeasuredWeight.value', 'lastMeasuredWeight.unit', 'lastMeasuredWeight.measuredWhen'] };
+  const reply = (previous: AdaptiveContext, outcome: AdaptiveOutcome, text: string) => {
+    const dialogue = selectAdaptiveDialogue(previous, outcome);
+    return { dialogue, ctx: { ...nextTurn(previous, outcome, text), displayed: dialogue.prompt } as AdaptiveContext };
+  };
+
+  it('"two twelve pounds" is never recorded silently: it asks "Just to confirm, is that 212 pounds?" as proposed wording', () => {
+    const ctx = { ...context('It was two twelve pounds.', ['Q04']), displayed: weightAsked };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [
+      { topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'two twelve pounds' },
+      { topic: 'Q04', field: 'lastMeasuredWeight.unit', state: 'known', value: 'lb', quote: 'pounds' },
+    ], ack: 'Noted 212 pounds.' }, ctx);
+    expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    expect(outcome.acknowledgement).toBeUndefined();
+    expect(outcome.clarifications).toEqual([expect.objectContaining({ topicId: 'Q04', path: 'lastMeasuredWeight.value', reason: 'ambiguous-value',
+      proposed: expect.objectContaining({ state: 'known', value: 212 }), confirm: expect.objectContaining({ value: 212, unit: 'lb', text: 'Just to confirm, is that 212 pounds?' }) })]);
+    const dialogue = selectAdaptiveDialogue(ctx, outcome);
+    expect(dialogue.status).toBe('clarification');
+    expect(dialogue.reply).toBeUndefined();
+    expect(dialogue.prompt).toMatchObject({ topicId: 'Q04', targetPaths: ['lastMeasuredWeight.value'], text: 'Just to confirm, is that 212 pounds?', wording: { status: 'proposed-detail' } });
+  });
+
+  it('records 212 only after a plain yes, citing both the spoken words and the confirmation', () => {
+    const first = { ...context('It was two twelve pounds.', ['Q04']), displayed: weightAsked };
+    const proposed = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'two twelve pounds' }] }, first);
+    const { ctx } = reply(first, proposed, 'Yes.');
+    // The model restating the number with a quote it cannot support is not an unplaced statement.
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'Yes' }] }, ctx);
+    const q04 = answers(outcome, 'Q04');
+    expect(q04['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 212, sourceIds: ['turn-current', 'turn-2'] });
+    expect(q04['lastMeasuredWeight.unit']).toMatchObject({ state: 'known', value: 'lb' });
+    const provenance = outcome.provenance.find(entry => entry.path === 'lastMeasuredWeight.value')!;
+    expect(provenance.transform).toBe('spoken-number-confirmed');
+    expect(provenance.sourceText).toEqual(['two twelve pounds', 'Yes.']);
+    expect(outcome.hasUnresolvedInterpretation).toBe(false);
+    expect(outcome.clarifications).toEqual([]);
+  });
+
+  it('a plain no records nothing and returns to the authored question; a corrected number is recorded normally', () => {
+    const first = { ...context('It was two twelve pounds.', ['Q04']), displayed: weightAsked };
+    const proposed = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'two twelve pounds' }] }, first);
+    const no = reply(first, proposed, 'No.').ctx;
+    const declined = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'No' }] }, no);
+    expect(answers(declined, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    expect(declined.clarifications).toEqual([]);
+    expect(declined.hasUnresolvedInterpretation).toBe(false);
+    const next = selectAdaptiveDialogue(no, declined);
+    expect(next.status).toBe('question');
+    expect(next.prompt).toMatchObject({ topicId: 'Q04' });
+    expect(next.prompt?.text).not.toMatch(/just to confirm/i);
+    expect(next.prompt?.wording).toBeUndefined();
+    const corrected = reply(first, proposed, "No, it's 221 pounds.").ctx;
+    const fixed = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 221, quote: '221 pounds' }] }, corrected);
+    expect(answers(fixed, 'Q04')['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 221 });
+  });
+
+  it('interprets other colloquial forms, always as a confirmation: "one eighty five", "two hundred and five", "five ten" for height', () => {
+    for (const [text, quote, value, expected] of [
+      ['Scale said one eighty five.', 'one eighty five', 185, 'Just to confirm, is that 185?'],
+      ['The scale said two oh five pounds.', 'two oh five pounds', '205', 'Just to confirm, is that 205 pounds?'],
+      ['It was two hundred and five kilos.', 'two hundred and five kilos', 205, 'Just to confirm, is that 205 kilograms?'],
+    ] as const) {
+      const ctx = { ...context(text, ['Q04']), displayed: weightAsked };
+      const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value, quote }] }, ctx);
+      expect(answers(outcome, 'Q04')['lastMeasuredWeight.value'], text).toBeUndefined();
+      expect(outcome.clarifications[0]?.confirm?.text, text).toBe(expected);
+    }
+    const height = { ...context("I'm five ten.", ['Q04']), displayed: { topicId: 'Q04', promptId: 'Q04', targetPaths: ['height.value', 'height.unit'] } };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'height.value', state: 'known', value: '5 ft 10 in', quote: "I'm five ten" }] }, height);
+    expect(answers(outcome, 'Q04')['height.value']).toBeUndefined();
+    expect(outcome.clarifications[0]?.confirm).toMatchObject({ value: { feet: 5, inches: 10 }, unit: 'ft-in', text: 'Just to confirm, is that 5 ft 10 in?' });
+    const yes = reply(height, outcome, 'Yep.').ctx;
+    const confirmed = interpretIntakeResponse(empty, yes);
+    expect(answers(confirmed, 'Q04')['height.value']).toMatchObject({ state: 'known', value: { feet: 5, inches: 10 } });
+    expect(answers(confirmed, 'Q04')['height.unit']).toMatchObject({ state: 'known', value: 'ft-in' });
+  });
+
+  it('requires readback even with explicit spoken height units, while typed digits remain direct', () => {
+    const height = context('I am five foot ten.', ['Q04']);
+    const direct = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'height.value', state: 'known', value: '5 ft 10 in', quote: 'five foot ten' }] }, height);
+    expect(answers(direct, 'Q04')['height.value']).toBeUndefined();
+    expect(direct.clarifications[0]?.confirm).toMatchObject({ value: { feet: 5, inches: 10 }, unit: 'ft-in', text: 'Just to confirm, is that 5 ft 10 in?' });
+    const yes = reply(height, direct, 'Yes.').ctx;
+    expect(answers(interpretIntakeResponse(empty, yes), 'Q04')['height.value']).toMatchObject({ state: 'known', value: { feet: 5, inches: 10 } });
+    const weight = { ...context('It was 212 pounds.', ['Q04']), displayed: weightAsked };
+    const digits = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: '212 pounds' }] }, weight);
+    expect(answers(digits, 'Q04')['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 212 });
+  });
+
+  it('just asks (no number proposed) when the spoken words are ambiguous or disagree with the model', () => {
+    for (const [text, quote, value] of [
+      ['Two twelve or two fifteen pounds, I forget which.', 'Two twelve or two fifteen pounds', 212],
+      ['It was two twelve pounds.', 'two twelve pounds', 2012],
+      ['Somewhere north of two hundred pounds.', 'north of two hundred pounds', 212],
+    ] as const) {
+      const ctx = { ...context(text, ['Q04']), displayed: weightAsked };
+      const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value, quote }] }, ctx);
+      expect(answers(outcome, 'Q04')['lastMeasuredWeight.value'], text).toBeUndefined();
+      expect(outcome.clarifications.some(entry => entry.confirm), text).toBe(false);
+    }
+    // A bare "yes" with no pending confirmation records nothing.
+    const plain = { ...context('Yes.', ['Q04']), displayed: weightAsked };
+    expect(answers(interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'Yes' }] }, plain), 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+  });
+
+  it('never converts a spoken medicine strength or dose: it stays in the patient\'s words with no confirmation', () => {
+    const ctx = { ...context('I take metformin two fifty milligrams twice a day.', ['Q08']), displayed: { topicId: 'Q08', promptId: 'Q08', targetPaths: ['medicines'] } };
+    const outcome = interpretIntakeResponse({ ...empty, items: [{ topic: 'Q08', list: 'medicines', existing: null, fields: [
+      { field: 'name', state: 'known', value: 'metformin', quote: 'metformin' },
+      { field: 'strength', state: 'known', value: '250 mg', quote: 'two fifty milligrams' },
+    ] }] }, ctx);
+    const item = itemsOf(outcome, 'Q08', 'medicines')[0];
+    expect(item.answers.strength).toMatchObject({ state: 'known', value: 'two fifty milligrams' });
+    expect(JSON.stringify(outcome)).not.toContain('250');
+    expect(outcome.clarifications).toEqual([]);
+  });
+
+  it('ignores a confirmation whose saved evidence does not say the proposed number', () => {
+    const first = { ...context('It was two twelve pounds.', ['Q04']), displayed: weightAsked };
+    const proposed = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'two twelve pounds' }] }, first);
+    const { ctx } = reply(first, proposed, 'Yes.');
+    const wording = ctx.displayed!.wording as { confirm: { value: number } };
+    wording.confirm.value = 312;
+    expect(answers(interpretIntakeResponse(empty, ctx), 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+  });
+
+  it('confirms through the clinic handler before recording the weight', async () => {
+    const turns: Record<string, unknown>[] = [
+      { ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'two twelve pounds' }, { topic: 'Q04', field: 'lastMeasuredWeight.unit', state: 'known', value: 'lb', quote: 'pounds' }] },
+      { ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'Yes' }] },
+    ];
+    let turn = 0;
+    const f = handlerFixture({ interpret: async ctx => ({ outcome: interpretIntakeResponse(turns[turn++], ctx), receipt: { requestId: `p${turn}`, model: 'qwen3.8-max', evidenceProtocol: 'intake-interpreter-v1' as const } }) });
+    await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
+    let session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
+    const say = async (text: string) => {
+      const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text, channel: 'text' });
+      expect(accepted.status).toBe(202);
+      const applied = await f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+      expect(applied.status, JSON.stringify(applied.body)).toBe(200);
+      session = applied.body.session;
+      return applied.body;
+    };
+    await say('My last weight was two twelve pounds.');
+    expect(f.draft().topics.Q04?.answers['lastMeasuredWeight.value']).toBeUndefined();
+    expect(session.currentPrompt?.text).toBe('Just to confirm, is that 212 pounds?');
+    expect(session.adaptive?.reply).toBeUndefined();
+    await say('Yes.');
+    expect(f.draft().topics.Q04?.answers['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 212 });
+    expect(session.currentPrompt?.text).not.toBe('Just to confirm, is that 212 pounds?');
+  });
+
+  it.each(['two oh five', '205', 'two hundred five', 'two-hundred and five'])(
+    'reads back unreviewed recognition "%s" exactly before recording 205', spoken => {
+      const base = context(`The scale said ${spoken} pounds.`, ['Q04']);
+      const raw = { ...base.source, channel: 'unreviewed-transcript' as const };
+      const ctx = { ...base, source: raw, sources: [raw], displayed: weightAsked };
+      const first = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 205, quote: `${spoken} pounds` }] }, ctx);
+      expect(answers(first, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+      expect(first.clarifications[0]?.confirm).toMatchObject({ value: 205, unit: 'lb', text: 'Just to confirm, is that 205 pounds?' });
+      const next = reply(ctx, first, 'Yes.').ctx;
+      const confirmed = interpretIntakeResponse(empty, next);
+      expect(answers(confirmed, 'Q04')['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 205, sourceIds: ['turn-2'] });
+      expect(confirmed.provenance.find(entry => entry.path === 'lastMeasuredWeight.value')?.sourceText).toEqual([`${spoken} pounds`, 'Yes.']);
+      expect(next.sources.find(source => source.id === raw.id)).toEqual(raw);
+    },
+  );
+
+  it.each(['confirmed-transcript', 'unreviewed-transcript'] as const)(
+    'requires a numeric readback for digit height from %s', channel => {
+      const base = context('My height is 173 cm.', ['Q04']);
+      const speech = { ...base.source, channel };
+      const ctx = { ...base, source: speech, sources: [speech],
+        displayed: { topicId: 'Q04', promptId: 'Q04', targetPaths: ['height.value', 'height.unit'] } };
+      const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'height.value', state: 'known', value: 173, quote: '173 cm' }] }, ctx);
+      expect(answers(outcome, 'Q04')['height.value']).toBeUndefined();
+      expect(outcome.clarifications[0]?.confirm).toMatchObject({ value: 173, unit: 'cm', text: 'Just to confirm, is that 173 cm?' });
+      const next = reply(ctx, outcome, 'Yes.').ctx;
+      expect(answers(interpretIntakeResponse(empty, next), 'Q04')['height.value']).toMatchObject({ state: 'known', value: 173 });
+    },
+  );
+
+  it('does not accept an unreviewed yes as confirmation of a spoken number', () => {
+    const ctx = { ...context('It was two twelve pounds.', ['Q04']), displayed: weightAsked };
+    const proposed = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'two twelve pounds' }] }, ctx);
+    const next = reply(ctx, proposed, 'Yes.').ctx;
+    const heard = { ...next.source, channel: 'unreviewed-transcript' as const };
+    const outcome = interpretIntakeResponse(empty, { ...next, source: heard, sources: [...ctx.sources, heard] });
+    expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    expect(selectAdaptiveDialogue(next, outcome).prompt?.text).toBe('Just to confirm, is that 212 pounds?');
+  });
+
+  it('rejects a pending unit that disagrees with the saved spoken evidence', () => {
+    const ctx = { ...context('It was two twelve pounds.', ['Q04']), displayed: weightAsked };
+    const proposed = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 212, quote: 'two twelve pounds' }] }, ctx);
+    const next = reply(ctx, proposed, 'Yes.').ctx;
+    const wording = next.displayed!.wording;
+    if (wording?.version !== 'spoken-number-confirm.1') throw new Error('Missing numeric readback');
+    wording.confirm.unit = 'kg';
+    expect(answers(interpretIntakeResponse(empty, next), 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    expect(answers(interpretIntakeResponse(empty, next), 'Q04')['lastMeasuredWeight.unit']).toBeUndefined();
+  });
+
+  it('clarifies an approximate actual reading while allowing a confirmed estimate in the estimate slot', () => {
+    const ctx = { ...context('One fifty or so pounds.', ['Q04']), displayed: weightAsked };
+    const proposal = { ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 150, quote: 'One fifty or so pounds' }] };
+    const actual = interpretIntakeResponse(proposal, ctx);
+    expect(answers(actual, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    expect(actual.clarifications).toEqual([expect.objectContaining({ path: 'lastMeasuredWeight.value', reason: 'ambiguous-value' })]);
+    expect(actual.clarifications[0].confirm).toBeUndefined();
+    const estimateCtx = { ...ctx, responses: { Q04: { presented: true, answers: { 'lastMeasuredWeight.representsCurrent': { state: 'known' as const, value: false, sourceIds: [ctx.source.id] } } } },
+      displayed: { topicId: 'Q04', promptId: 'Q04.estimate', targetPaths: ['currentWeightEstimate.value'] } };
+    const estimate = interpretIntakeResponse({ ...empty, facts: [{ ...proposal.facts[0], field: 'currentWeightEstimate.value' }] }, estimateCtx);
+    expect(answers(estimate, 'Q04')['currentWeightEstimate.value']).toBeUndefined();
+    expect(estimate.clarifications[0]?.confirm).toMatchObject({ value: 150, unit: 'lb' });
+    const next = reply(estimateCtx, estimate, 'Yes.').ctx;
+    expect(answers(interpretIntakeResponse(empty, next), 'Q04')['currentWeightEstimate.value']).toMatchObject({ state: 'known', value: 150 });
+  });
+
+  it('keeps raw recognition immutable and satisfies the numeric slot only after a reviewed handler confirmation', async () => {
+    const interpret: IntakeInterpreter['interpret'] = async ctx => ({ outcome: interpretIntakeResponse(ctx.source.text === 'Yes.' ? empty : { ...empty,
+      facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 205, quote: '205 pounds' }],
+    }, ctx) });
+    const f = handlerFixture({ interpret });
+    await f.request('/api/clinic/sessions', { scenario: 'first-intake', syntheticAcknowledged: true });
+    let session = (await f.request('/api/clinic/confirm-identity', { confirmed: true })).body;
+    const say = async (text: string, channel: 'text' | 'unreviewed-transcript') => {
+      const accepted = await f.request<AdaptiveTurnResult>('/api/clinic/adaptive-turns', { requestId: crypto.randomUUID(), expectedRevision: session.revision, text, channel });
+      expect(accepted.status).toBe(202);
+      const applied = await f.request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${accepted.body.operation.id}/interpret`, {});
+      expect(applied.status).toBe(200);
+      session = applied.body.session;
+      return applied.body;
+    };
+    const raw = await say('My weight was 205 pounds.', 'unreviewed-transcript');
+    expect(f.draft().topics.Q04?.answers['lastMeasuredWeight.value']).toBeUndefined();
+    expect(session.currentPrompt?.text).toBe('Just to confirm, is that 205 pounds?');
+    const confirmed = await say('Yes.', 'text');
+    expect(f.draft().topics.Q04?.answers['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 205, sourceIds: [confirmed.operation.sourceId] });
+    expect(f.draft().topics.Q04?.answers['lastMeasuredWeight.unit']).toMatchObject({ state: 'known', value: 'lb' });
+    expect(f.draft().turns.find(turn => turn.id === raw.operation.sourceId)).toMatchObject({ text: 'My weight was 205 pounds.', channel: 'unreviewed-transcript' });
+    expect(f.draft().adaptive!.operations[confirmed.operation.id].provenance?.find(entry => entry.path === 'lastMeasuredWeight.value')?.evidence.map(span => span.sourceId)).toEqual([raw.operation.sourceId, confirmed.operation.sourceId]);
+  });
+
+  it.each(['one week ago', '2 weeks ago'])(
+    'keeps typed digits direct when the measurement quote includes timing: %s', timing => {
+      const text = `I weighed 205 pounds ${timing}.`;
+      const ctx = { ...context(text, ['Q04']), displayed: weightAsked };
+      const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 205, quote: `205 pounds ${timing}` }] }, ctx);
+      expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 205 });
+      expect(outcome.clarifications).toEqual([]);
+    },
+  );
+
+  it('reads back only the measurement number from a spoken quote that also includes timing', () => {
+    const ctx = { ...context('I weighed two oh five pounds one week ago.', ['Q04']), displayed: weightAsked };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 205, quote: 'two oh five pounds one week ago' }] }, ctx);
+    expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    expect(outcome.clarifications[0]?.confirm?.text).toBe('Just to confirm, is that 205 pounds?');
+    const next = reply(ctx, outcome, 'Yes.').ctx;
+    expect(answers(interpretIntakeResponse(empty, next), 'Q04')['lastMeasuredWeight.value']).toMatchObject({ state: 'known', value: 205 });
+  });
+
+  it.each(['205 or 206 pounds one week ago', 'two oh five or two hundred six pounds one week ago'])(
+    'does not discard competing reading alternatives while separating timing: %s', quote => {
+      const ctx = { ...context(`It was ${quote}.`, ['Q04']), displayed: weightAsked };
+      const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 205, quote }] }, ctx);
+      expect(answers(outcome, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+      expect(outcome.clarifications[0]).toMatchObject({ path: 'lastMeasuredWeight.value', reason: 'ambiguous-value' });
+      expect(outcome.clarifications[0].confirm).toBeUndefined();
+    },
+  );
+
+  it.each(['I think it was', 'Maybe it was', 'It was probably', 'I guess it was'])(
+    'clarifies an uncertain actual reading even when the quote omits the uncertainty cue: %s', lead => {
+      const ctx = { ...context(`${lead} two oh five pounds.`, ['Q04']), displayed: weightAsked };
+      const first = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'lastMeasuredWeight.value', state: 'known', value: 205, quote: 'two oh five pounds' }] }, ctx);
+      expect(answers(first, 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+      expect(first.clarifications[0]).toMatchObject({ path: 'lastMeasuredWeight.value', reason: 'ambiguous-value' });
+      expect(first.clarifications[0].confirm).toBeUndefined();
+      const next = reply(ctx, first, 'Yes.').ctx;
+      expect(answers(interpretIntakeResponse(empty, next), 'Q04')['lastMeasuredWeight.value']).toBeUndefined();
+    },
+  );
+
+  it('clarifies uncertain height wording instead of treating a yes as confirmation of a measurement', () => {
+    const ctx = { ...context('I think I am five foot ten.', ['Q04']),
+      displayed: { topicId: 'Q04', promptId: 'Q04', targetPaths: ['height.value', 'height.unit'] } };
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: 'height.value', state: 'known', value: '5 ft 10 in', quote: 'five foot ten' }] }, ctx);
+    expect(answers(outcome, 'Q04')['height.value']).toBeUndefined();
+    expect(outcome.clarifications[0]).toMatchObject({ path: 'height.value', reason: 'ambiguous-value' });
+    expect(outcome.clarifications[0].confirm).toBeUndefined();
+  });
+
+  it.each([
+    { path: 'lastMeasuredWeight.value', value: 205, quote: '205.5 pounds' },
+    { path: 'lastMeasuredWeight.value', value: 205, quote: '-205 pounds' },
+    { path: 'height.value', value: 173, quote: '173.5 cm' },
+    { path: 'height.value', value: 173, quote: '-173 cm' },
+  ])('rejects precision or sign changes to $path from "$quote"', ({ path, value, quote }) => {
+    const ctx = context(`The reading was ${quote}.`, ['Q04']);
+    const outcome = interpretIntakeResponse({ ...empty, facts: [{ topic: 'Q04', field: path, state: 'known', value, quote }] }, ctx);
+    expect(answers(outcome, 'Q04')[path]).toBeUndefined();
+    expect(outcome.rejectedCandidates?.map(entry => entry.reason)).toContain('number-not-in-quote');
+  });
 });

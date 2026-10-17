@@ -1,6 +1,76 @@
 # Plan: safety gate, voice robustness, and answer specificity
 
 Status: **approved 2026-10-12** (decisions recorded in §5; D2 changed by the reviewer, see §2 V2). Synthetic demo only; no HIPAA claims.
+
+Progress (2026-10-12):
+- **P1 (safety): done**, commit 65f053f.
+- **P2 (voice V1): done**, commit 91868c9.
+- **P3a + P3b (specificity): done in one pass.** All 22 contracts across Q02–Q19 shipped together.
+  - **Source change, for a public repository:**
+    - RxClass classes are not used, because D6 needs no classes. ATC, one of the RxClass sources, also carries WHO licence limits.
+    - The Clinical Tables conditions list is not used, because it has no explicit redistribution grant.
+    - Conditions are instead our own authored terms, validated against CMS ICD-10-CM. See `packages/clinic-reference/SOURCES.md`.
+  - **Gate:**
+    - 344-answer deterministic corpus. Vague recall must be at least 95%, and needless follow-ups at most 5%.
+    - Two holdouts were labelled before running. The first scored 31/40 and drove general lexicon rules. The second scored 45/47 (95.7%) on first run.
+    - 6 bounded live interpreter calls (qwen3.8-max). They found and fixed two real defects: a named reply raised a conflict, and "I'll bring the bottle" was marked unresolved.
+- **Independent review of P1–P3 (2026-10-13):** Codex (gpt-6.1-sol, xhigh) on each commit, and cubic on PR #8. Every valid finding is fixed with a regression test that fails on the old code. Main fixes:
+  - **Safety gate:**
+    - A reviewer failure on an unflagged turn now goes to clinician review.
+    - Gate verdicts apply after a cancelled interpretation, after a resumed eating-concern notice, to spoken replies on fixed-choice items, and on the grouped and stream paths.
+    - Floor: "odd" no longer matches "OD'd". "Pain was severe" is past and goes to the model. "I told my husband about my suicidal thoughts" now pauses. Line breaks end a clause.
+  - **Specificity:**
+    - A qualified "yes" never confirms.
+    - Codes and settled notes are bound to the exact answer.
+    - Vague answers stay partial on the native final-review path too.
+    - Spelling checks count toward the topic budget.
+    - Numbers count only with their unit of time.
+    - A time answer must mention a time.
+    - Condition terms CT-0.3 code nothing more specific than the patient's words.
+    - Native definition bumped to `CC-0.2.phq4.native-5`.
+  - **Voice:**
+    - Retrying never overwrites typed words.
+    - No upload starts after a discard.
+    - Send stays off while a recording is kept.
+    - A corrected unit replaces the superseded one.
+    - Ordinary "wait" or "sorry" is not a correction.
+  - **Deferred, with reasons:**
+    - Binding safety-corpus recordings to full-message hashes is gate hygiene for the next safety change.
+    - The fail-closed banner staying visible is accurate (the message was flagged).
+    - A queue-test timer is a test-only flake risk.
+    - With no reviewer configured at all, the floor and screen are the documented fallback.
+- **Codex re-review of 7da5d98:** six findings, all fixed with tests that fail on 7da5d98:
+  - A current "pain was severe … still is now" pauses again.
+  - Structured guided field answers are gated.
+  - The stream path publishes its early reply only after the gate.
+  - A first-person statement isn't scoped as media.
+  - A follow-up reply that also states a new fact keeps it.
+  - Settling never brings back an earlier value's code.
+  - Known gap: the native final-review completeness override has no automated test. The test fixtures cannot bind a representation authority for a full first intake. It shares the same `specificityIncomplete` check as the guided path, which is tested.
+- **cubic second pass (2026-10-13):** 28 findings on 533b3f8; valid ones fixed:
+  - A safety verdict that can't be saved is never dropped: the signal stays open and the request returns 503 so the client retries.
+  - Grouped and stream replies are gated before anything runs.
+  - A follow-up settles only when the whole reply is a terminal answer; a plain "No" settles as unknown.
+  - "2x" needs an interval; "after" alone isn't a time; a vague answer keeps the native response `stopped`.
+  - A medicine's purpose ("heart meds", "arthritis meds") is never read as a reported condition.
+  - Optional detail probes can't be nominated ahead of a required question.
+- **P4 (voice V2 hands-free): code complete (2026-10-13).**
+  - The browser streams mic audio straight to Deepgram live (`nova-3-medical`). It uses a 30 s token minted per utterance at `POST /api/clinic/speech/tokens`. The server never relays audio.
+  - Each mint reserves against the Deepgram budget ledger (59 s stream bound). Refused when paused, confirmed, stale, buttons-only (PHQ-4 and exact-choice items), or over budget (429).
+  - Fallback to push-to-talk on a server, network or socket failure. A refusal is not a fallback.
+  - Read-aloud: browser voice by default. Optional ElevenLabs Flash via `POST /api/clinic/speech/output`, authored prompts only, same ledger.
+  - Verified: suites green (foundation 1849, clinic 230, hosting 28). Live, the exact streaming URL transcribed a self-correction clip as one utterance. A live browser token refusal fell back to push-to-talk, and dictation filled the box.
+  - The Deepgram token grant needs a Member-role key; the hosted `DEEPGRAM_API_KEY` must be that key.
+  - **Known limit:** a token is checked only when the socket opens, so the server cannot cut a stream mid-utterance. The browser enforces the 59 s cap. The server bounds exposure by bounding the number of tokens.
+  - Codex review of c6f04c4: three findings fixed with failing-first tests (token re-checked after admission and before release; a cancel during admission never reaches Deepgram; a spoken "pause" is removed from the draft).
+  - **Member-role key installed 2026-10-13. Live browser run against Deepgram (synthetic speech through a fake microphone):**
+    - 14 consecutive hands-free turns, one token each, no errors; the intake moved through 7 questions.
+    - Barge-in: speech during read-aloud stopped it within 0.5 s.
+    - "Stop." paused voice, saved nothing and left the answer box empty.
+    - The first run cut "ten milligrams, uh, [1.2 s] no wait, twenty milligrams" into two turns. Fixes, per the voice article review: Deepgram endpointing 800 ms with filler words kept; grace 1.0 s, or 2.5 s after a filler, correction cue or amount; a **Done speaking** button. Rerun: one turn, 3 of 3.
+  - Not yet verified: the hosted deploy (P5).
+- **P5: deployed 2026-10-14 (stage8).** native-5 published and qualified (39 checks, expires 2026-10-21); hosted hands-free verified. Details in `OPUS-HANDOFF.md`.
+- **Earlier P5 note:** Voice article review triage: `VOICE-ARTICLE-REVIEW-2026-10-12.md`.
 Constraints carried forward:
 - Reasoning runs on DigitalOcean inference only.
 - Authored questions only; the agent never writes clinical wording.
@@ -183,6 +253,8 @@ The model may *propose* a specificity, but the server validates it: the model ca
 **Nothing the patient said is discarded.** "pills for my heart" is kept verbatim as the item's description, not as its name. And "heart" in a medication context no longer marks heart disease; the condition guard requires condition wording.
 
 ### 3.3 Reference resolvers ("tools")
+> **Superseded in part (see Progress above and `packages/clinic-reference/SOURCES.md`):** RxClass classes, the lay-class map and the Clinical Tables conditions list were not used. Conditions are authored terms validated against CMS ICD-10-CM. The table below is the original proposal.
+
 These are local, offline, deterministic indexes, built from free sources by a build script and bundled with the server. **No runtime calls to outside services.** That keeps latency at 0 and sends no patient text off-platform; NLM's Clinical Tables terms forbid PHI in requests anyway.
 
 | Domain | Source (free) | What we use |
@@ -247,7 +319,7 @@ A **specificity corpus**: about 150 synthetic answers across every topic in the 
 | **P0** | Decisions D1–D6; verify source licences and releases; author both corpora (safety, specificity) | S | none |
 | **P1** | Safety gate: floor + negation scope + synchronous classifier + fail-safe banner + corpus gates; E-0.2 definition | M | D1 |
 | **P2** | Voice V1 robustness, including in-message self-correction | S–M | none |
-| **P3a** | Specificity engine core: contracts, assessment, probe engine, budget, readiness, staff view. First with **medications + conditions**, plus resolver build scripts (RxNorm, RxClass classes, Clinical Tables conditions, CMS ICD-10-CM) | L | D1, D5, D6 |
+| **P3a** | Specificity engine core: contracts, assessment, probe engine, budget, readiness, staff view. First with **medications + conditions**, plus resolver build scripts (RxNorm and CMS ICD-10-CM with authored condition terms; RxClass and Clinical Tables were dropped, see §3.3) | L | D1, D5, D6 |
 | **P3b** | Extend contracts and probes to every other topic in §3 (allergies, procedures, family history, symptoms, prior approaches, food, activity, substances, sleep, care team, time/quantity) | M | P3a |
 | **P4** | Voice V2 hands-free: browser → Deepgram live with server-minted short-lived tokens; optional ElevenLabs read-aloud of authored prompts (D3) | M | P2 |
 | **P5** | Re-qualify, deploy stage8, live corpus runs, hosted journeys, docs | S | all |

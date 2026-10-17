@@ -1,3 +1,4 @@
+import { scenarioForWorkflowTopic } from '../../clinic-content/src/scenarios.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
 import { canonicalJson } from '../../clinical-core/src/domain.js';
@@ -26,7 +27,7 @@ export const adaptiveGroupAnchorRoles: Readonly<Record<string, readonly string[]
   'Q11.occasions': ['time', 'foods', 'drinks'], 'Q17.substances': ['substance'], 'Q19.clinicians': ['owner'], 'Q19.records': ['record'], W07: ['medicine'],
 });
 const forbidden = (definition: SlotDefinition, topic: string) => definition.kind === 'configuration' || /^MH0[1-4]$/.test(definition.id) || definition.id === 'currentWeightEstimate.statedAt'
-  || topic === 'W02' && definition.id === 'appointmentContext' || topic === 'W04' && definition.id === 'planContext';
+  || !!scenarioForWorkflowTopic(topic)?.behaviour?.extractionBlockedSlotIds?.includes(definition.id);
 const states = (definition: SlotDefinition): State[] => ['known', 'unknown', 'declined', 'uncertain', ...(definition.acceptsNegative ? ['negative' as const] : []), ...(definition.acceptsNotApplicable ? ['not-applicable' as const] : [])];
 const enumeration = (values: string[]) => values.length ? z.enum(values as [string, ...string[]]) : z.never();
 const alternatives = (values: z.ZodType[]) => values.length === 1 ? values[0] : values.length ? z.union(values as [z.ZodType, z.ZodType, ...z.ZodType[]]) : z.never();

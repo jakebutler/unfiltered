@@ -3,6 +3,7 @@ import { conversation } from '../src/conversation.js';
 import { cookies } from '../src/cookies.js';
 import { escalation } from '../src/safety.js';
 import { digest } from '../../clinical-core/src/domain.js';
+import { toNativeQuestionnaireResponse } from '../../clinical-core/src/questionnaire-response.js';
 import type { ClinicApiConfig, Draft } from '../src/types.js';
 const patient = { reference: 'Patient/test', displayName: 'Synthetic Patient', description: 'Synthetic only', careTeams: { medical: 'CareTeam/md', nutrition: 'CareTeam/rd', administrative: 'CareTeam/admin' } };
 const config = { origin: 'http://127.0.0.1:5173', cookieSecret: 'test-secret-'.repeat(5), mentalHealth: 'phq4', patients: Object.fromEntries(['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill'].map(id => [id, patient])) } as ClinicApiConfig;
@@ -46,6 +47,15 @@ describe('guided patient evidence and immutable confirmation', () => {
         changed.turns.find(t => t.role === 'patient')!.text = 'Different source after preview';
         await expect(c.finalize(changed, confirmedAt)).rejects.toThrow('confirmation-digest-mismatch');
     });
+    it('guided path: an otherwise complete intake with one vague required answer stays partial in the view and the submission', async () => { let d = fresh(), count = 0, vague = 0; while (c.view(d).currentPrompt) {
+        const p = c.view(d).currentPrompt!;
+        expect(++count).toBeLessThan(150);
+        const text = p.choices ? p.choices.find(x => x.value === '__negative')?.value ?? p.choices.find(x => x.value === '__done')?.value ?? p.choices.find(x => x.value === '__topic-not-applicable')?.value ?? p.choices[0].value
+            : p.id === 'Q04:height.value' ? '170' : p.id === 'Q04:lastMeasuredWeight.value' ? '82' : p.id === 'Q04:lastMeasuredWeight.measuredWhen' ? (vague++, 'a while back') : `Synthetic detail for ${p.purpose}: typical pattern recalled for this example.`;
+        d = answer(d, text);
+    } expect(vague).toBe(1); expect(c.view(d).completeness).toBe('partial'); const s = (await c.preview(d)).confirmation.submission; expect(s.completeness).toBe('partial');
+    // The exported native QuestionnaireResponse says the same: stopped, not completed (cubic, 2026-10-13).
+    expect((await toNativeQuestionnaireResponse({ capture: s.questionnaireCapture!, validSourceIds: new Set(s.sources.map(source => source.id)), patient: s.patient, authored: s.confirmedAt, confirmed: true })).status).toBe('stopped'); }, 20000);
     it('finishes a granular first intake with real measurement targets and explicit PHQ responses', async () => { let d = fresh(), count = 0; while (c.view(d).currentPrompt) {
         const p = c.view(d).currentPrompt!;
         expect(++count).toBeLessThan(150);
@@ -57,10 +67,12 @@ describe('guided patient evidence and immutable confirmation', () => {
             text = '170';
         else if (p.id === 'Q04:lastMeasuredWeight.value')
             text = '82';
+        else if (p.id === 'Q04:lastMeasuredWeight.measuredWhen')
+            text = 'In March 2026.';
         else
             text = `Synthetic detail for ${p.purpose}: typical pattern recalled for this example.`;
         d = answer(d, text);
-    } expect(c.view(d).completeness).toBe('complete'); const p = await c.preview(d); expect(p.confirmation.submission.completeness).toBe('complete'); expect(p.topics.find(t => t.id === 'Q16')?.screening?.scores).toEqual({ gad2: 0, phq2: 0, phq4: 0 }); expect(count).toBeGreaterThan(40); expect(p.confirmation.submission.sources).toHaveLength(count); }, 20000);
+    } expect(c.view(d).completeness).toBe('complete'); const p = await c.preview(d); expect(p.confirmation.submission.completeness).toBe('complete'); const s = p.confirmation.submission; expect((await toNativeQuestionnaireResponse({ capture: s.questionnaireCapture!, validSourceIds: new Set(s.sources.map(source => source.id)), patient: s.patient, authored: s.confirmedAt, confirmed: true })).status).toBe('completed'); expect(p.topics.find(t => t.id === 'Q16')?.screening?.scores).toEqual({ gad2: 0, phq2: 0, phq4: 0 }); expect(count).toBeGreaterThan(40); expect(p.confirmation.submission.sources).toHaveLength(count); }, 20000);
     it('declines stop the topic, while unknown stops only that detail', () => { let d = c.select(fresh(), 'Q16'); d = answer(d, undefined, 'decline'); expect(d.topics.Q16.stopped).toBe('patient-declines'); expect(c.view(d).currentPrompt?.topicId).not.toBe('Q16'); let u = c.select(fresh(), 'Q16'); u = answer(u, undefined, 'unknown'); expect(u.topics.Q16.stopped).toBeUndefined(); expect(c.select(u, 'Q16').topics.Q16.answers.depressionHistory?.state).toBe('unknown'); expect(c.view(c.select(u, 'Q16')).currentPrompt?.id).toBe('Q16:anxietyHistory'); });
     it('a correction keeps source history, changes digest and refuses stale prompt targets', async () => { let d = answer(fresh(), 'Improve everyday energy with regular meals.'); const before = await c.preview(d), original = d.turns.find(t => t.role === 'patient')!; d = c.select(d, 'Q01', 'reason'); d = answer(d, 'Correction: improve walking endurance for family activities.'); const after = await c.preview(d); expect(after.digest).not.toBe(before.digest); expect(d.turns.some(t => t.corrects === original.id)).toBe(true); expect(after.confirmation.submission.answers.find(a => a.questionId === 'Q01')?.text).toContain('Correction'); expect(() => c.turn(d, { requestId: crypto.randomUUID(), expectedRevision: d.revision, promptId: 'Q04:height.value', action: 'answer', text: '170' })).toThrow('stale-prompt'); });
     it('refused required measurement never becomes complete', async () => { let d = c.select(fresh(), 'Q04'); d = answer(d, undefined, 'decline'); expect(c.view(d).completeness).toBe('partial'); expect((await c.preview(d)).confirmation.submission.completeness).toBe('partial'); });

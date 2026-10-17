@@ -65,7 +65,7 @@ export function seedPlan() {
       { key: 'administrative', name: 'Taylor Brooks', role: 'administrative', policy: 'administrative', patient: 'primary', ownerOf: ['administrative'] },
       { key: 'unassigned', name: 'Dr. Quinn Parker', role: 'physician', policy: 'clinical-unassigned', patient: 'unrelated', ownerOf: [] },
     ].map(staff => ({ ...staff, membershipAdmin: false, sendEmail: false, email: `${staff.key}.${CLOUD_PROJECT_ID.slice(0, 8)}@example.invalid`, password: '{{generate-private-random-password-at-execution}}' })),
-    questionnaire: { canonical: 'https://corvo.example/Questionnaire/clinic', version: 'CC-0.2.phq4.native-4', identity: 'url-and-version', readback: 'exact-authored-definition-and-history-version', compiler: 'packages/clinic-content/src/native-questionnaire.ts', runtimeAccess: 'read-search-vread-history-only-for-exact-questionnaire-id', administrativeAccess: 'none' },
+    questionnaire: { canonical: 'https://corvo.example/Questionnaire/clinic', version: 'CC-0.2.phq4.native-5', identity: 'url-and-version', readback: 'exact-authored-definition-and-history-version', compiler: 'packages/clinic-content/src/native-questionnaire.ts', runtimeAccess: 'read-search-vread-history-only-for-exact-questionnaire-id', administrativeAccess: 'none' },
     runtime: { admin: false, policy: 'runtime', noAccessTo: ['AccessPolicy', 'ProjectMembership', 'ClientApplication'], secretDelivery: 'private-file-or-host-secret-store-only' },
     scenarios: SCENARIOS.map(id => ({ id, patient: 'primary', mentalHealth: 'phq4', identity: 'synthetic-demo-capability-not-real-patient-verification' })),
     sequence: [
@@ -79,7 +79,7 @@ export function seedPlan() {
       'Finish setup, then demote the reused temporary bootstrap membership to admin:false with the runtime access policy, verify revoked admin access, and revoke the bootstrap OAuth session. Keep the existing client secret private.',
       'Write private clinic configuration from returned IDs; generate a separate cookie secret per deployment.',
       'Run conditional identity/concurrency, version history/CAS, recovery/action history and direct named-role authorization qualification; retain results and synthetic fixture IDs.',
-      'Seal deployment attestation only after every required check and confirmation that temporary setup access is revoked.',
+      'Seal deployment attestation (schema 3) only after every required check and confirmation that temporary setup access is revoked; the Project feature projection is observed by the demoted runtime client via auth/me.',
     ],
     reconcileRule: 'Persist intent before every write, retain returned native ID/version, and read back identity and content. A timeout is an unknown outcome; do not blindly retry or duplicate client/member creation.',
   };

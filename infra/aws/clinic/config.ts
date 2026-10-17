@@ -1,3 +1,4 @@
+import { scenarioIds as scenarios, type ScenarioId } from '../../../packages/clinic-content/src/workflows.js';
 import { NATIVE_QUESTIONNAIRE_CANONICAL, NATIVE_QUESTIONNAIRE_VERSION } from '../../../packages/clinic-content/src/native-questionnaire.js';
 import { nativeRoutingContextSchema } from '../../../packages/clinical-core/src/questionnaire-response.js';
 import { z } from 'zod';
@@ -6,24 +7,34 @@ import { parseDeploymentManifest, type ClinicDeploymentManifest } from '../manif
 
 const id = z.string().regex(/^[A-Za-z0-9.-]{1,64}$/);
 const reference = (type: string) => z.string().regex(new RegExp(`^${type}/[A-Za-z0-9.-]{1,64}$`));
-const scenarios = ['first-intake', 'pre-visit', 'non-visit', 'post-visit', 'billing', 'scheduling', 'refill'] as const;
 const checks = z.object({ conditionalCreate: z.literal(true), conditionalConcurrency: z.literal(true), versionConflict: z.literal(true), versionHistory: z.literal(true), lostResponseRecovery: z.literal(true), partialResume: z.literal(true), zeroTaskResume: z.literal(true), sourceVerification: z.literal(true), payloadConflict: z.literal(true) }).strict();
 const application = z.object(Object.fromEntries(applicationChecks.map(check => [check, z.literal(true)])) as Record<typeof applicationChecks[number], z.ZodLiteral<true>>).strict();
 const patient = z.object({ reference: reference('Patient'), displayName: z.string().min(1).max(200), description: z.string().max(2000), careTeams: z.object({ medical: reference('CareTeam'), nutrition: reference('CareTeam'), administrative: reference('CareTeam') }).strict(), context: z.string().max(8000).optional(), nativeContext: nativeRoutingContextSchema.optional() }).strict();
+const identityBase = { endpoint: z.string(), projectId: id, clientId: id, membershipId: id, effectivePolicyDigest: z.string().regex(/^[a-f0-9]{64}$/), serverVersion: z.string().min(1).max(128) };
+const features = z.array(z.string().min(1).max(128)).max(64);
+const payloadBase = {
+  purpose: z.literal('synthetic-clinic-conditional-resumable'), deliveryContract: z.literal('conditional-resumable-v1'), mode: z.literal('live'), origin: z.string(),
+  qualifiedAt: z.string().datetime({ offset: true }), expiresAt: z.string().datetime({ offset: true }), proofDigest: z.string().regex(/^[a-f0-9]{64}$/), checks, applicationChecks: application, namedPolicyDigests: z.record(z.string().regex(/^[a-f0-9]{64}$/)), staffRosterDigest: z.string().regex(/^[a-f0-9]{64}$/), applicationEvidenceDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  nativeQuestionnaire: z.object({ canonical: z.literal(NATIVE_QUESTIONNAIRE_CANONICAL), version: z.literal(NATIVE_QUESTIONNAIRE_VERSION), digest: z.string().regex(/^[a-f0-9]{64}$/), reference: z.string().regex(/^Questionnaire\/[A-Za-z0-9.-]{1,64}\/_history\/[A-Za-z0-9.-]{1,64}$/) }).strict().optional(),
+};
+// Schema 2: historical admin-observed Project feature file. Accepted until its own expiry.
+const payloadV2 = z.object({ ...payloadBase, schema: z.literal(2), identity: z.object(identityBase).strict(),
+  projectFeature: z.object({ projectId: id, projectVersion: id, features, observedAt: z.string().datetime({ offset: true }) }).strict(),
+  featureDriftContract: z.literal('admin-change-requires-requalification-not-runtime-observed') }).strict();
+// Schema 3: runtime /auth/me Project projection, re-observed and digest-compared on every refresh.
+// The regex validates the prefix and digest before narrowing the unchanged value for the contract.
+const projectionVersion = z.string().regex(/^projection-sha256:[a-f0-9]{64}$/).transform(value => value as `projection-sha256:${string}`);
+const payloadV3 = z.object({ ...payloadBase, schema: z.literal(3), identity: z.object({ ...identityBase, projectionDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+  projectFeature: z.object({ source: z.literal('auth-me'), projectId: id, features, projectVersion: projectionVersion, projectionDigest: z.string().regex(/^[a-f0-9]{64}$/), observedAt: z.string().datetime({ offset: true }) }).strict(),
+  featureDriftContract: z.literal('runtime-observed-auth-me-projection') }).strict()
+  .refine(payload => payload.identity.projectionDigest === payload.projectFeature.projectionDigest && payload.projectFeature.projectVersion === `projection-sha256:${payload.projectFeature.projectionDigest}`);
 const schema = z.object({
   origin: z.string(), medplumBaseUrl: z.string(), projectId: id, clientId: id,
   nativeQuestionnaire: z.object({ canonical: z.literal(NATIVE_QUESTIONNAIRE_CANONICAL), version: z.literal(NATIVE_QUESTIONNAIRE_VERSION), digest: z.string().regex(/^[a-f0-9]{64}$/), reference: z.string().regex(/^Questionnaire\/[A-Za-z0-9.-]{1,64}\/_history\/[A-Za-z0-9.-]{1,64}$/) }).strict().optional(),
   clientSecret: z.string().min(16).max(4096), cookieSecret: z.string().min(32).max(256), mentalHealth: z.literal('phq4'),
-  patients: z.object({ 'first-intake': patient, 'pre-visit': patient, 'non-visit': patient, 'post-visit': patient, billing: patient, scheduling: patient, refill: patient }).strict(),
+  patients: z.object(Object.fromEntries(scenarios.map(id => [id, patient])) as Record<ScenarioId, typeof patient>).strict(),
   staff: z.array(z.object({ membershipId: id, profile: reference('Practitioner'), policy: reference('AccessPolicy'), name: z.string().min(1).max(200), role: z.enum(['physician', 'registered-dietitian', 'administrative']), patients: z.array(reference('Patient')).length(1), careTeams: z.array(reference('CareTeam')).max(3) }).strict()).length(4),
-  storageQualification: z.object({ signature: z.string().regex(/^[a-f0-9]{64}$/), payload: z.object({
-    schema: z.literal(2), purpose: z.literal('synthetic-clinic-conditional-resumable'), deliveryContract: z.literal('conditional-resumable-v1'), mode: z.literal('live'), origin: z.string(),
-    qualifiedAt: z.string().datetime({ offset: true }), expiresAt: z.string().datetime({ offset: true }), proofDigest: z.string().regex(/^[a-f0-9]{64}$/), checks, applicationChecks: application, namedPolicyDigests: z.record(z.string().regex(/^[a-f0-9]{64}$/)), staffRosterDigest: z.string().regex(/^[a-f0-9]{64}$/), applicationEvidenceDigest: z.string().regex(/^[a-f0-9]{64}$/),
-    identity: z.object({ endpoint: z.string(), projectId: id, clientId: id, membershipId: id, effectivePolicyDigest: z.string().regex(/^[a-f0-9]{64}$/), serverVersion: z.string().min(1).max(128) }).strict(),
-    projectFeature: z.object({ projectId: id, projectVersion: id, features: z.array(z.string().min(1).max(128)).max(64), observedAt: z.string().datetime({ offset: true }) }).strict(),
-    nativeQuestionnaire: z.object({ canonical: z.literal(NATIVE_QUESTIONNAIRE_CANONICAL), version: z.literal(NATIVE_QUESTIONNAIRE_VERSION), digest: z.string().regex(/^[a-f0-9]{64}$/), reference: z.string().regex(/^Questionnaire\/[A-Za-z0-9.-]{1,64}\/_history\/[A-Za-z0-9.-]{1,64}$/) }).strict().optional(),
-    featureDriftContract: z.literal('admin-change-requires-requalification-not-runtime-observed'),
-  }).strict() }).strict(),
+  storageQualification: z.object({ signature: z.string().regex(/^[a-f0-9]{64}$/), payload: z.union([payloadV2, payloadV3]) }).strict(),
 }).strict();
 
 export function awsClinicConfig(environment: Record<string, string | undefined>): { manifest: ClinicDeploymentManifest; config: QualifiedClinicConfig } {

@@ -6,8 +6,10 @@ import { readDraft } from './store.js';
 import { requireNoPendingInterpretation } from './adaptive-session.js';
 import { streamSpeechScopeDigest } from './adaptive-stream-session.js';
 import { ApiFailure, type ClinicApiConfig } from './types.js';
+import { requirePatientScope, requireInvitationDraftScope } from './patient-fixture.js';
 import type { Runtime } from './runtime.js';
 import { conversationSpeech, type ScenarioId } from '../../clinic-contract/src/index.js';
+import { promptAllowsFreeText } from '../../clinic-contract/src/prompt-input.js';
 import type { SpeechOutputRequest, SpeechTurnScope } from '../../speech/src/contracts.js';
 
 export const speechInputPath = '/api/clinic/speech/input';
@@ -26,17 +28,17 @@ export function createSpeechAccess(config: ClinicApiConfig, options: { runtime()
     if (!options.enabled) throw new ApiFailure('speech-unavailable', 503);
     if (request.headers.get('origin') !== origin) throw new ApiFailure('origin-denied', 403);
     const claims = await jar.read(request, 'clinic_patient');
-    if (claims.kind !== 'patient' || !Object.hasOwn(config.patients, claims.scenario)
-      || config.patients[claims.scenario as ScenarioId].reference !== claims.patient) throw new ApiFailure('session-scope-denied', 403);
+    if (claims.kind !== 'patient') throw new ApiFailure('session-scope-denied', 403);
+    requirePatientScope(config, claims);
     if (!claims.identityConfirmed) throw new ApiFailure('identity-confirmation-required', 403);
     return claims;
   }
-  async function current(request: Request, scope: { sessionId: string; expectedRevision: number }) {
+  async function current(request: Request, scope: { sessionId: string; expectedRevision: number }, refuse: { confirmed?: boolean } = {}) {
     const claims = await authenticate(request);
     if (scope.sessionId !== claims.sessionId) throw new ApiFailure('session-scope-denied', 403);
     const { draft } = await readDraft((await options.runtime()).client, claims.sessionId, claims.patient);
-    if (draft.scenario !== claims.scenario || draft.id !== claims.sessionId) throw new ApiFailure('session-scope-denied', 403);
-    if (draft.phase !== 'conversation' || draft.safety?.paused) throw new ApiFailure('speech-conversation-required', 409);
+    requireInvitationDraftScope(claims, draft);
+    if (draft.phase !== 'conversation' || draft.safety?.paused || (refuse.confirmed && draft.confirmed)) throw new ApiFailure('speech-conversation-required', 409);
     const active = draft.adaptive?.activeOperationId && draft.adaptive.operations[draft.adaptive.activeOperationId];
     const savedReply = active && active.stream?.reply === 'saved' && active.stream.replyScope;
     if (draft.revision !== scope.expectedRevision && !(savedReply && savedReply.revision === scope.expectedRevision
@@ -54,6 +56,29 @@ export function createSpeechAccess(config: ClinicApiConfig, options: { runtime()
       const view = await current(request, input);
       if (!view.currentPrompt || view.currentPrompt.id !== input.promptId) throw new ApiFailure('stale-prompt', 409);
       return { sessionId: view.id, promptId: view.currentPrompt.id, revision: view.revision };
+    },
+    /** Hosted hands-free mint: the same current prompt as capture, refused for prompts whose answer must be a button or a typed field. */
+    async token(request: Request, input: SpeechTurnScope) {
+      const parsed = speechStartSchema.safeParse({ type: 'start', ...input });
+      if (!parsed.success) throw new ApiFailure('invalid-speech-request');
+      const view = await current(request, input, { confirmed: true });
+      const prompt = view.currentPrompt;
+      if (!prompt || prompt.id !== input.promptId) throw new ApiFailure('stale-prompt', 409);
+      // Mirrors the browser's natural-answer rule: PHQ-4 items and exact choice or structured-field prompts are button-only.
+      const natural = view.adaptive?.mode === 'adaptive' && prompt.mode !== 'guided';
+      if (/^Q16:MH0[1-4](?:$|:)/.test(prompt.id) || !promptAllowsFreeText(prompt, natural)) throw new ApiFailure('speech-buttons-only', 409);
+      return { sessionId: view.id, promptId: prompt.id, revision: view.revision };
+    },
+    /** Push-to-talk transcription only fills the patient's unsent answer box, so a question that changed during
+     * recording does not invalidate it; the session must still be the patient's own, open and not paused. */
+    async upload(request: Request, input: SpeechTurnScope) {
+      if (!speechStartSchema.safeParse({ type: 'start', ...input }).success) throw new ApiFailure('invalid-speech-request');
+      const claims = await authenticate(request);
+      if (input.sessionId !== claims.sessionId) throw new ApiFailure('session-scope-denied', 403);
+      const { draft } = await readDraft((await options.runtime()).client, claims.sessionId, claims.patient);
+      requireInvitationDraftScope(claims, draft);
+      if (draft.phase !== 'conversation' || draft.safety?.paused || draft.confirmed) throw new ApiFailure('speech-conversation-required', 409);
+      return { sessionId: draft.id, promptId: input.promptId, revision: draft.revision };
     },
     async output(request: Request, input: SpeechOutputRequest) {
       if (!speechOutputSchema.safeParse(input).success) throw new ApiFailure('invalid-speech-request');

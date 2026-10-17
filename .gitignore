@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/infra/cloud/vercel/research/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -81,3 +82,6 @@ worker-configuration.d.ts
 # Local qualification/extraction build outputs
 .extraction-*-build/
 .stream-*-build/
+
+# Offline reference-data build cache (scripts/reference/build-reference.mjs)
+/.cache/

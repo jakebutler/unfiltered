@@ -54,3 +54,13 @@ export function validScope(scope: SpeechTurnScope): boolean {
     && Number.isSafeInteger(scope.expectedRevision) && scope.expectedRevision >= 0
     && typeof scope.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(scope.requestId));
 }
+
+/** Hosted hands-free: the browser opens Deepgram live directly with a server-minted temporary token, never a long-lived key.
+ * `filler_words` keeps "um"/"uh" so the longer endpoint grace can see a speaker who is still thinking. */
+export const deepgramDirectListenUrl = 'wss://api.deepgram.com/v1/listen?model=nova-3-medical&language=en-US&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=800&vad_events=true&punctuate=true&smart_format=true&filler_words=true';
+export const deepgramDirectOrigin = 'wss://api.deepgram.com';
+export const speechTokenPath = '/api/clinic/speech/tokens';
+/** A token only has to be valid when the socket opens. */
+export const speechTokenTtlSeconds = 30;
+/** Client-enforced cap for a direct stream; the server cannot cut a stream it never sees. */
+export const directCaptureMs = 59_000;

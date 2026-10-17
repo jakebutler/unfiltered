@@ -1,9 +1,11 @@
+import { scenarios as workflowTemplates } from '../../clinic-content/src/scenarios.js';
 import { applyValidatedTurn, validateAdaptiveProposal, type AdaptiveContext } from '../src/adaptive-validation.js';
 import { eligibleAdaptiveProbes, selectAdaptiveDialogue } from '../src/dialogue.js';
 import { describe, expect, it } from 'vitest';
 import { conversation } from '../src/conversation.js';
 import { handoffs } from '../src/handoffs.js';
-import { createDraft, document, DRAFT_SYSTEM, readDraft } from '../src/store.js';
+import { createDraft, decodeDocument, document, DRAFT_SYSTEM, readDraft, SNAPSHOT_SYSTEM } from '../src/store.js';
+import type { Snapshot } from '../src/handoffs.js';
 import type { ClinicApiConfig, Draft, StaffAssignment } from '../src/types.js';
 import { digest, validateSubmissionIntegrity, unresolvedRecognitionSourceIds } from '../../clinical-core/src/domain.js';
 import { planHandoff } from '../../clinical-core/src/fhir.js';
@@ -27,7 +29,75 @@ async function setup(scenario: Draft['scenario'] = 'billing') {
   draft.preview = await c.preview(draft); draft.phase = 'review'; draft.confirmed = await c.finalize(draft); draft.preview = undefined; draft.phase = 'confirmed';
   return { native, config, client, c, h, q, draft, id: `${draft.id}.v1` };
 }
+type Fixture = Awaited<ReturnType<typeof setup>>;
+/** Persists a confirmed draft as its handoff snapshot and delivers it, returning the snapshot id. */
+async function receive(f: Fixture, draft: Draft) {
+  await createDraft(f.client, draft); await f.h.snapshot(f.client, draft); await f.client.deliver(draft.confirmed!.confirmation, f.q);
+  return `${draft.id}.v1`;
+}
+/** Rewrites the stored snapshot document in place, keeping its identifier, subject and receipt metadata. */
+function rewriteStoredSnapshot(f: Fixture, id: string, mutate: (snapshot: Snapshot) => void) {
+  const resource = [...f.native.resources.values()].find(row => row.resourceType === 'DocumentReference' && (row.identifier as Array<{ system: string; value: string }>).some(i => i.system === SNAPSHOT_SYSTEM && i.value === id))!;
+  const data = decodeDocument<Snapshot>(resource); mutate(data);
+  const { content } = document(SNAPSHOT_SYSTEM, id, data.patient, data) as { content: unknown };
+  resource.content = content as typeof resource.content;
+  f.native.histories.get(`DocumentReference/${resource.id}`)![0].content = resource.content;
+}
 describe('native questionnaire integration and recovery boundaries', () => {
+  it.each([false, true])('bypasses an explicitly selected unavailable changes prompt and rejects its stale answer (appointment context: %s)', async hasContext => {
+    const config = configuration();
+    if (hasContext) config.patients['pre-visit'] = { ...config.patients['pre-visit'], nativeContext: { appointment: { reference: 'Appointment/synthetic', version: '1', startsAt: '2026-10-20T15:00:00.000Z', timezone: 'America/New_York', priorUpdateAt: '2026-10-10T12:00:00.000Z' } } };
+    const c = conversation(config); let draft = draftFor('pre-visit');
+    draft.topics.W02 = { presented: true, answers: { appointmentContext: { state: 'known', value: 'Synthetic appointment details', sourceIds: ['source-1'] } } };
+    draft = c.select(draft, 'W02', 'changes');
+    expect(draft.activeSlot).toBe('changes');
+    expect(c.view(draft).currentPrompt).toMatchObject({ id: 'W02:priority' });
+    expect(c.view(draft).currentPrompt?.text).not.toContain('[');
+    const before = structuredClone(draft);
+    expect(() => c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: 'W02:changes', action: 'answer', text: 'This stale answer must not be recorded.' })).toThrow('stale-prompt');
+    expect(draft).toEqual(before);
+    for (const [path, text] of [['priority', 'Synthetic priority'], ['logistics', '__negative']] as const) {
+      expect(c.view(draft).currentPrompt?.id).toBe(`W02:${path}`);
+      draft = c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: `W02:${path}`, action: 'answer', text });
+    }
+    expect(c.view(draft).currentPrompt).toBeUndefined();
+    expect(draft.topics.W02.answers.changes).toBeUndefined();
+    expect(c.view(draft).topics.find(topic => topic.id === 'W02')?.details?.find(detail => detail.id === 'changes')).toMatchObject({ state: 'not-asked', sourceIds: [] });
+    expect((await c.preview(draft)).confirmation.submission.completeness).toBe('partial');
+  });
+  it.each([false, true])('keeps pre-visit native adaptive navigation active without prior-item context (appointment context: %s)', async hasContext => {
+    const config = configuration();
+    if (hasContext) config.patients['pre-visit'] = { ...config.patients['pre-visit'], nativeContext: { appointment: { reference: 'Appointment/synthetic', version: '1', startsAt: '2026-10-20T15:00:00.000Z', timezone: 'America/New_York', priorUpdateAt: '2026-10-10T12:00:00.000Z' } } };
+    const c = conversation(config), draft = draftFor('pre-visit');
+    draft.topics.W02 = { presented: true, answers: { appointmentContext: { state: 'known', value: 'Synthetic appointment details', sourceIds: ['source-1'] } } };
+    const context = (): AdaptiveContext => ({ binding: { operationId: 'op', sessionId: draft.id, patient: draft.patient, scenario: draft.scenario, revision: draft.revision, contentVersion: 'CC-0.2.phq4', snapshotDigest: 'bound-local-snapshot' }, source: draft.turns[0], sources: draft.turns, topics: c.definitions(draft), responses: draft.topics, nativeRouting: c.nativeNavigation(draft) });
+    const before = structuredClone(draft.topics), probes = eligibleAdaptiveProbes(context());
+    expect(probes.flatMap(probe => probe.targetPaths)).not.toContain('changes');
+    expect(probes.find(probe => probe.targetPaths.includes('logistics'))?.promptId).toBe(hasContext ? 'Q20' : 'S01a');
+    expect(selectAdaptiveDialogue(context()).prompt?.targetPaths).toEqual(['priority']);
+    expect(probes.every(probe => !probe.text.includes('['))).toBe(true);
+    expect(draft.topics).toEqual(before);
+    draft.topics.W02.answers.priority = { state: 'known', value: 'Synthetic priority', sourceIds: ['source-1'] };
+    expect(selectAdaptiveDialogue(context()).prompt?.targetPaths).toEqual(['logistics']);
+    draft.topics.W02.answers.logistics = { state: 'negative', sourceIds: ['source-1'] };
+    expect(selectAdaptiveDialogue(context()).prompt).toBeUndefined();
+    expect(draft.topics.W02.answers.changes).toBeUndefined();
+    expect((await c.preview(draft)).confirmation.submission.completeness).toBe('partial');
+  });
+  it.each([false, true])('uses active post-visit native adaptive question and difficulty prompts (plan context: %s)', hasContext => {
+    const config = configuration();
+    if (hasContext) config.patients['post-visit'] = { ...config.patients['post-visit'], nativeContext: { plan: { reference: 'CarePlan/synthetic', version: '1', author: 'Synthetic clinician', recordedAt: '2026-10-08T12:00:00.000Z', text: 'Synthetic plan.' } } };
+    const c = conversation(config), draft = draftFor('post-visit');
+    draft.topics.W04 = { presented: true, answers: { planContext: { state: 'known', value: 'Synthetic plan details', sourceIds: ['source-1'] } } };
+    const context = (): AdaptiveContext => ({ binding: { operationId: 'op', sessionId: draft.id, patient: draft.patient, scenario: draft.scenario, revision: draft.revision, contentVersion: 'CC-0.2.phq4', snapshotDigest: 'bound-local-snapshot' }, source: draft.turns[0], sources: draft.turns, topics: c.definitions(draft), responses: draft.topics, nativeRouting: c.nativeNavigation(draft) });
+    const probes = eligibleAdaptiveProbes(context());
+    expect(probes.find(probe => probe.targetPaths.includes('question'))?.promptId).toBe(hasContext ? 'W04.followup.1' : 'W04.followup.2');
+    expect(probes.find(probe => probe.targetPaths.includes('difficulty'))?.promptId).toBe(hasContext ? 'S03' : 'S03a');
+    expect(probes.every(probe => !probe.text.includes('['))).toBe(true);
+    expect(selectAdaptiveDialogue(context()).prompt?.targetPaths).toEqual(['question']);
+    draft.topics.W04.answers.question = { state: 'known', value: 'Synthetic question', sourceIds: ['source-1'] };
+    expect(selectAdaptiveDialogue(context()).prompt?.targetPaths).toEqual(['difficulty']);
+  });
   it('binds every scenario capture before confirmation and serializes honest nested partial responses', async () => {
     const c = conversation(configuration()), definition = await getNativeQuestionnaireDefinition();
     for (const scenario of scenarios) {
@@ -203,16 +273,16 @@ describe('native questionnaire integration and recovery boundaries', () => {
     const c = conversation(configuration()); let draft = draftFor('first-intake'), count = 0;
     while (c.view(draft).currentPrompt) {
       const prompt = c.view(draft).currentPrompt!; expect(++count).toBeLessThan(150);
-      const text = prompt.choices ? prompt.choices.find(choice => choice.value === '__negative')?.value ?? prompt.choices.find(choice => choice.value === '__done')?.value ?? prompt.choices.find(choice => choice.value === '__topic-not-applicable')?.value ?? prompt.choices[0].value : prompt.id === 'Q04:height.value' ? '170' : prompt.id === 'Q04:lastMeasuredWeight.value' ? '82' : 'Synthetic typical detail recalled for this fixture.';
+      const text = prompt.choices ? prompt.choices.find(choice => choice.value === '__negative')?.value ?? prompt.choices.find(choice => choice.value === '__done')?.value ?? prompt.choices.find(choice => choice.value === '__topic-not-applicable')?.value ?? prompt.choices[0].value : prompt.id === 'Q04:height.value' ? '170' : prompt.id === 'Q04:lastMeasuredWeight.value' ? '82' : prompt.id === 'Q04:lastMeasuredWeight.measuredWhen' ? 'In March 2026.' : 'Synthetic typical detail recalled for this fixture.';
       draft = c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: prompt.id, action: 'answer', text });
     }
     expect(c.view(draft).completeness).toBe('complete');
-    draft = c.select(draft, 'Q16', 'MH01');
+    draft = c.select(draft, 'Q06', 'conditions.diabetes');
     draft = c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: c.view(draft).currentPrompt!.id, action: 'answer', text: 'I am fine', choiceTranscriptOnly: true, channel: 'unreviewed-transcript' });
     const raw = draft.turns.at(-1)!; expect(c.view(draft).completeness).toBe('partial');
-    draft = c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: c.view(draft).currentPrompt!.id, action: 'answer', text: '1', channel: 'confirmed-transcript', choiceConfirmation: { optionTranscript: 'Several days.', confirmationTranscript: 'Yes.', confirmationMethod: 'voice' } });
+    draft = c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: c.view(draft).currentPrompt!.id, action: 'answer', text: '__negative', channel: 'confirmed-transcript', choiceConfirmation: { optionTranscript: 'None / no', confirmationTranscript: 'Yes.', confirmationMethod: 'voice' } });
     expect(c.view(draft).completeness).toBe('complete');
-    const preview = await c.preview(draft); expect(preview.confirmation.submission.sources).toEqual(expect.arrayContaining([expect.objectContaining({ id: raw.id, channel: 'unreviewed-transcript', displayedPromptId: 'Q16:MH01' })]));
+    const preview = await c.preview(draft); expect(preview.confirmation.submission.sources).toEqual(expect.arrayContaining([expect.objectContaining({ id: raw.id, channel: 'unreviewed-transcript', displayedPromptId: 'Q06:conditions.diabetes' })]));
     expect(preview.confirmation.submission.questionnaireCapture!.unreviewedSourceIds).not.toContain(raw.id);
     expect((await planHandoff(preview.confirmation)).components[1].resource.status).toBe('completed');
   }, 15000);
@@ -249,4 +319,37 @@ describe('native questionnaire integration and recovery boundaries', () => {
     expect((await f.h.resume(f.client, f.client, staff[0], f.id, f.q)).deliveryState).toBe('received');
     await expect(readDraft(f.client, f.draft.id, f.draft.patient)).rejects.toThrow('session-expired');
   });
+  it('counts a handoff captured under an earlier questionnaire version without failing or returning it in the staff queue', async () => {
+    const f = await setup(); await receive(f, f.draft);
+    rewriteStoredSnapshot(f, f.id, snapshot => { snapshot.confirmation.submission.questionnaireCapture!.definition.version = 'CC-0.2.phq4.native-4'; });
+    const current = await receive(f, await billingDraft(f));
+    const queue = await f.h.queue(f.client, f.client, staff[2]);
+    expect(queue.items.map(item => item.id)).toEqual([current]); expect(queue.recovery).toEqual([]); expect(queue.earlierVersion).toBe(1);
+  });
+  it('still fails the whole staff queue when a current-version snapshot is corrupted in another field', async () => {
+    const f = await setup(); await receive(f, f.draft);
+    rewriteStoredSnapshot(f, f.id, snapshot => { delete (snapshot.confirmation.submission as { sources?: unknown }).sources; });
+    await expect(f.h.queue(f.client, f.client, staff[2])).rejects.toMatchObject({ code: 'invalid-submission' });
+  });
+  it('omits earlierVersion from the staff queue response when no handoff is under an earlier version', async () => {
+    const f = await setup(); const current = await receive(f, f.draft);
+    const queue = await f.h.queue(f.client, f.client, staff[2]);
+    expect(queue.items.map(item => item.id)).toEqual([current]); expect(queue).not.toHaveProperty('earlierVersion');
+  });
+});
+/** A second confirmed billing intake with the same captured answer, so the scope holds two handoffs. */
+async function billingDraft(f: Fixture): Promise<Draft> {
+  let draft = draftFor('billing');
+  draft = f.c.select(draft, 'W05', 'issueType'); draft = f.c.turn(draft, { requestId: crypto.randomUUID(), expectedRevision: draft.revision, promptId: f.c.view(draft).currentPrompt!.id, action: 'answer', text: 'bill-question' });
+  draft.preview = await f.c.preview(draft); draft.phase = 'review'; draft.confirmed = await f.c.finalize(draft); draft.preview = undefined; draft.phase = 'confirmed';
+  return draft;
+}
+
+it('returns authored workflow completion and context requirements to assigned staff', async () => {
+  const f = await setup('billing');
+  await receive(f, f.draft);
+  for (const assignment of [staff[0], staff[2]]) {
+    const detail = await f.h.view(f.client, f.client, assignment, f.id);
+    expect(detail.workflow).toEqual({ completion: workflowTemplates.billing.completion, contextRequirement: workflowTemplates.billing.contextRequirement });
+  }
 });

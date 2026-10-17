@@ -14,7 +14,11 @@ export interface AdaptiveBinding {
 export interface DisplayedPrompt {
   topicId: string; promptId: string; targetPaths: readonly string[];
   /** Exact scoped copy has its own proposed wording provenance; clinical requirements are unchanged. */
-  wording?: { version: 'S2.scoped.2'; status: 'proposed-detail'; sourcePromptId: string };
+  wording?: { version: 'S2.scoped.2'; status: 'proposed-detail'; sourcePromptId: string }
+    /** intake-interpreter-v1: exact readback for spoken numbers or unreviewed numeric recognition; nothing is recorded until confirmed. */
+    | { version: 'spoken-number-confirm.1'; status: 'proposed-detail'; sourcePromptId: string; confirm: SpokenNumberConfirm };
+  /** An authored specificity follow-up (SP-0.1) about this one recorded answer. */
+  specificity?: import('./specificity.js').SpecificityPromptMark;
 }
 export interface DialogueState {
   activeTopicId?: string; suspended?: DisplayedPrompt;
@@ -37,6 +41,8 @@ export interface AdaptiveContext {
   displayed?: DisplayedPrompt;
   dialogue?: DialogueState;
   safetyPaused?: boolean;
+  /** Specificity follow-up state; when present, authored follow-ups about non-specific answers become eligible. */
+  specificity?: import('./specificity.js').SpecificityStates;
   /** Server-selected prototype evidence profile, never a provider/client flag. */
   sourceQuoteProtocol?: 'unique-anchor-v1';
   displayedText?: string;
@@ -97,11 +103,15 @@ export interface AdaptiveProvenance {
   /** An equivalent content target, derived only from already accepted evidence, not a new patient assertion. */
   derivedFrom?: { version: 'evidence-coverage-v1'; kind: 'fact' | 'question'; topicId?: string; path?: string; paths?: string[] };
 }
+/** A spoken or unreviewed numeric value: proposed with exact source words, never recorded until an explicit reviewed confirmation. */
+export interface SpokenNumberConfirm { value: number | { feet: number; inches: number }; unit?: string; sourceId: string; evidence: EvidenceSpan[]; text: string; }
 export interface AdaptiveClarification {
   topicId: string; path: string; reason: 'ambiguous-value' | 'unscoped-response' | 'conflict' | 'condition-unresolved' | 'stopped-topic';
   evidence: EvidenceSpan[];
   previous?: SlotAnswer;
   proposed?: SlotAnswer;
+  /** intake-interpreter-v1 only: ask the patient to confirm this spoken number (proposed-detail wording). */
+  confirm?: SpokenNumberConfirm;
 }
 export interface AdaptiveOutcome {
   responses: Record<string, TopicResponse | undefined>;

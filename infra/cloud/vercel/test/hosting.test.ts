@@ -41,17 +41,31 @@ describe('hosted configuration boundary', () => {
     const raw = change === 'oversize' ? 'x'.repeat(48001) : JSON.stringify(config);
     expect(() => hostedClinicConfig({ CLINIC_CONFIG_JSON: raw })).toThrow('hosted-clinic-configuration-invalid');
   });
+  it('accepts the deployed schema-2 and the auth/me schema-3 attestation shapes, but no other schema', () => {
+    for (const schema of [2, 3]) { const config = fixture(); (config.storageQualification.payload as { schema: number }).schema = schema; expect(hostedClinicConfig({ CLINIC_CONFIG_JSON: JSON.stringify(config) }).origin).toBe(origin); }
+    const config = fixture(); (config.storageQualification.payload as { schema: number }).schema = 4;
+    expect(() => hostedClinicConfig({ CLINIC_CONFIG_JSON: JSON.stringify(config) })).toThrow('hosted-clinic-configuration-invalid');
+  });
   it('does not load a local credential path or expose malformed input in an error', () => {
     expect(() => hostedClinicConfig({ CLINIC_CONFIG_PATH: '/private/env' })).toThrow('hosted-clinic-configuration-invalid');
     expect(() => hostedClinicConfig({ CLINIC_CONFIG_JSON: 'synthetic-secret-not-json' })).toThrow(/^hosted-clinic-configuration-invalid$/);
+  });
+  it('loads explicit server email configuration with an empty default allowlist', () => {
+    const config = hostedClinicConfig({ CLINIC_CONFIG_JSON: JSON.stringify(fixture()), RESEND_API_KEY: 'synthetic-server-only-email-key', RESEND_FROM: 'demo@example.invalid' });
+    expect(config.invitationEmail).toEqual({ apiKey: 'synthetic-server-only-email-key', from: 'demo@example.invalid', allowlist: [], recipients: {} });
+    expect(hostedClinicConfig({ CLINIC_CONFIG_JSON: JSON.stringify(fixture()) }).invitationEmail).toBeUndefined();
+  });
+  it('rejects malformed email environment input without echoing its value', () => {
+    expect(() => hostedClinicConfig({ CLINIC_CONFIG_JSON: JSON.stringify(fixture()), RESEND_API_KEY: 'synthetic-secret\r\ninjected' })).toThrow(/^hosted-clinic-configuration-invalid$/);
   });
 });
 
 describe('hosted static boundary', () => {
   it('serves known page/asset routes, supports HEAD/ETag, and keeps pages revalidated', async () => {
-    for (const path of ['/', '/staff', '/staff/']) {
+    for (const path of ['/', '/staff', '/staff/', '/join']) {
       const response = serveClinicAsset(new Request(origin + path), assets());
       expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe('no-cache');
+      expect(response.headers.get('referrer-policy')).toBe('no-referrer');
       expect(response.headers.get('content-security-policy')).toContain("connect-src 'self'");
       expect(await response.text()).toContain('Corvo Clinic');
     }
@@ -137,5 +151,52 @@ describe('hosted provider wiring for speech upload', () => {
     expect(() => hostedInterpreterProviders(runtime, hostedEnv({ CLINIC_SPEECH_INPUT: 'deepgram-rest' }))).toThrow('speech-credentials-required');
     expect(() => hostedInterpreterProviders(runtime, hostedEnv({ CLINIC_SPEECH_INPUT: 'other', DEEPGRAM_API_KEY: 'synthetic-deepgram-key' }))).toThrow('unknown-speech-input');
     expect(() => hostedInterpreterProviders(runtime, { CLINIC_SPEECH_INPUT: 'deepgram-rest', DEEPGRAM_API_KEY: 'synthetic-deepgram-key' })).toThrow('speech-input-requires-interpreter');
+  });
+});
+
+describe('hosted hands-free (direct Deepgram) composition', () => {
+  async function directApp(withOutput: boolean) {
+    const runtime = vi.fn(async () => { throw new Error('must-not-contact-medplum'); });
+    const reserve = vi.fn(async () => { throw new Error('must-not-dispatch-provider'); });
+    const speech = { admission: { reserve } };
+    const application = createHostedClinicServer({ config: hostedClinicConfig({ CLINIC_CONFIG_JSON: JSON.stringify(fixture()) }), assets: assets(), runtime, providers: { speechUpload: { deepgramApiKey: 'synthetic-deepgram-key', ...speech }, speechDirect: { deepgramApiKey: 'synthetic-deepgram-key', ...speech }, ...(withOutput ? { speechOutput: { elevenlabsApiKey: 'synthetic-elevenlabs-key', ...speech } } : {}) } });
+    application.server.listen(0, '127.0.0.1'); await once(application.server, 'listening');
+    const url = `http://127.0.0.1:${(application.server.address() as { port: number }).port}`;
+    cleanups.push(async () => { application.server.closeAllConnections(); application.close(); if (application.server.listening) await once(application.server, 'close'); });
+    return { url, runtime, reserve };
+  }
+  it('advertises direct input, lets the page reach only Deepgram, and refuses unauthenticated tokens before admission', async () => {
+    const app = await directApp(false);
+    const config = await (await fetch(app.url + '/api/clinic/config')).json();
+    expect(config.voice).toMatchObject({ available: true, input: 'direct', output: 'browser' });
+    const csp = (await fetch(app.url + '/')).headers.get('content-security-policy')!;
+    expect(csp).toContain("connect-src 'self' wss://clinic.example wss://api.deepgram.com;");
+    const body = JSON.stringify({ requestId: '0b8f6a4e-7c2d-4e91-8f3a-1d2c3b4a5e6f', sessionId: '6f1f3d3e-2d4b-4c1e-9a53-3c1b2a4d5e6f', promptId: 'p', expectedRevision: 0 });
+    const denied = await fetch(app.url + '/api/clinic/speech/tokens', { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body });
+    expect(denied.status).toBeGreaterThanOrEqual(400); expect(denied.headers.get('cache-control')).toBe('no-store');
+    expect(JSON.stringify(await denied.json())).not.toContain('synthetic-deepgram-key');
+    expect(app.reserve).not.toHaveBeenCalled(); expect(app.runtime).not.toHaveBeenCalled();
+  });
+  it('serves ElevenLabs read-aloud only when configured, behind the same patient authorization', async () => {
+    const app = await directApp(true);
+    expect((await (await fetch(app.url + '/api/clinic/config')).json()).voice.output).toBe('provider');
+    const body = JSON.stringify({ requestId: '0b8f6a4e-7c2d-4e91-8f3a-1d2c3b4a5e6f', sessionId: '6f1f3d3e-2d4b-4c1e-9a53-3c1b2a4d5e6f', expectedRevision: 0, sourceId: 'p' });
+    const denied = await fetch(app.url + '/api/clinic/speech/output', { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body });
+    expect(denied.status).toBeGreaterThanOrEqual(400);
+    expect(app.reserve).not.toHaveBeenCalled(); expect(app.runtime).not.toHaveBeenCalled();
+    const browserOnly = await directApp(false);
+    expect((await fetch(browserOnly.url + '/api/clinic/speech/output', { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body })).status).toBe(404);
+  });
+  it('wires direct tokens and optional ElevenLabs only from explicit env, failing closed on gaps', () => {
+    const runtime = vi.fn(async () => { throw new Error('must-not-contact-medplum'); });
+    const direct = hostedInterpreterProviders(runtime, hostedEnv({ CLINIC_SPEECH_INPUT: 'deepgram-direct', DEEPGRAM_API_KEY: 'synthetic-deepgram-key' }));
+    expect(direct.speechDirect?.deepgramApiKey).toBe('synthetic-deepgram-key'); expect(direct.speechUpload).toBeDefined(); expect(direct.speechOutput).toBeUndefined();
+    expect(hostedInterpreterProviders(runtime, hostedEnv({ CLINIC_SPEECH_INPUT: 'deepgram-rest', DEEPGRAM_API_KEY: 'synthetic-deepgram-key' })).speechDirect).toBeUndefined();
+    const voiced = hostedInterpreterProviders(runtime, hostedEnv({ CLINIC_SPEECH_INPUT: 'deepgram-direct', CLINIC_SPEECH_OUTPUT: 'elevenlabs', DEEPGRAM_API_KEY: 'synthetic-deepgram-key', ELEVENLABS_API_KEY: 'synthetic-elevenlabs-key' }));
+    expect(voiced.speechOutput?.elevenlabsApiKey).toBe('synthetic-elevenlabs-key');
+    expect(() => hostedInterpreterProviders(runtime, hostedEnv({ CLINIC_SPEECH_INPUT: 'deepgram-direct', CLINIC_SPEECH_OUTPUT: 'elevenlabs', DEEPGRAM_API_KEY: 'synthetic-deepgram-key' }))).toThrow('speech-credentials-required');
+    expect(() => hostedInterpreterProviders(runtime, hostedEnv({ CLINIC_SPEECH_OUTPUT: 'elevenlabs', ELEVENLABS_API_KEY: 'synthetic-elevenlabs-key' }))).toThrow('speech-output-requires-input');
+    expect(() => hostedInterpreterProviders(runtime, hostedEnv({ CLINIC_SPEECH_INPUT: 'deepgram-direct', CLINIC_SPEECH_OUTPUT: 'loud', DEEPGRAM_API_KEY: 'synthetic-deepgram-key' }))).toThrow('unknown-speech-output');
+    expect(runtime).not.toHaveBeenCalled();
   });
 });

@@ -3,9 +3,10 @@ import type { AdaptiveOperationView, AdaptiveTurnResult, ClinicSessionView } fro
 import { request, RequestError } from './api';
 import { AdaptiveResponseGuard, answerBlockedByInterpretation, canQueueNextSource, isPendingInterpretation } from './adaptive-state';
 
-export function useAdaptiveConversation({ session, getSession, onSession, onOperation }: {
+export function useAdaptiveConversation({ session, getSession, onSession, onOperation, timingForOperation }: {
   session?: ClinicSessionView; getSession: () => ClinicSessionView | undefined; onSession: (session: ClinicSessionView) => void;
   onOperation?: (result: AdaptiveTurnResult) => void;
+  timingForOperation?: (operationId: string) => string | undefined;
 }) {
   const guard = useRef(new AdaptiveResponseGuard());
   const [interpreting, setInterpreting] = useState<string>();
@@ -54,7 +55,7 @@ export function useAdaptiveConversation({ session, getSession, onSession, onOper
     const ticket = guard.current.ticket(current, savedOperation.id);
     setInterpreting(savedOperation.id); setUncertain(undefined); setMessage('');
     try {
-      const result = await request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${encodeURIComponent(savedOperation.id)}/interpret`, {});
+      const result = await request<AdaptiveTurnResult>(`/api/clinic/adaptive-turns/${encodeURIComponent(savedOperation.id)}/interpret`, {}, { turnId: timingForOperation?.(savedOperation.id) });
       if (!guard.current.accepts(ticket, getSession(), result)) return;
       onSession(result.session);
       onOperation?.(result);

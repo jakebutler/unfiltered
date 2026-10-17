@@ -1,9 +1,19 @@
 import { hasValidEvidence } from './readiness.js';
 import type { EvidenceContext, SlotAnswers } from './types.js';
 
+/** The locked PHQ-4 block: the only numeric choice slots that carry the PHQ-4 response coding. */
+export const PHQ4_TOPIC_ID = 'Q16' as const;
+export const PHQ4_ITEM_IDS = ['MH01','MH02','MH03','MH04'] as const;
+export const PHQ4_RESPONSE_SYSTEM = 'urn:corvo:phq4-response' as const;
+
+/** Identifies PHQ-4 item slots by explicit topic and slot id, never by kind or numeric choices. */
+export function isPhq4ItemSlot(topicId: string, slotId: string): boolean {
+  return topicId === PHQ4_TOPIC_ID && (PHQ4_ITEM_IDS as readonly string[]).includes(slotId);
+}
+
 /** Explicitly invoked arithmetic after the targeted user selection; never infer or fill item responses. */
 export function scorePhq4(answers: SlotAnswers, context: EvidenceContext & { confirmedItemIds: ReadonlySet<string>; completedAt: string }) {
-  const ids = ['MH01','MH02','MH03','MH04'] as const;
+  const ids = PHQ4_ITEM_IDS;
   const items = ids.map(id=>answers[id]);
   const valid = ids.every((id,index)=>{
     const answer = items[index];

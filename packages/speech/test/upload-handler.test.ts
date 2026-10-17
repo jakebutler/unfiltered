@@ -12,7 +12,7 @@ const pcm = new Uint8Array([1, 2, 3, 4]);
 function setup() {
   const capture = vi.fn(async () => ({ sessionId, promptId: 'prompt-a', revision: 3 }));
   const transcribe = vi.fn(async () => ({ text: 'I have a sore throat.' }));
-  const handler = createSpeechUploadHandler({ access: { capture } as never, transcribe: transcribe as never });
+  const handler = createSpeechUploadHandler({ access: { upload: capture } as never, transcribe: transcribe as never });
   return { capture, transcribe, handler };
 }
 const upload = (search = query, init: { type?: string; length?: string; body?: Uint8Array } = {}) => new Request(`${origin}${speechTranscriptionPath}${search}`, {
@@ -62,12 +62,12 @@ describe('push-to-talk transcription route', () => {
     const response = await handler.handle(request);
     expect(response?.status).toBe(413); expect(transcribe).not.toHaveBeenCalled();
   });
-  it('maps a stale prompt from authorization to 409 and never reaches the transcriber', async () => {
+  it('maps a closed or paused session from authorization to 409 and never reaches the transcriber', async () => {
     const { handler, capture, transcribe } = setup();
-    capture.mockRejectedValueOnce(new ApiFailure('stale-prompt', 409));
+    capture.mockRejectedValueOnce(new ApiFailure('speech-conversation-required', 409));
     const response = await handler.handle(upload());
     expect(response?.status).toBe(409);
-    expect(await response?.json()).toEqual({ error: { code: 'stale-prompt', message: expect.any(String), retryable: false } });
+    expect(await response?.json()).toEqual({ error: { code: 'speech-conversation-required', message: expect.any(String), retryable: false } });
     expect(transcribe).not.toHaveBeenCalled();
   });
   it('returns the transcript only as no-store JSON on success and scopes the transcriber to the verified session', async () => {

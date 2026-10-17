@@ -25,8 +25,11 @@ describe("fixed authored native Questionnaire", () => {
   it("compiles every fixed prompt with unique reachable acyclic link IDs and binds all semantics", async () => {
     const d = await getNativeQuestionnaireDefinition();
     expect(d.binding.digest).toMatch(/^[a-f0-9]{64}$/);
-    // Pinned to the deployed binding; extraction-only slot hints must not change it.
-    expect(d.binding.digest).toBe("d787950f0f0cbc0a1962e14a6a03f96d3adfc669bb47312776373913339f7c5b");
+    // Pinned; extraction-only slot hints must not change it. E-0.2 safety and SP-0.1 specificity with its reference
+    // releases (D1 re-qualification, published with stage8).
+    expect(d.binding.digest).toBe("45ece585454dbda2226bf0bfd5a8ae4d352c0617edc24a267b50925686e60a8f");
+    const specificity = JSON.parse(d.questionnaire.extension!.find((e) => e.url.endsWith("specificity-contract"))!.valueString!);
+    expect(specificity).toMatchObject({ version: "SP-0.1", budget: { perField: 2, perTopic: 4, perTurn: 1 }, reference: { medications: "rxnorm-prescribe-2026-10-05", conditions: "CT-0.3+icd10cm-FY2027" } });
     expect(d.questionnaire.url).toBe(d.binding.canonical);
     validateNativeDefinitionStructure(d.questionnaire.item);
     expect(d.promptTargets["MH.unscored"]).toBeUndefined();
@@ -530,25 +533,51 @@ it("proposed repeat sibling conditions permit only the exact item's navigation w
     repeatResolutionTopics: { Q06: topic({ "conditions.diabetes": known(true) }) } }, evidence)).toThrow();
 });
 
-describe("retained E-0.1 semantics", () => {
-  it("retains exact approved copy and classifier precedence, history and negation behavior", async () => {
+describe("E-0.2 safety floor", () => {
+  it("keeps the approved copy and pauses only explicit, current, first-person hard stops", async () => {
     const old =
       await import("../../../docs/implementation/evidence/native-questionnaire-pre-edit/clinic-api-safety.js");
     const current = await import("../src/safety.js");
     expect(current.escalationCopy).toEqual(old.escalationCopy);
-    for (const text of [
-      "I cannot breathe now",
-      "I cannot breathe years ago",
-      "I hurt myself now",
-      "I do not have suicidal thoughts",
-      "I took an extra dose",
-      "I took an extra dose and cannot breathe",
-      "I cannot keep fluids down",
-      "I am purging",
-      "I was purging in the past",
-      "I am unsure whether I took a dose",
-      "I am snoring",
-    ])
-      expect(current.escalation(text), text).toBe(old.escalation(text));
+    const expected: Record<string, string | undefined> = {
+      "I cannot breathe now": "E01",
+      "I cannot breathe years ago": undefined,
+      "I may hurt myself tonight": "E04",
+      "I do not have suicidal thoughts": undefined,
+      "I have never had suicidal thoughts": undefined,
+      "I'm not suicidal but I do want to kill myself": "E04",
+      "My brother overdosed last year": undefined,
+      "I'd kill myself if I gained it back": undefined,
+      "Is it normal to want to hurt myself?": undefined,
+      "I took an extra dose and cannot breathe": "E01",
+      "I cannot keep fluids down": "E02",
+      "I am purging": "E05",
+      "I was purging in the past": undefined,
+      "I am unsure whether I took a dose": undefined,
+      "I binge on chips at night": undefined,
+      "I hurt myself running last month": undefined,
+      "I am snoring": undefined,
+      // Independent review (codex, 2026-10-12): an unrelated cue elsewhere must not scope the emergency itself.
+      "I can't breathe right now, please show me what to do.": "E01",
+      "I can't sleep and want to kill myself tonight.": "E04",
+      "In the movie the character wanted to kill himself.": undefined,
+      "No chest pain and no trouble breathing.": undefined,
+      // Independent review (cubic, 2026-10-13).
+      "That's odd, my scale said something different.": undefined,
+      "I OD'd on my pills an hour ago.": "E03",
+      "My chest pain was severe.": undefined,
+      "I told my husband about my suicidal thoughts.": "E04",
+      "I was suicidal years ago\nI want to kill myself": "E04",
+      // Independent re-review (codex, 2026-10-13).
+      "My chest pain was severe this morning and still is now.": "E01",
+      "I wrote that story because I am suicidal.": "E04",
+      // Independent review (cubic, second pass).
+      "I was suicidal years ago and can't breathe": "E01",
+      "The patient has a medical emergency": undefined,
+    };
+    for (const [text, rule] of Object.entries(expected)) expect(current.escalation(text), text).toBe(rule);
+    // A scoped hit is never silently dropped: it is reported for the model gate.
+    expect(current.safetyFloorHits("I have never had suicidal thoughts")).toEqual([{ rule: "E04", scope: "negated", term: "suicidal" }]);
+    expect(current.safetyFloorHits("In the movie a character is suicidal.")).toEqual([{ rule: "E04", scope: "media", term: "suicidal" }]);
   });
 });

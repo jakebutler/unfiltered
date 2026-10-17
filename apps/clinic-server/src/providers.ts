@@ -22,6 +22,10 @@ export interface ClinicProviderWiring {
   /** Tier-2 safety reviewer; wired whenever the interpreter is, on its own admission session. */
   safetyReviewer?: import('../../../packages/clinic-api/src/safety-review.js').SafetyReviewer;
   speechUpload?: { deepgramApiKey: string; admission: import('../../../packages/speech/src/server.js').SpeechAdmission };
+  /** Hosted hands-free: mints short-lived Deepgram tokens per utterance. Upload stays wired as its fallback. */
+  speechDirect?: { deepgramApiKey: string; admission: import('../../../packages/speech/src/server.js').SpeechAdmission };
+  /** Hosted read-aloud of authored prompts through ElevenLabs. Absent: the browser's own voice. */
+  speechOutput?: { elevenlabsApiKey: string; admission: import('../../../packages/speech/src/server.js').SpeechAdmission };
 }
 
 /** Default chosen from the bounded live eval (scripts/dev/intake-interpreter-eval.mts). */
@@ -88,7 +92,10 @@ export function configuredProviders(runtime: () => Promise<Runtime>): ClinicProv
 export function hostedInterpreterProviders(runtime: () => Promise<Runtime>, env: Record<string, string | undefined> = process.env): ClinicProviderWiring {
   // Validated before the interpreter gate so a misspelled speech mode can never be silently ignored.
   const speechInput = env.CLINIC_SPEECH_INPUT || undefined;
-  if (speechInput !== undefined && speechInput !== 'deepgram-rest') throw new Error('unknown-speech-input');
+  if (speechInput !== undefined && speechInput !== 'deepgram-rest' && speechInput !== 'deepgram-direct') throw new Error('unknown-speech-input');
+  const speechOutput = env.CLINIC_SPEECH_OUTPUT || undefined;
+  if (speechOutput !== undefined && speechOutput !== 'browser' && speechOutput !== 'elevenlabs') throw new Error('unknown-speech-output');
+  if (speechOutput === 'elevenlabs' && !speechInput) throw new Error('speech-output-requires-input');
   if (!env.CLINIC_ADAPTIVE_INTERPRETER) {
     // Speech upload is budgeted through the same ledger, which only exists with the interpreter policy.
     if (speechInput) throw new Error('speech-input-requires-interpreter');
@@ -101,11 +108,14 @@ export function hostedInterpreterProviders(runtime: () => Promise<Runtime>, env:
   const admission = createProviderAdmission(async () => (await runtime()).client, JSON.parse(env.CLINIC_PROVIDER_POLICY_JSON) as ProviderBudgetPolicy);
   const safetyReviewer = boundedSafetyReviewer(safetyReviewerConfig(apiKey), admission);
   if (!speechInput) return { adaptiveInterpreter: boundedIntakeInterpreter(interpreterConfig(apiKey), admission), safetyReviewer };
-  const deepgramApiKey = env.DEEPGRAM_API_KEY?.trim();
-  if (!deepgramApiKey) throw new Error('speech-credentials-required');
+  const deepgramApiKey = env.DEEPGRAM_API_KEY?.trim(), elevenlabsApiKey = env.ELEVENLABS_API_KEY?.trim();
+  if (!deepgramApiKey || (speechOutput === 'elevenlabs' && !elevenlabsApiKey)) throw new Error('speech-credentials-required');
+  const speech = speechAdmission(admission);
   return {
     adaptiveInterpreter: boundedIntakeInterpreter(interpreterConfig(apiKey), admission),
     safetyReviewer,
-    speechUpload: { deepgramApiKey, admission: speechAdmission(admission) },
+    speechUpload: { deepgramApiKey, admission: speech },
+    ...(speechInput === 'deepgram-direct' ? { speechDirect: { deepgramApiKey, admission: speech } } : {}),
+    ...(speechOutput === 'elevenlabs' ? { speechOutput: { elevenlabsApiKey: elevenlabsApiKey!, admission: speech } } : {}),
   };
 }

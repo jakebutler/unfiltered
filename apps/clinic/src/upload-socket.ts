@@ -1,4 +1,4 @@
-/** Hosted push-to-talk: a WebSocket-shaped buffer that posts one recording for transcription on finish. */
+/** Hosted push-to-talk: a WebSocket-shaped buffer that posts one recording for transcription on finish. The recording is kept until it is transcribed, discarded, or the socket closes. */
 export const uploadPcmLimitBytes = 1_920_000;
 const transcriptionPath = '/api/clinic/speech/transcriptions';
 const unavailable = 'Voice is unavailable for this question.';
@@ -7,6 +7,7 @@ export interface UploadSocketEvent { type: string; data?: string; code?: number;
 type UploadListener = (event: UploadSocketEvent) => void;
 type Fetcher = (input: string, init: RequestInit) => Promise<Response>;
 interface UploadScope { requestId: string; sessionId: string; promptId: string; expectedRevision: number }
+type Attempt = { status: 'done'; text: string } | { status: 'failed'; code: string; transient: boolean } | { status: 'aborted' };
 
 /** Implements only the WebSocket subset used by useSpeechCapture and PcmTransport. */
 export class UploadSpeechSocket {
@@ -18,6 +19,10 @@ export class UploadSpeechSocket {
   private bytes = 0;
   private scope?: UploadScope;
   private finishing = false;
+  /** Set on finish; kept after a failed or paused transcription so the patient can retry or discard it. */
+  private recording?: Uint8Array<ArrayBuffer>;
+  private busy = false;
+  private attempts = 0;
   private controller?: AbortController;
   private fetcher: Fetcher;
   private schedule: (fn: () => void) => void;
@@ -46,12 +51,26 @@ export class UploadSpeechSocket {
     this.chunks.push(view.slice()); this.bytes += view.byteLength;
   }
 
-  /** Aborts any in-flight upload and suppresses every later event. */
+  /** Aborts any in-flight upload, drops the kept recording, and suppresses every later event. */
   close(_code?: number, _reason?: string) {
     if (this.readyState === 3) return;
-    this.readyState = 3; this.chunks = []; this.bytes = 0;
+    this.readyState = 3; this.chunks = []; this.bytes = 0; this.recording = undefined; this.busy = false;
     this.controller?.abort();
     this.emit({ type: 'close' });
+  }
+
+  /** Transcribes the kept recording again after a failure or a paused attempt. */
+  retry() {
+    if (this.readyState !== 1 || !this.recording || !this.scope || this.busy) return;
+    void this.transcribe(this.scope, this.recording);
+  }
+
+  /** Stops an in-flight transcription but keeps the recording for a later retry. */
+  pause(): boolean {
+    if (this.readyState !== 1 || !this.busy) return false;
+    this.controller?.abort();
+    this.keep('transcription-paused');
+    return true;
   }
 
   private open() {
@@ -69,38 +88,59 @@ export class UploadSpeechSocket {
       this.emit({ type: 'message', data: JSON.stringify({ type: 'ready', sampleRate: 16000, channels: 1, maxCaptureMs: 60000 }) });
     } else if (value.type === 'finish' && this.scope && !this.finishing) {
       this.finishing = true;
-      void this.upload(this.scope);
+      this.begin(this.scope);
     } else this.fail('invalid-control');
   }
 
-  private async upload(scope: UploadScope) {
-    // Nothing recorded: finish cleanly with no words instead of sending an empty clip.
-    if (!this.bytes) { this.emit({ type: 'message', data: JSON.stringify({ type: 'ended', outcome: 'completed' }) }); this.close(); return; }
+  private begin(scope: UploadScope) {
     const body = new Uint8Array(this.bytes);
     let offset = 0;
     for (const chunk of this.chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
     this.chunks = [];
-    const query = new URLSearchParams({ sessionId: scope.sessionId, promptId: scope.promptId, expectedRevision: String(scope.expectedRevision), requestId: scope.requestId });
-    const controller = new AbortController();
-    this.controller = controller;
-    let text: unknown;
-    try {
-      const response = await this.fetcher(`${transcriptionPath}?${query}`, { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: controller.signal, headers: { 'Content-Type': 'application/octet-stream' }, body });
-      if (this.readyState === 3) return;
-      if (!response.ok) return this.fail(await errorCode(response));
-      text = ((await response.json()) as { text?: unknown }).text;
-    } catch {
-      this.fail('transcription-unavailable');
-      return;
-    }
-    if (this.readyState === 3) return;
-    if (typeof text !== 'string') return this.fail('invalid-transcription');
-    const clean = text.trim();
+    // Nothing recorded: finish cleanly with no words instead of sending an empty clip.
+    if (!body.byteLength) { this.emit({ type: 'message', data: JSON.stringify({ type: 'ended', outcome: 'completed' }) }); this.close(); return; }
+    this.recording = body;
+    void this.transcribe(scope, body);
+  }
+
+  /** One automatic retry for network and server failures; any other failure keeps the recording for a manual retry. */
+  private async transcribe(scope: UploadScope, body: Uint8Array<ArrayBuffer>) {
+    this.busy = true;
+    let attempt = await this.request(scope, body);
+    // Never retry after a discard or pause, including one that landed while the error body was being read.
+    if (attempt.status === 'failed' && attempt.transient && this.readyState !== 3 && !this.controller?.signal.aborted) attempt = await this.request(scope, body);
+    if (attempt.status === 'aborted' || this.readyState === 3) return;
+    if (attempt.status === 'failed') return this.keep(attempt.code);
+    this.busy = false;
+    const clean = attempt.text.trim();
     if (clean) {
       this.emit({ type: 'message', data: JSON.stringify({ type: 'recognition', segment: { start: 0, duration: body.byteLength / 32000, text: clean, isFinal: true, speechFinal: true } }) });
     }
     this.emit({ type: 'message', data: JSON.stringify({ type: 'ended', outcome: 'completed' }) });
     this.close();
+  }
+
+  private async request(scope: UploadScope, body: Uint8Array<ArrayBuffer>): Promise<Attempt> {
+    // Each attempt is its own provider reservation, so a retry never collides with the earlier attempt.
+    const requestId = this.attempts++ ? crypto.randomUUID() : scope.requestId;
+    const query = new URLSearchParams({ sessionId: scope.sessionId, promptId: scope.promptId, expectedRevision: String(scope.expectedRevision), requestId });
+    const controller = new AbortController();
+    this.controller = controller;
+    try {
+      const response = await this.fetcher(`${transcriptionPath}?${query}`, { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: controller.signal, headers: { 'Content-Type': 'application/octet-stream' }, body });
+      if (controller.signal.aborted) return { status: 'aborted' };
+      if (!response.ok) { const code = await errorCode(response); return controller.signal.aborted ? { status: 'aborted' } : { status: 'failed', code, transient: response.status >= 500 || response.status === 429 }; }
+      const text = ((await response.json()) as { text?: unknown }).text;
+      return typeof text === 'string' ? { status: 'done', text } : { status: 'failed', code: 'invalid-transcription', transient: false };
+    } catch {
+      return controller.signal.aborted ? { status: 'aborted' } : { status: 'failed', code: 'transcription-unavailable', transient: true };
+    }
+  }
+
+  /** Reports a transcription that did not finish; the socket stays open with the recording kept. */
+  private keep(code: string) {
+    this.busy = false;
+    this.emit({ type: 'message', data: JSON.stringify({ type: 'error', code, message: unavailable, retained: true }) });
   }
 
   private fail(code: string) {

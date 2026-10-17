@@ -6,8 +6,14 @@ import {
   type ClinicContent,
 } from "./register.js";
 import { escalation, escalationCopy, safetyDefinition } from "./safety.js";
-import { scenarios } from "./scenarios.js";
+import { assessSpecificity, specificityContracts, specificityDefinition } from "./specificity.js";
+import { lookupReference, referenceRelease } from "../../clinic-reference/src/index.js";
+/** Answer specificity contracts with the exact offline reference releases they consult (D1). */
+const specificityContract = { ...specificityDefinition, reference: referenceRelease };
+import { scenarios, scenarioForWorkflowTopic } from "./scenarios.js";
+import { fillPrompt } from "./prompt-fill.js";
 import { conditionBranches } from "./branches.js";
+import { branchRules } from "./pack-rules.js";
 import {
   guidedFieldForPath,
   nextGuidedField,
@@ -27,11 +33,13 @@ import type {
 
 export const NATIVE_QUESTIONNAIRE_CANONICAL =
   "https://corvo.example/Questionnaire/clinic";
-export const NATIVE_QUESTIONNAIRE_VERSION = "CC-0.2.phq4.native-4";
+export const NATIVE_QUESTIONNAIRE_VERSION = "CC-0.2.phq4.native-5";
 
 /** Extraction-only interpretation hints are server policy, not questionnaire structure. */
 const definitionSlot = ({ extractionNegativeScope: _hint, ...slot }: SlotDefinition): SlotDefinition =>
   ({ ...slot, ...(slot.fields ? { fields: slot.fields.map(definitionSlot) } : {}) });
+/** Dialogue metadata is not part of the published native Questionnaire contract. */
+const definitionTopic = ({ corvo: _dialogue, ...topic }: TopicDefinition) => topic;
 export const NATIVE_EXTENSION =
   "https://corvo.example/fhir/StructureDefinition/";
 export type NativeOutcome = "applicable" | "not-applicable" | "unknown";
@@ -62,7 +70,8 @@ export interface NativeRoutingContext {
     version: string;
     startsAt: string;
     timezone: string;
-    priorUpdateAt: string;
+    priorUpdateAt?: string;
+    recordedAt?: string;
   };
   plan?: {
     reference: string;
@@ -70,6 +79,17 @@ export interface NativeRoutingContext {
     author: string;
     recordedAt: string;
     text: string;
+    /** Truncation is audit metadata, never inserted into patient-facing copy. */
+    truncated?: boolean;
+  };
+  priorSubmission?: {
+    reference: string;
+    version: string;
+    recordedAt: string;
+    sourceDocumentReference: string;
+    item?: string;
+    topicId?: 'Q02' | 'Q08';
+    path?: string;
   };
   sleepApnea?: NativeSourceFact;
   surgeryEatingEffect?: NativeSourceFact;
@@ -773,7 +793,7 @@ export function evaluateNativeRule(
             !!a.version &&
             !!a.timezone &&
             Number.isFinite(Date.parse(a.startsAt)) &&
-            Number.isFinite(Date.parse(a.priorUpdateAt)),
+            Number.isFinite(Date.parse(a.priorUpdateAt ?? '')),
         );
         break;
       }
@@ -1110,16 +1130,24 @@ export function nativeScenarioTopics(
     context: context.context,
   };
   const evidence = context.evidence ?? { validSourceIds: new Set<string>() };
-  for (const rule of nativeRoutingRules(all).filter(
-    (r) => r.kind === "topic" && ["DM", "SLEEP", "GI"].includes(r.target),
-  )) {
+  const routingRules = nativeRoutingRules(all);
+  for (const branch of Object.values(register.branches)) {
+    if (!("rule" in branch)) continue;
+    const rule = routingRules.find((rule) => rule.kind === "topic" && rule.target === branch.topic.id);
+    if (!rule) continue;
     const eligible = rule.anchors.some((anchor) =>
       topics.some((t) => anchor.startsWith(`${t.id}.`)),
     );
     const decision = evaluateNativeRule(rule, snapshot, evidence);
+    const namedApplicable = branchRules[branch.rule.id](
+      context.responses?.Q06?.answers ?? {}, evidence,
+      "slot" in branch.rule ? branch.rule.slot : undefined,
+    );
+    // The native adapter additionally preserves source-qualified context, reviewed facts,
+    // and unknown outcomes. Named rules alone do not replace these published semantics.
     if (
       eligible &&
-      (decision.outcome === "applicable" ||
+      (namedApplicable || decision.outcome === "applicable" ||
         (context.includeUnresolvedBranches && decision.outcome === "unknown"))
     )
       topics.push(all.find((t) => t.id === rule.target)!);
@@ -1418,7 +1446,7 @@ function compile(
         extension: [
           {
             url: `${NATIVE_EXTENSION}topic-definition`,
-            valueString: nativeCanonicalJson({ ...topic, slots: undefined }),
+            valueString: nativeCanonicalJson({ ...definitionTopic(topic), slots: undefined }),
           },
         ],
         item: [
@@ -1492,12 +1520,14 @@ export function getNativeQuestionnaireDefinition(): Promise<NativeQuestionnaireD
     const payload = {
       canonical: NATIVE_QUESTIONNAIRE_CANONICAL,
       version: NATIVE_QUESTIONNAIRE_VERSION,
-      topics: topics.map((topic) => ({ ...topic, slots: topic.slots.map(definitionSlot) })),
+      // Scoped dialogue copy has never been part of the published native definition.
+      topics: topics.map(topic => ({ ...definitionTopic(topic), slots: topic.slots.map(definitionSlot) })),
       promptTargets,
       routingRules,
       aliases: nativeAliases,
       stopSemantics,
       safetyDefinition,
+      specificityContract,
       sourceRecognition: nativeSourceRecognition,
       items,
       mapperContract: "typed-state-repeats-history-v4",
@@ -1550,6 +1580,10 @@ export function getNativeQuestionnaireDefinition(): Promise<NativeQuestionnaireD
             url: `${NATIVE_EXTENSION}safety-contract`,
             valueString: nativeCanonicalJson(safetyDefinition),
           },
+          {
+            url: `${NATIVE_EXTENSION}specificity-contract`,
+            valueString: nativeCanonicalJson(specificityContract),
+          },
         ],
       },
     };
@@ -1594,8 +1628,24 @@ export function nativeCaptureComplete(
           topic,
           capture.topics[topic.id] ?? emptyResponse(),
           evidence,
-        ).sufficient,
+        ).sufficient && !vagueAnswer(topic.id, capture.topics[topic.id]),
     );
+}
+
+/** Whether a recorded answer is still non-specific under its specificity contract (SP-0.1); then the capture is not complete. */
+function vagueAnswer(topicId: string, response: TopicResponse | undefined): boolean {
+  if (!response) return false;
+  return specificityContracts.filter((contract) => contract.topicId === topicId).some((contract) => {
+    const values: unknown[] = [];
+    const scalar = response.answers[contract.path];
+    if (scalar) { if (scalar.state === "known" && !scalar.items) values.push(scalar.value); }
+    else {
+      const [list, field] = contract.path.split(".");
+      const collection = field ? response.answers[list!] : undefined;
+      if (collection?.state === "known") for (const item of collection.items ?? []) { const answer = item.answers[field!]; if (answer?.state === "known") values.push(answer.value); }
+    }
+    return values.some((value) => typeof value === "string" && value.trim() && assessSpecificity(contract, value, lookupReference).level !== "specific");
+  });
 }
 
 export interface NativeAnswerTreeItem {
@@ -1905,6 +1955,34 @@ export function nativeCrossTopicReuses(
   }
   return result;
 }
+/** Select only an active authored prompt, filling templates from verified records alone.
+ * This is runtime navigation; unavailable prompts never change capture/readiness data. */
+export function activeNativeGuidedPrompt(
+  topic: TopicDefinition,
+  field: Pick<GuidedField, "path" | "promptIds">,
+  authority: NativePromptAuthority & { scenario: ScenarioId },
+  evidence: EvidenceContext,
+): { promptId: string; text: string } | undefined {
+  const contextPrompts = scenarioForWorkflowTopic(topic.id)?.behaviour?.contextPrompts;
+  const candidates = field.promptIds.flatMap(id =>
+    contextPrompts && id === contextPrompts.verifiedPromptId ? [id, contextPrompts.missingPromptId] : [id],
+  );
+  for (const promptId of new Set(candidates)) {
+    const authored = promptsById[promptId]?.text;
+    if (!authored) continue;
+    const { text, complete } = fillPrompt(authored, authority.context ?? {});
+    // Filled readback must still fit the existing saved displayed-prompt contract.
+    // A long exact quote remains prior context; it is never silently truncated.
+    if (!complete || text.length > 8000) continue;
+    try {
+      guardNativePrompt({ ...authority, promptId, topicId: topic.id, path: field.path, text }, evidence);
+      return { promptId, text };
+    } catch {
+      // An inactive first candidate must not hide a later active authored prompt.
+    }
+  }
+}
+
 /** Authored one-field selection. Relevant optional clarifications never become universal completion minimums. */
 export function nextNativeGuidedField(
   topic: TopicDefinition,
@@ -1956,6 +2034,16 @@ export function nextNativeGuidedField(
       if (resolved.answer && resolved.answer.state !== "not-asked") continue;
       return guidedFieldForPath(topic, response, path);
     }
+  }
+  const workflow = scenarioForWorkflowTopic(topic.id);
+  if (workflow) {
+    // Filter navigation metadata only. In particular W02.changes remains unasked
+    // and unresolved until its prior item/date can be supplied by trusted context.
+    const navigable = { ...topic, slots: topic.slots.map(slot => {
+      const selected = activeNativeGuidedPrompt(topic, { path: slot.id, promptIds: slot.promptIds }, { scenario: workflow.id, topics, context }, evidence);
+      return { ...slot, promptIds: selected ? [selected.promptId] : [] };
+    }) };
+    return nextGuidedField(navigable, response, evidence);
   }
   return nextGuidedField(topic, response, evidence);
 }

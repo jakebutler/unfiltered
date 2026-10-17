@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { conversation } from '../src/conversation.js';
-import { adaptiveSession } from '../src/adaptive-session.js';
+import { adaptiveSession, type AdaptiveDraftStore } from '../src/adaptive-session.js';
 import { createFullReplyManifest, prepareFullCapture, fullReplyTargets, type FullReplyDraft, type FullReplyManifest } from '../src/adaptive-reply-full.js';
 import { projectProvisional, fullPolicyRevision } from '../src/provisional-projection.js';
 import { adaptiveSourceSegments } from '../src/adaptive-source.js';
@@ -124,6 +124,23 @@ it.each(scenarios)('%s projects sufficient self-report into one frozen review/ha
   const review = { ...saved, phase: 'review' as const, preview }; const final = await f.content.finalize(review);
   expect(final.topics).toEqual(preview.topics); expect(final.previewDigest).toBe(preview.digest);
   if (scenario === 'first-intake') expect(view.topics.find(topic => topic.id === 'Q16')!.screening?.scores).toEqual({ gad2: 0, phq2: 0, phq4: 0 });
+}, 15000); // A full-intake journey: about 3 s alone, close to the 5 s default under the parallel suite.
+
+// Independent review (codex, 2026-10-13): the stream path publishes its early reply only after the safety gate.
+it('an escalating safety verdict stops the stream path from publishing its next question', async () => {
+  const f = fixture('first-intake'), q01 = f.content.definitions((await f.store.read()).draft).find(topic => topic.id === 'Q01')!, synthetic = topicFixture(q01);
+  f.configure(synthetic.build);
+  let published = false; void f.reply.then(() => { published = true; });
+  const at = new Date().toISOString();
+  const safetyGate = (_: Draft, sourceId: string) => new Promise<Awaited<ReturnType<NonNullable<AdaptiveDraftStore['safetyGate']>>>>(resolve => setTimeout(() => resolve({
+    signal: { id: 'gate-signal', sourceId, categories: ['self-harm'], terms: [], at, version: 'safety-gate-v1' },
+    entry: { signalId: 'gate-signal', sourceId, screened: [], status: 'needs-human-review', level: 'imminent', concern: true, categories: ['self-harm'], rationale: 'Synthetic.', reviewer: 'test', reviewedAt: at, escalated: 'E04' },
+  }), 30));
+  const accepted = await f.accept(synthetic.text);
+  await f.api.interpret({ ...f.store, safetyGate }, accepted.operation.id);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(published).toBe(false);
+  expect((await f.store.read()).draft.safety).toMatchObject({ rule: 'E04', paused: true });
 });
 
 it.each(scenarios)('%s preserves partial unknown source and allows explicit Stop/review recovery without retry', async scenario => {

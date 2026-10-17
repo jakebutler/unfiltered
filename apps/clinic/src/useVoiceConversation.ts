@@ -13,6 +13,7 @@ export function useVoiceConversation(ports: Omit<ConversationVoicePorts, 'change
     speakChoiceConfirmation: value => latest.current.speakChoiceConfirmation?.(value),
     saveChoice: (candidate, scope, confirmation) => latest.current.saveChoice?.(candidate, scope, confirmation) ?? Promise.resolve(undefined),
     restoreChoiceDraft: candidate => latest.current.restoreChoiceDraft?.(candidate),
+    restoreDraft: text => latest.current.restoreDraft?.(text),
     saveChoiceAttempt: (text, scope, prior) => latest.current.saveChoiceAttempt?.(text, scope, prior) ?? Promise.resolve(undefined),
   });
   useEffect(() => {

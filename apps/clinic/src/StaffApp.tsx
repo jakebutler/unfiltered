@@ -1,3 +1,5 @@
+import { administrativeChoiceLabels } from '../../../packages/clinic-contract/src/index';
+import { StaffInvitations } from './StaffInvitations';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, Check, ChevronRight, ClipboardList, LogOut, RefreshCw } from 'lucide-react';
 import type { SafetyCategoryView, SafetyLevelView, StaffHandoffView, StaffIdentity, StaffQueueItem, StaffRecoveryItem, StaffSafetyAction, StaffSafetyItem, StaffSafetyView, TopicView } from '../../../packages/clinic-contract/src/index';
@@ -6,8 +8,13 @@ import { freezeStaffAction, handoffRevision, reconcileStaffAction, StaffResponse
 import { Button, EmptyQueue, Header, Loading, Notice, SourceInspector, WorkHistory, TopicContent, answerLabels, topicLabels, deliveryLabels, workDeliveryLabels, dateTime, outcomeLabels, responsibilityLabels, roleLabels, time, type SourceSelection } from './components';
 
 type Outcome = 'reviewed' | 'needs-information' | 'declined' | 'resolved';
-type QueuePage = { items: StaffQueueItem[]; recovery: StaffRecoveryItem[]; nextCursor?: string; recoveryCursor?: string };
+type QueuePage = { items: StaffQueueItem[]; recovery: StaffRecoveryItem[]; earlierVersion?: number; nextCursor?: string; recoveryCursor?: string };
 const canInspect = (handoff: StaffHandoffView) => handoff.anchorsVerified === true;
+// Pure rendering helper: keep the metadata tree visible to the existing staff renderer.
+export function renderStaffWorkflowMetadata({ handoff }: { handoff: Pick<StaffHandoffView, 'workflow' | 'contextSources'> }) {
+  if (!handoff.workflow) return null;
+  return <details className="metadata"><summary>About this workflow</summary><p><strong>What counts as done</strong>: {handoff.workflow.completion}</p><p><strong>Context this workflow expects</strong>: {handoff.workflow.contextRequirement}</p>{handoff.contextSources?.map(source => <p key={`${source.kind}:${source.reference}`}><strong>Context used</strong>: {source.reference} (recorded {dateTime(source.recordedAt)}){source.truncated ? ' (truncated)' : ''}</p>)}</details>;
+}
 type StaffSafetyPage = { items: StaffSafetyItem[]; nextCursor?: string };
 type SafetyOutcome = StaffSafetyAction['outcome'];
 const safetyOutcomes: SafetyOutcome[] = ['no-concern', 'contacted-patient', 'escalated'];
@@ -35,7 +42,9 @@ export function StaffApp() {
   const sourceTrigger = useRef<HTMLButtonElement | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const [booting, setBooting] = useState(true);
-  const [busy, setBusy] = useState('');
+  const [activity, setBusy] = useState('');
+  const [safetyBusy, setSafetyBusy] = useState(false);
+  const busy = safetyBusy ? 'safety-action' : activity;
   const operation = useRef(false);
   const [error, setError] = useState('');
   const [updatedAt, setUpdatedAt] = useState('');
@@ -46,9 +55,10 @@ export function StaffApp() {
   const [hasNote, setHasNote] = useState(false);
   const [navigation, setNavigation] = useState<(() => void)>();
   const [safetySessionId, setSafetySessionId] = useState<string>();
+  const [safetyQueueVersion, setSafetyQueueVersion] = useState(0);
 
   const clearScope = () => {
-    scope.current.invalidate(); operation.current = false; setBusy(''); setQueueLoading(false); setRecoveryLoading(false);
+    scope.current.invalidate(); operation.current = false; setBusy(''); setSafetyBusy(false); setQueueLoading(false); setRecoveryLoading(false);
     setHandoff(undefined); setSource(undefined); sourceTrigger.current = null; setQueue([]); setRecovery([]);
     setQueueLoaded(false); setRecoveryLoaded(false); setQueueError(false); setRecoveryError(false);
     setUpdatedAt(''); setNextCursor(undefined); setRecoveryCursor(undefined);
@@ -71,6 +81,7 @@ export function StaffApp() {
     if (e instanceof RequestError && e.status === 409) setStale('refresh');
     setError(messageOf(e));
   };
+  const [earlierVersion, setEarlierVersion] = useState(0);
   const loadQueue = async (kind: 'both' | 'snapshots' | 'drafts' = 'both', cursor?: string) => {
     const generation = scope.current.capture();
     if (kind !== 'drafts') setQueueLoading(true);
@@ -82,6 +93,7 @@ export function StaffApp() {
       if (kind !== 'drafts') {
         setQueue(previous => cursor === undefined ? value.items : [...new Map([...previous, ...value.items].map(item => [`${item.id}:${item.responsibility}`, item])).values()]);
         setNextCursor(value.nextCursor); setQueueLoaded(true); setQueueError(false);
+        setEarlierVersion(previous => (cursor === undefined ? 0 : previous) + (value.earlierVersion ?? 0));
       }
       // Snapshot pages contain both received assignments and pending deliveries.
       // Draft pages add no-snapshot confirmations; they must not rewind the snapshot cursor.
@@ -128,6 +140,7 @@ export function StaffApp() {
     if (!canInspect(next)) { setSource(undefined); sourceTrigger.current = null; }
   };
   const refresh = () => run('refresh', async () => {
+    setSafetyQueueVersion(version => version + 1);
     const generation = scope.current.capture();
     // The selected action readback is independent of queue availability.
     const results = await Promise.allSettled([
@@ -226,20 +239,21 @@ export function StaffApp() {
   if (!identity) return <StaffLogin error={error} onSignIn={value => { clearScope(); setIdentity(value); setError(''); setQueueLoaded(false); setQueueError(false); setUpdatedAt(''); }} />;
   return <><Header staff><div className="staff-identity"><strong>{identity.name}</strong><span>{roleLabels[identity.role]}</span></div><Button variant="text" onClick={() => navigate(() => { void logout(); })} disabled={Boolean(busy)}><LogOut size={16} aria-hidden="true" />Sign out</Button></Header>
     <main id="main" tabIndex={-1} className="staff-shell">
-      <aside className={`queue-panel ${handoff ? 'has-selection' : ''}`} aria-label="Assigned work queue"><div className="queue-heading"><h1>Work queue</h1><Button variant="text" onClick={refresh} disabled={Boolean(busy)} aria-label="Refresh work queue"><RefreshCw size={18} aria-hidden="true" /></Button></div><p className="queue-context">{queueError ? queueLoaded && queue.length > 0 ? 'Previously loaded work · may be out of date' : 'Current assignments are unavailable' : queueLoading ? busy === 'more' ? 'Loading more assigned work…' : queueLoaded ? 'Refreshing assigned work…' : 'Loading assigned work…' : queueLoaded ? `Assigned to you · ${queue.length} loaded${nextCursor === undefined ? '' : ' · more available'}` : 'Queue not yet loaded'}</p><p className="queue-context mobile-staff-name">{identity.name} · {roleLabels[identity.role]}</p><p className="metadata queue-updated">{updatedAt ? `${queueError ? 'Last successful load' : queueLoading ? 'Previous load' : 'Updated'} at ${time(updatedAt)}` : queueLoading ? 'Loading assigned work…' : 'No successful queue load yet'}</p><div className="queue-list">
+      <aside className={`queue-panel ${handoff || safetySessionId ? 'has-selection' : ''}`} aria-label="Assigned work queue"><div className="queue-heading"><h1>Work queue</h1><Button variant="text" onClick={refresh} disabled={Boolean(busy)} aria-label="Refresh work queue"><RefreshCw size={18} aria-hidden="true" /></Button></div><p className="queue-context">{queueError ? queueLoaded && queue.length > 0 ? 'Previously loaded work · may be out of date' : 'Current assignments are unavailable' : queueLoading ? busy === 'more' ? 'Loading more assigned work…' : queueLoaded ? 'Refreshing assigned work…' : 'Loading assigned work…' : queueLoaded ? `Assigned to you · ${queue.length} loaded${nextCursor === undefined ? '' : ' · more available'}` : 'Queue not yet loaded'}</p>{earlierVersion > 0 && <p className="queue-context">{earlierVersion === 1 ? '1 earlier handoff was' : `${earlierVersion} earlier handoffs were`} recorded under a previous questionnaire version. It stays in the record but can’t be shown here.</p>}<p className="queue-context mobile-staff-name">{identity.name} · {roleLabels[identity.role]}</p><p className="metadata queue-updated">{updatedAt ? `${queueError ? 'Last successful load' : queueLoading ? 'Previous load' : 'Updated'} at ${time(updatedAt)}` : queueLoading ? 'Loading assigned work…' : 'No successful queue load yet'}</p><div className="queue-list">
         {queueError && <div className="queue-empty queue-unavailable" role="status"><h2>{queueLoaded ? 'Could not refresh the queue' : 'Queue unavailable'}</h2><p>{queueLoaded && queue.length > 0 ? 'Showing previously loaded work. Current assignments may have changed.' : 'Current assignments could not be checked. This does not mean there is no assigned work.'}</p><Button onClick={refresh} disabled={Boolean(busy)}><RefreshCw size={16} aria-hidden="true" />Try loading the queue again</Button></div>}
         {queue.map((item, index) => <button key={`${item.id}:${item.responsibility}:${index}`} className={`queue-item ${handoff?.id === item.id ? 'is-selected' : ''}`} aria-pressed={handoff?.id === item.id} onClick={() => { if (handoff?.id !== item.id) navigate(() => { void openHandoff(item.id); }); }} disabled={Boolean(busy) || Boolean(pendingAction)}><span className="queue-patient">{item.patientName}<ChevronRight size={17} aria-hidden="true" /></span><span className="queue-purpose">{item.scenarioTitle}</span><span className="queue-detail">{responsibilityLabels[item.responsibility]}{item.receivedAt ? ` · Complete delivery ${dateTime(item.receivedAt)}` : ' · Work received; open for complete-delivery status'}</span><span className="queue-status">{outcomeLabels[item.status]}{identity.role !== 'administrative' && item.completeness === 'partial' && ' · Partial'}</span></button>)}
         {queueLoaded && !queueError && !queueLoading && !queue.length && nextCursor === undefined && <EmptyQueue />}
         {queueLoaded && !queueError && nextCursor !== undefined && <div className="queue-empty"><p>{queue.length ? 'More assigned work is available.' : 'No work to show on this page. Continue checking your assigned work.'}</p><Button onClick={() => { void run('more', () => loadQueue('snapshots', nextCursor)); }} disabled={Boolean(busy)}>{busy === 'more' ? 'Loading more work…' : 'Load more work'}<ArrowRight size={16} aria-hidden="true" /></Button></div>}
-      </div><RecoveryQueue items={recovery} loaded={recoveryLoaded} loading={recoveryLoading} error={recoveryError} cursor={nextCursor ?? recoveryCursor} selectedId={handoff?.id} disabled={Boolean(busy) || Boolean(pendingAction)} onOpen={id => { if (handoff?.id !== id) navigate(() => { void openHandoff(id); }); }} onMore={() => { void run('more-recovery', () => loadQueue(nextCursor !== undefined ? 'snapshots' : 'drafts', nextCursor ?? recoveryCursor)); }} onRefresh={refresh} /><SafetyQueue selectedId={safetySessionId} disabled={Boolean(busy) || Boolean(pendingAction)} onOpen={id => { if (safetySessionId !== id) openSafety(id); }} onAuthError={handleError} /></aside>
+      </div><RecoveryQueue items={recovery} loaded={recoveryLoaded} loading={recoveryLoading} error={recoveryError} cursor={nextCursor ?? recoveryCursor} selectedId={handoff?.id} disabled={Boolean(busy) || Boolean(pendingAction)} onOpen={id => { if (handoff?.id !== id) navigate(() => { void openHandoff(id); }); }} onMore={() => { void run('more-recovery', () => loadQueue(nextCursor !== undefined ? 'snapshots' : 'drafts', nextCursor ?? recoveryCursor)); }} onRefresh={refresh} /><StaffInvitations key={`${identity.name}:${identity.role}`} disabled={Boolean(busy) || Boolean(pendingAction)} onAuthError={handleError} /><SafetyQueue key={safetyQueueVersion} selectedId={safetySessionId} disabled={Boolean(busy) || Boolean(pendingAction)} onOpen={id => { if (safetySessionId !== id) openSafety(id); }} onAuthError={handleError} /></aside>
       <section className="handoff-workspace" aria-busy={busy.startsWith('open:')}>
         {error && <Notice tone="attention" action={<Button onClick={refresh} disabled={Boolean(busy)}><RefreshCw size={16} aria-hidden="true" />Refresh saved state</Button>}>{error}</Notice>}
         {success && <Notice>{success}</Notice>}
         {pendingAction && <Notice tone="attention" action={<div className="button-row"><Button onClick={refresh} disabled={Boolean(busy)}>Check original action</Button>{pendingAction.checked && <Button onClick={() => { void submitAction(pendingAction); }} disabled={Boolean(busy)}>Retry original action</Button>}</div>}>The result of your last action is unconfirmed. Your original request and note are retained. Check saved state before retrying.<p className="metadata break-anywhere">Action reference: {pendingAction.request.actionId}</p></Notice>}
-        {safetySessionId ? <SafetyDetail key={safetySessionId} sessionId={safetySessionId} onBack={() => setSafetySessionId(undefined)} onAuthError={handleError} /> : handoff ? <>
+        {safetySessionId ? <SafetyDetail key={safetySessionId} sessionId={safetySessionId} disabled={Boolean(activity)} onBusyChange={setSafetyBusy} onBack={() => setSafetySessionId(undefined)} onRecorded={() => setSafetyQueueVersion(version => version + 1)} onAuthError={handleError} /> : handoff ? <>
           <Button disabled={Boolean(busy) || Boolean(pendingAction)} className="mobile-only queue-back" variant="text" onClick={() => navigate(() => { setHandoff(undefined); setSource(undefined); })}><ArrowLeft size={16} aria-hidden="true" />Work queue</Button>
           <div className="handoff-header"><div><h1 ref={heading} tabIndex={-1}>{handoff.patientName}</h1><p>{handoff.title}</p></div><span className="status-label">{handoff.deliveryState === 'received' ? 'Received' : 'Confirmed'} version {handoff.version}</span></div>
           <div className="handoff-meta"><span>{handoff.deliveryState === 'received' ? handoff.receivedAt ? `Complete delivery ${dateTime(handoff.receivedAt)}` : 'Complete delivery verified · receipt time not established' : 'Complete delivery pending'}</span>{identity.role !== 'administrative' && handoff.completeness !== undefined && <span>{handoff.completeness === 'partial' ? 'Partial handoff · detail missing' : 'Required details recorded'}</span>}</div>
+          {renderStaffWorkflowMetadata({ handoff })}
           <StaffDeliverySummary handoff={handoff} busy={Boolean(busy) || Boolean(pendingAction)} onResume={resumeDelivery} />
           <p className="scope-note">{identity.role === 'administrative' ? 'Administrative details only. Clinical history and conversation sources are available to the clinical care team. Action availability follows your assigned responsibilities.' : 'Full intake and original answers. Clinical context is shared with the assigned care team; available actions follow your role.'}</p>
           {identity.role !== 'administrative' && canInspect(handoff) && handoff.sources.some(turn => turn.corrects) && <Notice>This record includes corrected answers. Open a detail’s source to compare its current and earlier wording.</Notice>}
@@ -284,13 +298,6 @@ export function StaffDeliverySummary({ handoff, busy, onResume }: { handoff: Sta
   </section>;
 }
 
-const administrativeChoiceLabels: Record<string, Record<string, string>> = {
-  issueType: { 'bill-question': 'A bill question', 'coverage-question': 'A coverage question', 'payment-question': 'A payment question', 'other-request': 'Another billing request' },
-  requestedResolution: { explanation: 'An explanation', 'review-possible-error': 'Review a possible error', 'payment-options': 'Discuss payment options', 'contact-me': 'Contact me' },
-  intent: { request: 'Request a visit', change: 'Change a visit', cancel: 'Cancel a visit' },
-  visitCategory: { 'first-visit': 'First visit', 'follow-up': 'Follow-up visit', 'not-sure': 'Not sure' },
-  timezone: { 'America/New_York': 'Eastern time', 'America/Chicago': 'Central time', 'America/Denver': 'Mountain time', 'America/Los_Angeles': 'Pacific time', 'America/Anchorage': 'Alaska time', 'Pacific/Honolulu': 'Hawaii time' },
-};
 
 function administrativeDetailText(detail: NonNullable<TopicView['details']>[number]) {
   const value = detail.text;
@@ -377,25 +384,26 @@ export function SafetyQueue({ selectedId, disabled, onOpen, onAuthError }: { sel
   };
   useEffect(() => { alive.current = true; void load(); return () => { alive.current = false; }; }, []);
   if (access === 'hidden') return null;
-  // Open reviews first; the sort is stable, so server order is kept within each group.
-  const ordered = [...items].sort((a, b) => Number(b.open > 0) - Number(a.open > 0));
+  const openItems = items.filter(item => item.open > 0);
+  const reviewedItems = items.filter(item => item.open === 0);
   return <section className="safety-queue" aria-labelledby="safety-queue-title" aria-busy={loading}>
     <h2 id="safety-queue-title">Safety review</h2>
-    <p className="queue-context">Patient messages flagged for clinician review{access === 'granted' ? ` · ${items.length} loaded${nextCursor === undefined ? '' : ' · more available'}` : ''}</p>
+    <p className="queue-context">Patient messages flagged for clinician review{access === 'granted' ? ` · ${openItems.length} open conversations loaded${nextCursor === undefined ? '' : ' · more available'}` : ''}</p>
     {error && <div className="queue-empty" role="status"><p>Safety reviews could not be loaded. Previously loaded items may be out of date.</p><Button onClick={() => void load()} disabled={loading}><RefreshCw size={16} aria-hidden="true" />Try loading safety reviews again</Button></div>}
     {loading && <p className="queue-context" role="status">{items.length ? 'Loading more safety reviews…' : 'Loading safety reviews…'}</p>}
-    {ordered.map(item => <button key={item.sessionId} className={`queue-item safety-item ${selectedId === item.sessionId ? 'is-selected' : ''}`} aria-pressed={selectedId === item.sessionId} onClick={() => onOpen(item.sessionId)} disabled={disabled}>
+    {openItems.map(item => <button key={item.sessionId} className={`queue-item safety-item ${selectedId === item.sessionId ? 'is-selected' : ''}`} aria-pressed={selectedId === item.sessionId} onClick={() => onOpen(item.sessionId)} disabled={disabled}>
       <span className="queue-patient">{item.patientName}<ChevronRight size={17} aria-hidden="true" /></span>
       <span className="queue-purpose">{item.scenario}</span>
       <span className="queue-status">{item.open} open · highest {safetyLevelLabels[item.highestLevel]}{item.escalated && <span className="safety-badge">Model escalated</span>}</span>
       <span className="queue-detail">Categories: {categoryText(item.categories)}</span>
     </button>)}
-    {access === 'granted' && !loading && !error && !items.length && <p className="queue-context">No flagged messages in your scope.</p>}
+    {access === 'granted' && !loading && !error && !openItems.length && <p className="queue-context">{nextCursor === undefined ? 'No open safety reviews in your scope.' : 'No open safety reviews on the loaded pages.'}</p>}
+    {reviewedItems.length > 0 && <details className="safety-reviewed"><summary>Reviewed safety messages ({reviewedItems.length})</summary>{reviewedItems.map(item => <button key={item.sessionId} className="queue-item safety-history-item" aria-pressed={selectedId === item.sessionId} onClick={() => onOpen(item.sessionId)} disabled={disabled}><span className="queue-patient">{item.patientName}<ChevronRight size={17} aria-hidden="true" /></span><span className="queue-status">Review complete · View recorded actions</span></button>)}</details>}
     {access === 'granted' && nextCursor !== undefined && <div className="queue-empty"><Button onClick={() => void load(nextCursor)} disabled={loading}>{loading ? 'Loading…' : 'Load more safety reviews'}<ArrowRight size={16} aria-hidden="true" /></Button></div>}
   </section>;
 }
 
-export function SafetyDetail({ sessionId, onBack, onAuthError }: { sessionId: string; onBack: () => void; onAuthError: (error: unknown) => void }) {
+export function SafetyDetail({ sessionId, disabled = false, onBusyChange, onBack, onRecorded, onAuthError }: { sessionId: string; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onBack: () => void; onRecorded?: () => void; onAuthError: (error: unknown) => void }) {
   const [view, setView] = useState<StaffSafetyView>();
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -411,24 +419,24 @@ export function SafetyDetail({ sessionId, onBack, onAuthError }: { sessionId: st
       .catch(e => { if (alive.current) { if (e instanceof RequestError && [401, 403].includes(e.status)) onAuthError(e); else setError(messageOf(e)); } })
       .finally(() => { if (alive.current) setLoading(false); });
   };
-  useEffect(() => { alive.current = true; load(); return () => { alive.current = false; }; }, []);
+  useEffect(() => { alive.current = true; load(); return () => { alive.current = false; onBusyChange?.(false); }; }, []);
   useEffect(() => { heading.current?.focus({ preventScroll: true }); }, [view?.sessionId]);
   const submitAction = async (signalId: string, outcome: SafetyOutcome, note: string): Promise<boolean> => {
-    if (busy) return false;
+    if (busy || disabled) return false;
     const previous = attempt.current;
     const current = previous?.signalId === signalId && previous.outcome === outcome && previous.note === note
       ? previous : { signalId, outcome, note, actionId: crypto.randomUUID() };
     attempt.current = current;
-    setBusy(true); setError('');
+    setBusy(true); onBusyChange?.(true); setError('');
     try {
       const next = await request<StaffSafetyView>(`/api/staff/safety/${encodeURIComponent(sessionId)}/actions`, { actionId: current.actionId, signalId, outcome, note });
       if (!alive.current) return false;
-      attempt.current = undefined; setView(next);
+      attempt.current = undefined; setView(next); onRecorded?.();
       return true;
     } catch (e) {
       if (alive.current) { if (e instanceof RequestError && [401, 403].includes(e.status)) onAuthError(e); else setError(messageOf(e)); }
       return false;
-    } finally { if (alive.current) setBusy(false); }
+    } finally { if (alive.current) { setBusy(false); onBusyChange?.(false); } }
   };
   if (!view) return <div className="safety-detail" aria-busy={loading}>
     <Button variant="text" onClick={onBack}><ArrowLeft size={16} aria-hidden="true" />Safety review list</Button>
@@ -437,7 +445,7 @@ export function SafetyDetail({ sessionId, onBack, onAuthError }: { sessionId: st
   </div>;
   const openCount = view.reviews.filter(review => review.open).length;
   return <div className="safety-detail" aria-busy={busy}>
-    <Button variant="text" onClick={onBack} disabled={busy}><ArrowLeft size={16} aria-hidden="true" />Safety review list</Button>
+    <Button variant="text" onClick={onBack} disabled={busy || disabled}><ArrowLeft size={16} aria-hidden="true" />Safety review list</Button>
     {error && <Notice tone="attention">{error}</Notice>}
     <div className="handoff-header"><div><h1 ref={heading} tabIndex={-1}>{view.patientName}</h1><p>{view.scenario}</p></div><span className="status-label">{openCount} open {openCount === 1 ? 'review' : 'reviews'}</span></div>
     <section className="safety-reviews" aria-label="Safety reviews">
@@ -457,7 +465,7 @@ export function SafetyDetail({ sessionId, onBack, onAuthError }: { sessionId: st
           {review.failure && <><dt>Failure reason</dt><dd>{review.failure}</dd></>}
         </dl>
         {review.open
-          ? <SafetyActionForm signalId={review.signalId} disabled={busy} onSubmit={(outcome, note) => submitAction(review.signalId, outcome, note)} />
+          ? <SafetyActionForm signalId={review.signalId} disabled={busy || disabled} onSubmit={(outcome, note) => submitAction(review.signalId, outcome, note)} />
           : <p className="metadata">This review is closed.</p>}
       </article>)}
     </section>

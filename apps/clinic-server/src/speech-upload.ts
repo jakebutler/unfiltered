@@ -58,7 +58,7 @@ export function createSpeechUploadHandler(options: { access: ReturnType<typeof c
         if (declared !== null && !/^\d+$/.test(declared)) throw new ApiFailure('invalid-speech-request');
         if (declared !== null && Number(declared) > speechUploadMaxBytes) throw new ApiFailure('request-too-large', 413);
         const { sessionId, promptId, expectedRevision, requestId } = scope.data;
-        await options.access.capture(request, { sessionId, promptId, expectedRevision, requestId });
+        await options.access.upload(request, { sessionId, promptId, expectedRevision, requestId });
         const pcm = await readBounded(request, speechUploadMaxBytes);
         const { text } = await options.transcribe({ sessionId, requestId, pcm }, request.signal);
         return json({ text }, 200);

@@ -7,8 +7,5 @@
   },
   "include": [
     "infra/cloud/vercel/research/**/*.ts"
-  ],
-  "exclude": [
-    "infra/cloud/vercel/research/test"
   ]
 }

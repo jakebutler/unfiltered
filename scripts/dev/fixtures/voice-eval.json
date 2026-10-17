@@ -1,0 +1,587 @@
+{
+  "version": "VE-0.1",
+  "cases": [
+    {
+      "id": "num-01",
+      "category": "number",
+      "say": "I'm only taking 0.25 milligrams once a week right now.",
+      "expect": [
+        [
+          "0.25 mg",
+          "0.25 milligrams",
+          "zero point two five milligrams",
+          "point two five milligrams"
+        ],
+        [
+          "once a week",
+          "once weekly",
+          "one time a week",
+          "1 time a week",
+          "once per week"
+        ]
+      ]
+    },
+    {
+      "id": "num-02",
+      "category": "number",
+      "say": "My doctor said 2.5 milligrams, not 25 milligrams, to start with.",
+      "expect": [
+        [
+          "2.5 mg",
+          "2.5 milligrams",
+          "two point five milligrams",
+          "two and a half milligrams"
+        ],
+        [
+          "25 mg",
+          "25 milligrams",
+          "twenty five milligrams",
+          "twenty-five milligrams"
+        ]
+      ]
+    },
+    {
+      "id": "num-03",
+      "category": "number",
+      "say": "It's fifteen milligrams at night, not fifty milligrams.",
+      "expect": [
+        [
+          "15 mg",
+          "15 milligrams",
+          "fifteen milligrams"
+        ],
+        [
+          "50 mg",
+          "50 milligrams",
+          "fifty milligrams"
+        ]
+      ]
+    },
+    {
+      "id": "num-04",
+      "category": "number",
+      "say": "I take seventy five micrograms every morning on an empty stomach.",
+      "expect": [
+        [
+          "75 micrograms",
+          "75 mcg",
+          "seventy five micrograms",
+          "seventy-five micrograms"
+        ],
+        [
+          "every morning",
+          "each morning"
+        ]
+      ]
+    },
+    {
+      "id": "num-05",
+      "category": "number",
+      "say": "I weighed two hundred twelve pounds at my last visit.",
+      "expect": [
+        [
+          "212 pounds",
+          "212 lbs",
+          "212 lb",
+          "two hundred twelve pounds",
+          "two hundred and twelve pounds",
+          "two hundred twelve lbs"
+        ]
+      ]
+    },
+    {
+      "id": "num-06",
+      "category": "number",
+      "say": "I'm five foot six, and my goal weight is one hundred eighty pounds.",
+      "expect": [
+        [
+          "5 foot 6",
+          "5 ft 6",
+          "5 feet 6",
+          "five foot six",
+          "five feet six",
+          "5 foot 6 inches",
+          "5 ft 6 in",
+          "5 feet 6 inches"
+        ],
+        [
+          "180 pounds",
+          "180 lbs",
+          "180 lb",
+          "one hundred eighty pounds",
+          "one hundred and eighty pounds"
+        ]
+      ]
+    },
+    {
+      "id": "num-07",
+      "category": "number",
+      "say": "I was first diagnosed back in twenty nineteen.",
+      "expect": [
+        [
+          "2019",
+          "twenty nineteen",
+          "two thousand nineteen",
+          "twenty-nineteen"
+        ]
+      ]
+    },
+    {
+      "id": "num-08",
+      "category": "number",
+      "say": "My last blood sugar test was seven point two, back in twenty twenty four.",
+      "expect": [
+        [
+          "7.2",
+          "seven point two"
+        ],
+        [
+          "2024",
+          "twenty twenty four",
+          "two thousand twenty four",
+          "twenty twenty-four"
+        ]
+      ]
+    },
+    {
+      "id": "num-09",
+      "category": "number",
+      "say": "I'm supposed to take it twice a day with food.",
+      "expect": [
+        [
+          "twice a day",
+          "twice daily",
+          "two times a day",
+          "2 times a day",
+          "two times daily",
+          "2 times daily",
+          "twice per day",
+          "2 times per day"
+        ]
+      ]
+    },
+    {
+      "id": "num-10",
+      "category": "number",
+      "say": "I do the shot every other day, not every day.",
+      "expect": [
+        [
+          "every other day",
+          "every-other-day",
+          "every second day",
+          "every 2 days",
+          "every two days",
+          "alternate days"
+        ],
+        [
+          "not every day",
+          "not everyday",
+          "not daily"
+        ]
+      ]
+    },
+    {
+      "id": "num-11",
+      "category": "number",
+      "say": "The pharmacy said my refill is in thirty days, not ninety.",
+      "expect": [
+        [
+          "30 days",
+          "thirty days"
+        ],
+        [
+          "not ninety",
+          "not 90"
+        ]
+      ]
+    },
+    {
+      "id": "num-12",
+      "category": "number",
+      "say": "I take one tablet every night at bedtime, around ten thirty.",
+      "expect": [
+        [
+          "1 tablet",
+          "one tablet",
+          "1 tab",
+          "one tab"
+        ],
+        [
+          "10:30",
+          "10 30",
+          "ten thirty",
+          "10:30 pm",
+          "10 30 pm",
+          "ten thirty pm"
+        ]
+      ]
+    },
+    {
+      "id": "num-13",
+      "category": "number",
+      "say": "My BMI was thirty four point five at the last visit.",
+      "expect": [
+        [
+          "34.5",
+          "thirty four point five",
+          "thirty-four point five"
+        ]
+      ]
+    },
+    {
+      "id": "num-14",
+      "category": "number",
+      "say": "I started at ten milligrams and went up to fifteen milligrams last month.",
+      "expect": [
+        [
+          "10 mg",
+          "ten mg"
+        ],
+        [
+          "15 mg",
+          "fifteen mg"
+        ]
+      ]
+    },
+    {
+      "id": "num-15",
+      "category": "number",
+      "say": "I started at 0.5 milligrams and went up to 1 milligram.",
+      "expect": [
+        [
+          "0.5 mg",
+          "0.5 milligrams",
+          "point five milligrams",
+          "zero point five milligrams"
+        ],
+        [
+          "1 mg",
+          "1 milligram",
+          "one milligram",
+          "one mg"
+        ]
+      ]
+    },
+    {
+      "id": "neg-01",
+      "category": "negation",
+      "say": "I'm not taking metformin anymore.",
+      "expect": [
+        [
+          "not"
+        ],
+        [
+          "metformin"
+        ],
+        [
+          "anymore",
+          "any more",
+          "no longer"
+        ]
+      ]
+    },
+    {
+      "id": "neg-02",
+      "category": "negation",
+      "say": "I have no allergies to any medicines.",
+      "expect": [
+        [
+          "no",
+          "none",
+          "not"
+        ],
+        [
+          "allergies",
+          "allergy"
+        ]
+      ]
+    },
+    {
+      "id": "neg-03",
+      "category": "negation",
+      "say": "I've never smoked cigarettes in my life.",
+      "expect": [
+        [
+          "never",
+          "not ever"
+        ],
+        [
+          "smoked",
+          "smoke",
+          "smoking"
+        ]
+      ]
+    },
+    {
+      "id": "neg-04",
+      "category": "negation",
+      "say": "I don't have diabetes, I just have prediabetes.",
+      "expect": [
+        [
+          "dont",
+          "don't",
+          "do not",
+          "not"
+        ],
+        [
+          "diabetes"
+        ],
+        [
+          "prediabetes",
+          "pre diabetes",
+          "pre-diabetes"
+        ]
+      ]
+    },
+    {
+      "id": "neg-05",
+      "category": "negation",
+      "say": "I stopped semaglutide in June because of nausea.",
+      "expect": [
+        [
+          "stopped",
+          "quit",
+          "stop",
+          "discontinued"
+        ],
+        [
+          "semaglutide"
+        ]
+      ]
+    },
+    {
+      "id": "neg-06",
+      "category": "negation",
+      "say": "No, I don't take any blood thinners.",
+      "expect": [
+        [
+          "no",
+          "not",
+          "don't",
+          "do not"
+        ],
+        [
+          "dont",
+          "don't",
+          "do not",
+          "not"
+        ],
+        [
+          "blood thinners",
+          "blood thinner"
+        ]
+      ]
+    },
+    {
+      "id": "neg-07",
+      "category": "negation",
+      "say": "I am not pregnant and I'm not planning to be.",
+      "expect": [
+        [
+          "not"
+        ],
+        [
+          "pregnant"
+        ]
+      ]
+    },
+    {
+      "id": "neg-08",
+      "category": "negation",
+      "say": "I have never been told I have sleep apnea.",
+      "expect": [
+        [
+          "never"
+        ],
+        [
+          "sleep apnea"
+        ]
+      ]
+    },
+    {
+      "id": "neg-09",
+      "category": "negation",
+      "say": "No surgeries and no hospital stays in the last five years.",
+      "expect": [
+        [
+          "no",
+          "none"
+        ],
+        [
+          "surgeries",
+          "surgery"
+        ],
+        [
+          "hospital stays",
+          "hospital stay",
+          "hospitalized"
+        ]
+      ]
+    },
+    {
+      "id": "neg-10",
+      "category": "negation",
+      "say": "I'm not on any insulin, and I've never used it.",
+      "expect": [
+        [
+          "not"
+        ],
+        [
+          "insulin"
+        ],
+        [
+          "never"
+        ]
+      ]
+    },
+    {
+      "id": "name-01",
+      "category": "name",
+      "say": "My doctor switched me from Ozempic to Wegovy last spring.",
+      "expect": [
+        [
+          "wegovy",
+          "we govy"
+        ],
+        [
+          "ozempic"
+        ]
+      ]
+    },
+    {
+      "id": "name-02",
+      "category": "name",
+      "say": "I take tirzepatide, which is also called Mounjaro, once a week.",
+      "expect": [
+        [
+          "tirzepatide"
+        ],
+        [
+          "mounjaro"
+        ]
+      ]
+    },
+    {
+      "id": "name-03",
+      "category": "name",
+      "say": "The new prescription is liraglutide, the same as Saxenda.",
+      "expect": [
+        [
+          "liraglutide"
+        ],
+        [
+          "saxenda"
+        ]
+      ]
+    },
+    {
+      "id": "name-04",
+      "category": "name",
+      "say": "They put me on phentermine and topiramate for weight loss.",
+      "expect": [
+        [
+          "phentermine"
+        ],
+        [
+          "topiramate"
+        ]
+      ]
+    },
+    {
+      "id": "name-05",
+      "category": "name",
+      "say": "The pharmacist said Contrave is naltrexone combined with bupropion.",
+      "expect": [
+        [
+          "contrave"
+        ],
+        [
+          "naltrexone"
+        ],
+        [
+          "bupropion"
+        ]
+      ]
+    },
+    {
+      "id": "name-06",
+      "category": "name",
+      "say": "I take levothyroxine every morning for hypothyroidism.",
+      "expect": [
+        [
+          "levothyroxine",
+          "levo thyroxine"
+        ],
+        [
+          "hypothyroidism"
+        ]
+      ]
+    },
+    {
+      "id": "name-07",
+      "category": "name",
+      "say": "My cholesterol medicine is atorvastatin, and I take it at night.",
+      "expect": [
+        [
+          "atorvastatin",
+          "ator vastatin"
+        ]
+      ]
+    },
+    {
+      "id": "name-08",
+      "category": "name",
+      "say": "Last year my kidney doctor added empagliflozin.",
+      "expect": [
+        [
+          "empagliflozin",
+          "empa gliflozin"
+        ]
+      ]
+    },
+    {
+      "id": "name-09",
+      "category": "name",
+      "say": "I was on glipizide, and then my doctor switched me to sitagliptin.",
+      "expect": [
+        [
+          "glipizide"
+        ],
+        [
+          "sitagliptin"
+        ]
+      ]
+    },
+    {
+      "id": "name-10",
+      "category": "name",
+      "say": "My doctor says I have PCOS and prediabetes.",
+      "expect": [
+        [
+          "pcos",
+          "p-c-o-s",
+          "p c o s",
+          "polycystic ovary syndrome"
+        ],
+        [
+          "prediabetes",
+          "pre diabetes",
+          "pre-diabetes"
+        ]
+      ]
+    },
+    {
+      "id": "name-11",
+      "category": "name",
+      "say": "I was diagnosed with sleep apnea and I use a CPAP machine.",
+      "expect": [
+        [
+          "sleep apnea"
+        ],
+        [
+          "cpap"
+        ]
+      ]
+    }
+  ]
+}

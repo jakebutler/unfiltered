@@ -1,12 +1,13 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import WebSocket, { WebSocketServer, type RawData, type ClientOptions } from 'ws';
-import { createSpeechAccess, speechInputPath, speechOutputPath, speechOutputSchema, speechStartSchema } from '../../../packages/clinic-api/src/speech-access.js';
+import { createSpeechAccess, speechInputPath, speechOutputPath, speechStartSchema } from '../../../packages/clinic-api/src/speech-access.js';
 import { ApiFailure } from '../../../packages/clinic-api/src/types.js';
 import { createSpeechRelay, deepgramListenUrl } from '../../../packages/speech/src/relay.js';
-import { createSpeechOutput, type SpeechAdmission, type SpeechFetch, type SpeechLease, type SpeechOutcome } from '../../../packages/speech/src/server.js';
+import type { SpeechAdmission, SpeechFetch, SpeechLease, SpeechOutcome } from '../../../packages/speech/src/server.js';
 import { SpeechError, type SpeechInputEvent } from '../../../packages/speech/src/contracts.js';
 import type { IngressAdmission, IngressLease } from '../../../packages/clinic-api/src/ingress-admission.js';
+import { createSpeechOutputHandler } from './speech-output.js';
 
 export interface NodeSpeechOptions {
   access: ReturnType<typeof createSpeechAccess>;
@@ -39,6 +40,7 @@ export function createNodeSpeechTransport(options: NodeSpeechOptions) {
   const active = new Map<string, () => void>();
   const pending = new Set<Duplex>();
   const connect = options.connect ?? ((url, config) => new WebSocket(url, config));
+  const output = createSpeechOutputHandler({ access: options.access, admission: options.admission, elevenlabsApiKey: options.elevenlabsApiKey, fetcher: options.fetcher });
   let closed = false;
 
   function attach(browser: WebSocket, request: Request, sessionId: string, sharedLease?: IngressLease) {
@@ -207,22 +209,10 @@ export function createNodeSpeechTransport(options: NodeSpeechOptions) {
   async function handle(request: Request): Promise<Response | undefined> {
     const url = new URL(request.url);
     if (![speechInputPath, speechOutputPath].includes(url.pathname)) return undefined;
-    try {
-      if (closed) throw new ApiFailure('speech-unavailable', 503);
-      if (url.pathname !== speechOutputPath || request.method !== 'POST' || url.search) throw new ApiFailure('method-not-allowed', 405);
-      await options.access.authenticate(request);
-      if (!request.headers.get('content-type')?.startsWith('application/json')) throw new ApiFailure('json-required', 415);
-      const reader = request.body?.getReader(); if (!reader) throw new ApiFailure('invalid-speech-request');
-      let timedOut = false;
-      const timer = setTimeout(() => { timedOut = true; void reader.cancel().catch(() => undefined); }, 5000);
-      let body = '', bytes = 0;
-      try { for (;;) { const chunk = await reader.read(); if (chunk.done) break; bytes += chunk.value.byteLength; if (bytes > 2048) throw new ApiFailure('request-too-large', 413); body += new TextDecoder().decode(chunk.value); } }
-      finally { clearTimeout(timer); void reader.cancel().catch(() => undefined); }
-      if (timedOut || request.signal.aborted) throw new SpeechError('timeout');
-      let input: unknown; try { input = JSON.parse(body); } catch { throw new ApiFailure('invalid-speech-request'); }
-      const parsed = speechOutputSchema.safeParse(input); if (!parsed.success) throw new ApiFailure('invalid-speech-request');
-      return await createSpeechOutput({ elevenlabsApiKey: options.elevenlabsApiKey, admission: options.admission, authorize: value => options.access.output(request, value), fetcher: options.fetcher })(parsed.data, request.signal);
-    } catch (error) { return failure(error); }
+    if (closed) return failure(new ApiFailure('speech-unavailable', 503));
+    if (url.pathname === speechOutputPath) return await output.handle(request);
+    // The input path is WebSocket-only; any plain HTTP request to it is refused.
+    return failure(new ApiFailure('method-not-allowed', 405));
   }
   return { handle, upgrade, close() { closed = true; for (const cancel of active.values()) cancel(); for (const socket of pending) socket.destroy(); wss.close(); } };
 }

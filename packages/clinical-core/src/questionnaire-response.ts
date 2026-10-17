@@ -1,3 +1,4 @@
+import { scenarioIds } from '../../clinic-content/src/workflows.js';
 import { z } from "zod";
 import {
   getNativeQuestionnaireDefinition,
@@ -25,6 +26,10 @@ import type {
   SlotDefinition,
   TopicResponse,
 } from "../../clinic-content/src/types.js";
+import {
+  isPhq4ItemSlot,
+  PHQ4_RESPONSE_SYSTEM,
+} from "../../clinic-content/src/mental-health.js";
 
 const sourceId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/);
 const sources = z.array(sourceId).max(600);
@@ -151,9 +156,10 @@ export const nativeRoutingContextSchema = z
       .object({
         reference: z.string().regex(/^Appointment\/[A-Za-z0-9.-]+$/),
         version: sourceId,
-        startsAt: z.string().datetime(),
+        startsAt: z.string().datetime({ offset: true }),
         timezone: bounded,
-        priorUpdateAt: z.string().datetime(),
+        priorUpdateAt: z.string().datetime({ offset: true }).optional(),
+        recordedAt: z.string().datetime({ offset: true }).optional(),
       })
       .strict()
       .optional(),
@@ -164,11 +170,23 @@ export const nativeRoutingContextSchema = z
           .regex(/^(CarePlan|DocumentReference)\/[A-Za-z0-9.-]+$/),
         version: sourceId,
         author: bounded,
-        recordedAt: z.string().datetime(),
+        recordedAt: z.string().datetime({ offset: true }),
         text: bounded,
+        truncated: z.boolean().optional(),
       })
       .strict()
       .optional(),
+    priorSubmission: z.object({
+      reference: z.string().regex(/^QuestionnaireResponse\/[A-Za-z0-9.-]{1,64}$/),
+      version: sourceId,
+      recordedAt: z.string().datetime({ offset: true }),
+      sourceDocumentReference: z.string().regex(/^DocumentReference\/[A-Za-z0-9.-]{1,64}\/_history\/[A-Za-z0-9.-]{1,64}$/),
+      item: bounded.optional(),
+      topicId: z.enum(['Q02', 'Q08']).optional(),
+      path: z.string().max(300).optional(),
+    }).strict().refine(prior => prior.item === undefined
+      ? prior.topicId === undefined && prior.path === undefined
+      : prior.topicId === 'Q02' && prior.path === 'concern' || prior.topicId === 'Q08' && /^medicines\[[A-Za-z0-9_-]{1,64}\]\.name$/.test(prior.path ?? '')).optional(),
     sleepApnea: sourceFact.optional(),
     surgeryEatingEffect: sourceFact.optional(),
     reproductive: sourceFact.optional(),
@@ -220,15 +238,7 @@ export const nativeQuestionnaireCaptureSchema: z.ZodType<NativeQuestionnaireCapt
           digest: z.string().regex(/^[a-f0-9]{64}$/),
         })
         .strict(),
-      scenario: z.enum([
-        "first-intake",
-        "pre-visit",
-        "non-visit",
-        "post-visit",
-        "billing",
-        "scheduling",
-        "refill",
-      ]),
+      scenario: z.enum(scenarioIds),
       relevantTopicIds: z
         .array(
           z.enum([
@@ -393,7 +403,7 @@ function parseNativeQuestionnaireCaptureShape(
   );
   if (validSourceIds) {
     for (const [name, value] of Object.entries(capture.context ?? {})) {
-      if (name === "appointment" || name === "plan") continue;
+      if (name === "appointment" || name === "plan" || name === "priorSubmission") continue;
       const facts = Array.isArray(value) ? value : [value];
       for (const fact of facts) {
         ensure(
@@ -950,22 +960,35 @@ function stateItem(
     ],
   };
 }
-function scalarAnswer(slot: SlotDefinition, value: unknown): ResponseAnswer {
+const PHQ4_LABELS = [
+  "Not at all",
+  "Several days",
+  "More than half the days",
+  "Nearly every day",
+];
+/** Non-PHQ numeric choices are plain FHIR numbers: valueInteger when every choice is an integer, else valueDecimal. */
+function numericChoiceKey(slot: SlotDefinition): "valueInteger" | "valueDecimal" {
+  return slot.choices?.every((c) => Number.isInteger(c))
+    ? "valueInteger"
+    : "valueDecimal";
+}
+function scalarAnswer(
+  topicId: string,
+  slot: SlotDefinition,
+  value: unknown,
+): ResponseAnswer {
   if (typeof value === "boolean") return { valueBoolean: value };
   if (typeof value === "number")
     return slot.kind === "choice"
-      ? {
-          valueCoding: {
-            system: "urn:corvo:phq4-response",
-            code: String(value),
-            display: [
-              "Not at all",
-              "Several days",
-              "More than half the days",
-              "Nearly every day",
-            ][value],
-          },
-        }
+      ? isPhq4ItemSlot(topicId, slot.id)
+        ? {
+            valueCoding: {
+              system: PHQ4_RESPONSE_SYSTEM,
+              code: String(value),
+              display: PHQ4_LABELS[value],
+            },
+          }
+        : { [numericChoiceKey(slot)]: value }
       : { valueDecimal: value };
   if (slot.id === "statedAt" || slot.id.endsWith(".statedAt"))
     return { valueDateTime: value as string };
@@ -973,7 +996,8 @@ function scalarAnswer(slot: SlotDefinition, value: unknown): ResponseAnswer {
     return { valueDate: value as string };
   return { valueString: value as string };
 }
-function serializeSlots(
+/** Exported for slot-level round-trip tests with synthetic topics; production paths use the topic-level functions. */
+export function serializeSlots(
   topicId: string,
   slots: readonly SlotDefinition[],
   answers: SlotAnswers,
@@ -1080,6 +1104,7 @@ function serializeSlots(
                 negative
                   ? { valueBoolean: false }
                   : scalarAnswer(
+                      topicId,
                       slot,
                       answer!.state === "known" ? answer!.value : undefined,
                     ),
@@ -1187,7 +1212,8 @@ export async function toNativeQuestionnaireResponse(input: {
     item,
   };
 }
-function deserializeSlots(
+/** Exported for slot-level round-trip tests with synthetic topics; production paths use the topic-level functions. */
+export function deserializeSlots(
   topicId: string,
   slots: readonly SlotDefinition[],
   items: NativeResponseItem[],
@@ -1337,31 +1363,37 @@ function deserializeSlots(
         ensure(keys.length === 1, "ambiguous-response-value");
         const native = a![0];
         let decoded: unknown;
+        const phq4 = isPhq4ItemSlot(topicId, slot.id);
+        const numericChoice =
+          slot.kind === "choice" &&
+          !!slot.choices?.every((c) => typeof c === "number");
         if (native.valueCoding) {
           ensure(
-            slot.kind === "choice" &&
-              native.valueCoding.system === "urn:corvo:phq4-response" &&
+            phq4 &&
+              native.valueCoding.system === PHQ4_RESPONSE_SYSTEM &&
               /^[0-3]$/.test(native.valueCoding.code),
             "invalid-response-coding",
           );
           decoded = Number(native.valueCoding.code);
           ensure(
-            native.valueCoding.display ===
-              [
-                "Not at all",
-                "Several days",
-                "More than half the days",
-                "Nearly every day",
-              ][decoded as number],
+            native.valueCoding.display === PHQ4_LABELS[decoded as number],
             "invalid-response-choice-label",
           );
-        } else
+        } else {
           decoded =
             native.valueString ??
             native.valueDecimal ??
+            native.valueInteger ??
             native.valueBoolean ??
             native.valueDate ??
             native.valueDateTime;
+          ensure(
+            !numericChoice ||
+              phq4 ||
+              slot.choices!.includes(decoded as never),
+            "invalid-response-choice",
+          );
+        }
         const expectedType =
           slot.kind === "positive-number"
             ? "valueDecimal"
@@ -1369,9 +1401,10 @@ function deserializeSlots(
                 (slot.kind === "choice" &&
                   slot.choices?.every((c) => typeof c === "boolean"))
               ? "valueBoolean"
-              : slot.kind === "choice" &&
-                  slot.choices?.every((c) => typeof c === "number")
-                ? "valueCoding"
+              : numericChoice
+                ? phq4
+                  ? "valueCoding"
+                  : numericChoiceKey(slot)
                 : slot.id === "statedAt" || slot.id.endsWith(".statedAt")
                   ? "valueDateTime"
                   : ["serviceDate", "requestedDate"].includes(slot.id)

@@ -1,0 +1,4362 @@
+{
+  "schemaVersion": 1,
+  "id": "adult-intake",
+  "url": "https://corvo.example/Questionnaire/adult-intake",
+  "version": "CC-0.2",
+  "title": "Adult intake",
+  "provenance": {
+    "version": "CC-0.2",
+    "sourcePath": "docs/rebuild/design/CLINICAL-CONTENT.md",
+    "reviewedBodySha256": "272fc43512dfa9faefdea861b997caca9a17b27fd6f39237f5dff060018df6c4",
+    "targetedApprovalAddendumDate": "2026-10-09",
+    "requirementApproval": "accepted-user-direction",
+    "detailApproval": "proposed",
+    "clinicalProtocolApproval": false
+  },
+  "prompts": [
+    {
+      "id": "Q01",
+      "text": "What would you most like help with, and what would meaningful progress look like for you?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q01.followup.1",
+      "text": "What would you most like to be different in daily life?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q01.followup.2",
+      "text": "Which of those matters most to you right now?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q02",
+      "text": "Are there any specific symptoms or health concerns you want your care team to know about now?",
+      "origin": "opening",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q02.followup.1",
+      "text": "What does [patient's term] feel like for you?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q02.followup.2",
+      "text": "About when did it start?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q02.followup.3",
+      "text": "Is it happening now, and how is it affecting you?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q03",
+      "text": "Let's walk through how your weight has changed over time. What was your experience with weight as a child?",
+      "origin": "opening",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q03.followup.1",
+      "text": "You mentioned the gain after school; was your weight fairly steady before then, or changing?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q04",
+      "text": "What is your height, including the units?",
+      "origin": "opening",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q04.followup.1",
+      "text": "Was that a measured reading or your estimate?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q04.followup.2",
+      "text": "Which units were those?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q05",
+      "text": "What approaches to weight or health have you tried, including nutrition support, programs, medicines, or procedures? What helped or was difficult?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q05.followup.1",
+      "text": "About when did you try it, and for how long?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q05.followup.2",
+      "text": "What helped, and what led you to stop or change it?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q06",
+      "text": "What health conditions have you been told you have? I'll also check a few common conditions so we don't miss something that could matter to your care.",
+      "origin": "opening",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q06.followup.1",
+      "text": "What have you been told about that condition?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q06.followup.2",
+      "text": "Who helps you manage it?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q06.followup.3",
+      "text": "Is there anything about it troubling you now?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q07",
+      "text": "Have you had surgery, a weight-related procedure, or a hospital stay that you want the team to know about?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q07.followup.1",
+      "text": "What was the procedure or hospital stay for, and roughly when was it?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q07.followup.2",
+      "text": "Has it changed how you eat, take medicines, or manage daily activities?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q08",
+      "text": "What medicines, vitamins, supplements, or weight-loss products do you currently use, if any? Share the names and how you take them as best you know.",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q08.followup.1",
+      "text": "How do you actually take it, compared with those directions?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q08.followup.2",
+      "text": "Is anything making it difficult to take or obtain?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q09",
+      "text": "Do you have any allergies or reactions to medicines or other substances? If so, what happened?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q09.followup.1",
+      "text": "What happened when you used or encountered it?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q09.followup.2",
+      "text": "Was that in the past or is it happening now?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q10",
+      "text": "Is there any family health history you know about that you would like your medical clinician to consider?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q10.followup.1",
+      "text": "Which relative, and what condition were they told they had, as best you know?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q11",
+      "text": "Let's walk through yesterday's eating and drinking, from when you woke up until you went to sleep. What did you first eat or drink, and about when?",
+      "origin": "opening",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q12",
+      "text": "Would you like to share any concerns about eating or your relationship with food, such as feeling out of control, eating much less than you need, or trying to undo eating? It's also okay to discuss this with your care team instead.",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q12.followup.1",
+      "text": "Is this happening now or something you've dealt with before?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q12.followup.2",
+      "text": "What support would feel useful?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q13",
+      "text": "What makes getting or preparing the food you want easier or harder—for example cost, time, access, equipment, or support?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q13.followup.1",
+      "text": "When that happens, what becomes difficult about getting or preparing food?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q13.followup.2",
+      "text": "What kind of help would be useful?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q14",
+      "text": "What kinds of movement or activity fit your life, and are pain, breathing, mobility, fatigue, or other limits getting in the way?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q14.followup.1",
+      "text": "What does a usual week of movement look like for you?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q14.followup.2",
+      "text": "Are there daily tasks you'd like to do more comfortably?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q15",
+      "text": "How is your sleep, and are there sleep concerns or treatments you want the team to know about?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q15.followup.1",
+      "text": "About when do you sleep and wake, and how rested do you feel?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q15.followup.2",
+      "text": "Have you been told you have a sleep condition or use treatment for one?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q16",
+      "text": "We'll check both depression and anxiety, as well as stress and support. Have you ever been told you have depression or an anxiety condition, or received care for either?",
+      "origin": "opening",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q16.followup.1",
+      "text": "What has been putting pressure on you lately, if anything?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q16.followup.2",
+      "text": "How does it affect your day, and what support do you have or want?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q17",
+      "text": "Is there anything about alcohol, nicotine, cannabis, or other substance use that you want your medical clinician to know?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q17.followup.1",
+      "text": "How often would you typically use it, and roughly how much?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q17.followup.2",
+      "text": "Is anything about it something you'd like help with?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q18",
+      "text": "If relevant to you, is pregnancy, planning a pregnancy, or breastfeeding something you would like your medical clinician to consider? You can discuss this with them privately instead.",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q18.followup.1",
+      "text": "What would you like your medical clinician to take into account?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q19",
+      "text": "Who else is involved in your health care, and are there recent tests or records you would like the team to review?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q19.followup.1",
+      "text": "Which clinician or service manages that?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q19.followup.2",
+      "text": "What was the test, about when was it done, and do you have the result?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q20",
+      "text": "What could make visits or ongoing care difficult—for example timing, cost, internet access, privacy, work, or caregiving?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q20.followup.1",
+      "text": "What would make it easier for you to attend or keep up with care?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q20.followup.2",
+      "text": "Which part would you like staff to help with?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q21",
+      "text": "How would you like us to address you, and what language, communication, or accessibility support would help?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q21.followup.1",
+      "text": "What format or support works best for you?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q22",
+      "text": "What else would you like the team to know, or what questions would you like them to answer?",
+      "origin": "opening",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "Q22.followup.1",
+      "text": "What would you like the team to do or clarify about that?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q03a",
+      "text": "What was your experience with weight as a child?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q03b",
+      "text": "How about during your teenage years?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q03c",
+      "text": "What changed, if anything, after high school or during that stage of life?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q03d",
+      "text": "What has your weight been like over the last five years?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q03e",
+      "text": "And over the past 18 months—fairly steady, increasing, decreasing, or changing in another way?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q04a",
+      "text": "When was the last time your weight was actually measured, and what was the reading, including the units?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q04b",
+      "text": "Does that reading still reflect your weight now, or do you think it has changed?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q04c",
+      "text": "If you can estimate your current weight, what would it be, including the units? We'll record it as an estimate.",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q11a",
+      "text": "What did you have next, and about what time?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q11b",
+      "text": "About how much did you have? An everyday description, such as a bowl, slice or cup, is fine.",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q11c",
+      "text": "What did you drink with that or between eating occasions, including anything added to the drink?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q11d",
+      "text": "Was there anything else between meals, in the evening, or overnight?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q11e",
+      "text": "Was that a usual day for you? If not, what is usually different, including on workdays or days off?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q06a",
+      "text": "Have you ever been told you have diabetes or prediabetes?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q06b",
+      "text": "Have you been told you have high blood pressure, high cholesterol, heart disease, or a previous stroke?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q06c",
+      "text": "Have you been told you have sleep apnea, a fatty liver or another liver condition, or kidney disease?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q06d",
+      "text": "Have you been told you have arthritis or another joint condition, a thyroid or other hormone condition, or a digestive condition?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "DM01",
+      "text": "What type were you told you have, and roughly when were you told?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "DM02",
+      "text": "What medicines or other treatment do you use for it?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "DM03",
+      "text": "Do you check your blood sugar—for example with a meter or sensor—and what is the most recent result you know, including units and when it was taken? If you know a recent A1C result, you can share that and its date too.",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "DM04",
+      "text": "Have you had episodes you were told were low blood sugar, or episodes you thought might be low blood sugar? What happened, when was the most recent, and did you need someone else's help?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "DM05",
+      "text": "Who currently helps you manage it, and is there a concern you want them or this care team to review?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "COND01",
+      "text": "What have you been told about [patient's condition term], and what treatment or follow-up do you have for it?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "COND02",
+      "text": "Is it causing any difficulties now, and who helps you manage it?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q16b",
+      "text": "What support or care do you already have, and is there support you would like?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "COPY-01",
+      "text": "Corvo Clinic is a fictional demo. Use the provided fictional details, not your own health information. No medical care is provided or monitored here.",
+      "origin": "authority-copy",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "COPY-02",
+      "text": "I can help collect your answers and questions for the care team to review. I can't diagnose you, decide whether a treatment is right for you, or prescribe medicine.",
+      "origin": "authority-copy",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "COPY-03",
+      "text": "You can say ‘I don't know,’ ‘I'd rather discuss this with my care team,’ or ‘Skip for now.’ You can check and change your answers before sending them.",
+      "origin": "authority-copy",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "COPY-04",
+      "text": "A medical clinician would need to review your situation to discuss treatment options. I can record what you want to ask.",
+      "origin": "authority-copy",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "COPY-05",
+      "text": "I can't tell you whether to take, skip, repeat, or change a dose. If this is a real medication question, contact your prescriber or pharmacist for advice.",
+      "origin": "authority-copy",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "COPY-06",
+      "text": "Please check that this reflects what you want to share, including anything marked unknown or left unanswered.",
+      "origin": "authority-copy",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "COPY-07",
+      "text": "Received by Corvo Clinic's demo staff workspace. [Role] review is pending. This is not a treatment decision.",
+      "origin": "authority-copy",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "COPY-08",
+      "text": "Delivery is not confirmed yet. Your confirmed answers are saved. Check delivery status before trying again.",
+      "origin": "authority-copy",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "B01",
+      "text": "What are you experiencing, when did it start, and how is it affecting what you can do?",
+      "origin": "bounded-clarification",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "B02",
+      "text": "If the label is available, can you share the medicine name, strength, and the directions written on it? Please don't guess anything you aren't sure about.",
+      "origin": "bounded-clarification",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "B03",
+      "text": "Are you unsure whether you took the dose, or do you think you may have taken an extra dose?",
+      "origin": "bounded-clarification",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "B04",
+      "text": "Are you having severe belly pain, trouble breathing, fainting or confusion, or are you unable to keep fluids down?",
+      "origin": "bounded-clarification",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "S01",
+      "text": "For your appointment on [verified date/time/timezone], what has changed since [dated prior update], and what matters most for this visit?",
+      "origin": "scenario",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "S01a",
+      "text": "I don't have a confirmed appointment to refer to. What update would you like to share, and what appointment details should staff check?",
+      "origin": "scenario",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "S02",
+      "text": "What would you like to share or get help with between visits?",
+      "origin": "scenario",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "S03",
+      "text": "Looking at the plan recorded by [demo author/role] on [date], what questions, changes, or difficulties would you like to share?",
+      "origin": "scenario",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "S03a",
+      "text": "I don't have a follow-up plan to refer to. What would you like your care team to review?",
+      "origin": "scenario",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "COPY-09",
+      "text": "I can show the plan that was recorded, but I can't add new treatment directions.",
+      "origin": "authority-copy",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "S04",
+      "text": "What bill, coverage, or payment question would you like staff to help with? Share a reference or service date if you know it, but don't enter payment-card or bank details.",
+      "origin": "scenario",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "S05",
+      "text": "Would you like to request a visit, change one, or cancel one? Tell us which visit if known, and any timing or accessibility preferences, including your time zone.",
+      "origin": "scenario",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "S06",
+      "text": "Which medicine are you asking about, how much do you have left, and which pharmacy should staff check with, if you know?",
+      "origin": "scenario",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "S07",
+      "text": "Have you noticed symptoms, had trouble taking it, or had any changes or questions since the last prescription?",
+      "origin": "scenario",
+      "wordingStatus": "retained-approved-plan"
+    },
+    {
+      "id": "SLEEP01",
+      "text": "Do you use any treatment for sleep apnea, and is anything making it difficult to use?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "GI01",
+      "text": "How does this affect eating, drinking, or digestion now?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "stop-choice",
+      "text": "Would you rather move on or come back to this?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q03.change-context",
+      "text": "Roughly when did that change happen, and what else was happening in your life?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q11.preparation",
+      "text": "How was it prepared, and where or with whom did you eat?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q06.uncertain",
+      "text": "What were you told, as best you remember?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "MH.unscored",
+      "text": "Have low mood, loss of interest, anxiety, or worry been affecting you recently? Which, if any, and how has it affected daily life?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "Q16a",
+      "text": "What has been putting pressure on you lately, if anything, and how has it affected your day?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "W02.followup.1",
+      "text": "What has changed about [previously reported item] since [date]?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "W02.followup.2",
+      "text": "What do you most want covered at this visit?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "W03.followup.1",
+      "text": "What changed, and what would you like the team to help with?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "W04.followup.1",
+      "text": "Which part of the recorded plan would you like to discuss?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "W04.followup.2",
+      "text": "What do you remember wanting help with, without guessing the instructions?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "W05.followup.1",
+      "text": "What part of the bill or coverage information seems wrong or unclear?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "W06.followup.1",
+      "text": "Which days or times could work, and what time zone should staff use?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "W07.followup.1",
+      "text": "What is making the refill difficult?",
+      "origin": "directed-followup",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "COPY-10",
+      "text": "These four questions ask about depression and anxiety symptoms over the past two weeks. They are a screening check, not a diagnosis. You can skip an item or discuss it with your care team.",
+      "origin": "instrument",
+      "wordingStatus": "proposed-detail"
+    },
+    {
+      "id": "MH.stem",
+      "text": "Over the last 2 weeks, how often have you been bothered by the following problems?",
+      "origin": "instrument",
+      "wordingStatus": "accepted-targeted-choice"
+    },
+    {
+      "id": "MH01",
+      "text": "Feeling nervous, anxious or on edge",
+      "origin": "instrument",
+      "wordingStatus": "accepted-targeted-choice"
+    },
+    {
+      "id": "MH02",
+      "text": "Not being able to stop or control worrying",
+      "origin": "instrument",
+      "wordingStatus": "accepted-targeted-choice"
+    },
+    {
+      "id": "MH03",
+      "text": "Little interest or pleasure in doing things",
+      "origin": "instrument",
+      "wordingStatus": "accepted-targeted-choice"
+    },
+    {
+      "id": "MH04",
+      "text": "Feeling down, depressed, or hopeless",
+      "origin": "instrument",
+      "wordingStatus": "accepted-targeted-choice"
+    }
+  ],
+  "topics": [
+    {
+      "linkId": "Q01",
+      "openingPromptId": "Q01",
+      "presentation": "R",
+      "minimumDetailText": "Main reason for seeking care; one personally meaningful outcome or priority.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "reason",
+          "text": "Reason for seeking care",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q01"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "priority",
+          "text": "Personally meaningful outcome or priority",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q01.followup.1",
+              "Q01.followup.2"
+            ],
+            "acceptsNegative": false
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Patient-defined priorities; D, S1",
+        "branchAndClarification": "Clarify one priority if several compete. Accept non-weight goals; do not demand a target weight.",
+        "workAccountability": "M + RD"
+      }
+    },
+    {
+      "linkId": "Q02",
+      "openingPromptId": "Q02",
+      "presentation": "R",
+      "minimumDetailText": "Explicit no current concern, or the symptom in the patient's words, onset/timecourse, present impact and help sought. No diagnostic detail threshold.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "concern",
+          "text": "Specific current symptom or no concern",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q02"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "onset",
+          "text": "Onset and timecourse",
+          "type": "text",
+          "enableWhen": {
+            "question": "concern",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q02.followup.2",
+              "B01"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "impact",
+          "text": "Current presence and effect",
+          "type": "text",
+          "enableWhen": {
+            "question": "concern",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q02.followup.3",
+              "B01"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "help",
+          "text": "Help sought",
+          "type": "text",
+          "enableWhen": {
+            "question": "concern",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q22.followup.1"
+            ],
+            "acceptsNegative": false
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 2,
+        "wordingStatus": "proposed-detail",
+        "purpose": "Surface specific current concerns without diagnosing; Jake direction, D",
+        "branchAndClarification": "B01 and the Q02 targets clarify a positive response. E-policy interrupts immediately when applicable; no universal diagnostic checklist.",
+        "workAccountability": "M"
+      }
+    },
+    {
+      "linkId": "Q03",
+      "openingPromptId": "Q03",
+      "presentation": "R",
+      "minimumDetailText": "A trajectory description for each applicable life-stage window, plus timing/context of major changes. Numeric weights only if remembered. For a young adult, five-year/18-month windows overlap earlier life stages; do not force nonexistent separate adulthood.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "childhood",
+          "text": "Childhood trajectory",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q03",
+              "Q03a"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "teenage",
+          "text": "Teenage trajectory",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q03b"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "afterSchool",
+          "text": "After high school or equivalent life stage",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q03c"
+            ],
+            "acceptsNegative": false,
+            "acceptsNotApplicable": true
+          }
+        },
+        {
+          "linkId": "lastFiveYears",
+          "text": "Trajectory over last five years",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q03d"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "past18Months",
+          "text": "Trajectory over past 18 months",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q03e"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "majorChanges",
+          "text": "Major changes with timing and life context",
+          "type": "collection",
+          "item": [
+            {
+              "linkId": "change",
+              "text": "Change described",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q03.change-context"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "timing",
+              "text": "Approximate timing",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q03.change-context"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "context",
+              "text": "Life context or no associated event",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q03.change-context"
+                ],
+                "acceptsNegative": true
+              }
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q03.change-context"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 2,
+        "wordingStatus": "proposed-detail",
+        "purpose": "Life-stage trajectory; Jake direction, S1",
+        "branchAndClarification": "Continue only through the missing windows Q03a–e below: childhood, teens, after high school, last five years, past 18 months. Approximate descriptions suffice; no required childhood numbers.",
+        "workAccountability": "M + RD"
+      }
+    },
+    {
+      "linkId": "Q04",
+      "openingPromptId": "Q04",
+      "presentation": "R-value",
+      "minimumDetailText": "Height value+units; latest actual weight value+units and date/approximate period; whether that reading represents now; separate current estimate+units if it no longer does and an estimate is available.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "height.value",
+          "text": "Height value",
+          "type": "height-value",
+          "corvo": {
+            "promptIds": [
+              "Q04"
+            ]
+          }
+        },
+        {
+          "linkId": "height.unit",
+          "text": "Height units",
+          "type": "choice",
+          "answerOption": [
+            {
+              "value": "cm"
+            },
+            {
+              "value": "m"
+            },
+            {
+              "value": "in"
+            },
+            {
+              "value": "ft"
+            },
+            {
+              "value": "ft-in"
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q04.followup.2"
+            ]
+          }
+        },
+        {
+          "linkId": "lastMeasuredWeight.value",
+          "text": "Latest actual weight reading",
+          "type": "positive-number",
+          "corvo": {
+            "promptIds": [
+              "Q04a"
+            ]
+          }
+        },
+        {
+          "linkId": "lastMeasuredWeight.unit",
+          "text": "Measured weight units",
+          "type": "choice",
+          "answerOption": [
+            {
+              "value": "kg"
+            },
+            {
+              "value": "lb"
+            },
+            {
+              "value": "st"
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q04a",
+              "Q04.followup.2"
+            ]
+          }
+        },
+        {
+          "linkId": "lastMeasuredWeight.measuredWhen",
+          "text": "Exact or approximate measurement date",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q04a"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "lastMeasuredWeight.datePrecision",
+          "text": "Whether the measurement date is exact or approximate",
+          "type": "choice",
+          "answerOption": [
+            {
+              "value": "exact"
+            },
+            {
+              "value": "approximate"
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q04a"
+            ]
+          }
+        },
+        {
+          "linkId": "lastMeasuredWeight.describedAsOld",
+          "text": "Patient explicitly described the reading as old",
+          "type": "choice",
+          "required": false,
+          "answerOption": [
+            {
+              "value": true
+            },
+            {
+              "value": false
+            }
+          ],
+          "corvo": {
+            "promptIds": []
+          }
+        },
+        {
+          "linkId": "lastMeasuredWeight.representsCurrent",
+          "text": "Whether reading represents current weight",
+          "type": "choice",
+          "answerOption": [
+            {
+              "value": true
+            },
+            {
+              "value": false
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q04b"
+            ],
+            "acceptsUncertain": true
+          }
+        },
+        {
+          "linkId": "currentWeightEstimate.value",
+          "text": "Current estimated weight",
+          "type": "positive-number",
+          "enableWhen": {
+            "question": "lastMeasuredWeight.representsCurrent",
+            "operator": "estimate-needed",
+            "alsoWhenTrue": "lastMeasuredWeight.describedAsOld"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q04c"
+            ]
+          }
+        },
+        {
+          "linkId": "currentWeightEstimate.unit",
+          "text": "Estimated weight units",
+          "type": "choice",
+          "answerOption": [
+            {
+              "value": "kg"
+            },
+            {
+              "value": "lb"
+            },
+            {
+              "value": "st"
+            }
+          ],
+          "enableWhen": {
+            "question": "lastMeasuredWeight.representsCurrent",
+            "operator": "estimate-needed",
+            "alsoWhenTrue": "lastMeasuredWeight.describedAsOld"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q04c",
+              "Q04.followup.2"
+            ]
+          }
+        },
+        {
+          "linkId": "currentWeightEstimate.statedAt",
+          "text": "When estimate was stated (source timestamp)",
+          "type": "text",
+          "enableWhen": {
+            "question": "lastMeasuredWeight.representsCurrent",
+            "operator": "estimate-needed",
+            "alsoWhenTrue": "lastMeasuredWeight.describedAsOld"
+          },
+          "corvo": {
+            "promptIds": [],
+            "acceptsNegative": false
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 2,
+        "wordingStatus": "proposed-detail",
+        "purpose": "Required measurements with provenance; Jake direction, S3",
+        "branchAndClarification": "Follow with Q04a–c below for last actual weight/date and current estimate when indicated. Missing/refused data prevents complete intake but never prevents partial save/handoff. No BMI eligibility decision.",
+        "workAccountability": "M + RD"
+      }
+    },
+    {
+      "linkId": "Q05",
+      "openingPromptId": "Q05",
+      "presentation": "R",
+      "minimumDetailText": "Explicit none, or named/type of approach, approximate period/duration, what happened/helped and problems/reason stopped if stopped. Reuse drug/procedure facts.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "approaches",
+          "text": "Prior approaches or explicit none",
+          "type": "collection",
+          "item": [
+            {
+              "linkId": "approach",
+              "text": "Name or type",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q05"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "period",
+              "text": "Approximate period and duration",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q05.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "experience",
+              "text": "What helped or was difficult",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q05.followup.2"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "currentStatus",
+              "text": "Continuing or reason stopped/changed",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q05.followup.2"
+                ],
+                "acceptsNegative": false
+              }
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q05"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Prior experience and patient burden; S1, D",
+        "branchAndClarification": "Clarify a named treatment, timeframe, or concern; current medicine moves to Q08 without repetition.",
+        "workAccountability": "M + RD"
+      }
+    },
+    {
+      "linkId": "Q06",
+      "openingPromptId": "Q06",
+      "presentation": "R",
+      "minimumDetailText": "Explicit state for the common groups checked below; for each reported condition, patient term, current care/treatment and concern or no current concern. Diabetes uses the focused bundle below.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "uncertainDiagnosis",
+          "text": "What you recall being told about the uncertain condition",
+          "type": "text",
+          "enableWhen": {
+            "question": "conditions.diabetes",
+            "operator": "uncertain",
+            "orQuestions": [
+              "conditions.prediabetes",
+              "conditions.bloodPressure",
+              "conditions.cholesterol",
+              "conditions.heartDisease",
+              "conditions.stroke",
+              "conditions.sleepApnea",
+              "conditions.liver",
+              "conditions.kidney",
+              "conditions.joint",
+              "conditions.thyroidHormone",
+              "conditions.digestive"
+            ]
+          },
+          "corvo": {
+            "promptIds": [
+              "Q06.uncertain"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "conditions.diabetes",
+          "text": "Diabetes",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q06a"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "conditions.prediabetes",
+          "text": "Prediabetes",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q06a"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "conditions.bloodPressure",
+          "text": "High blood pressure",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q06b"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "conditions.cholesterol",
+          "text": "High cholesterol",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q06b"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "conditions.heartDisease",
+          "text": "Heart disease",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q06b"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "conditions.stroke",
+          "text": "Previous stroke",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q06b"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "conditions.sleepApnea",
+          "text": "Sleep apnea",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q06c"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "conditions.liver",
+          "text": "Fatty liver or another liver condition",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q06c"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "conditions.kidney",
+          "text": "Kidney disease",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q06c"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "conditions.joint",
+          "text": "Arthritis or another joint condition",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q06d"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "conditions.thyroidHormone",
+          "text": "Thyroid or another hormone condition",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q06d"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "conditions.digestive",
+          "text": "Digestive condition",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q06d"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "reportedConditions",
+          "text": "Reported conditions with care context or explicit none",
+          "type": "collection",
+          "item": [
+            {
+              "linkId": "term",
+              "text": "Patient condition term and status",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q06.followup.1",
+                  "COND01"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "care",
+              "text": "Current treatment/follow-up or none",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "COND01"
+                ],
+                "acceptsNegative": true
+              }
+            },
+            {
+              "linkId": "concern",
+              "text": "Current difficulty or none",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "COND02"
+                ],
+                "acceptsNegative": true
+              }
+            },
+            {
+              "linkId": "owner",
+              "text": "Care owner or none",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q06.followup.2",
+                  "COND02"
+                ],
+                "acceptsNegative": true
+              }
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q06"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 2,
+        "wordingStatus": "proposed-detail",
+        "purpose": "Explicit patient-reported comorbidity history; Jake direction, S3, S12",
+        "branchAndClarification": "Q06a–d check common groups not already answered; known/uncertain conditions use bounded branches below. Never presume diagnosis from weight, medication or an unchecked item.",
+        "workAccountability": "M + RD"
+      }
+    },
+    {
+      "linkId": "Q07",
+      "openingPromptId": "Q07",
+      "presentation": "R",
+      "minimumDetailText": "Explicit none, or procedure/reason for admission, approximate date and continuing effects/follow-up relevant to daily care.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "events",
+          "text": "Surgery/procedure/hospital stay or none",
+          "type": "collection",
+          "item": [
+            {
+              "linkId": "event",
+              "text": "Procedure or admission reason",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q07.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "when",
+              "text": "Approximate date",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q07.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "effects",
+              "text": "Continuing effects/follow-up or none",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q07.followup.2"
+                ],
+                "acceptsNegative": true
+              }
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q07"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Relevant care history; S1, D",
+        "branchAndClarification": "If yes, use the Q07 minimum targets and shared follow-up/stop rule. Patient need not decide medical relevance; preserve volunteered history.",
+        "workAccountability": "M; RD for relevant nutrition context"
+      }
+    },
+    {
+      "linkId": "Q08",
+      "openingPromptId": "Q08",
+      "presentation": "R",
+      "minimumDetailText": "Explicit none, or each known name, strength/amount+units, actual schedule/use, reason if known, and uncertainty/access concerns. Label directions and actual use remain separate.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "medicines",
+          "text": "Each medicine/product or explicit none",
+          "type": "collection",
+          "item": [
+            {
+              "linkId": "name",
+              "text": "Medicine/product name",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "B02"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "strength",
+              "text": "Strength or amount with units",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "B02"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "labelDirections",
+              "text": "Label directions as reported",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "B02"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "actualUse",
+              "text": "Actual schedule/use, separate from label",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q08.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "reason",
+              "text": "Reason for use if known",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q08"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "concerns",
+              "text": "Uncertainty/access/use concerns or none",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q08.followup.2"
+                ],
+                "acceptsNegative": true
+              }
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q08"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Medication and supplement context; S4",
+        "branchAndClarification": "B02 for unclear details or refill; no guessed drug, formulation, route, amount, or frequency. No inferred nonadherence.",
+        "workAccountability": "M"
+      }
+    },
+    {
+      "linkId": "Q09",
+      "openingPromptId": "Q09",
+      "presentation": "R",
+      "minimumDetailText": "Explicit none known, or substance, reaction description and approximate timing/current versus historical.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "reactions",
+          "text": "Allergies/reactions or none known",
+          "type": "collection",
+          "item": [
+            {
+              "linkId": "substance",
+              "text": "Substance",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q09"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "reaction",
+              "text": "Patient reaction description",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q09.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "timing",
+              "text": "Approximate timing and current versus past",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q09.followup.2"
+                ],
+                "acceptsNegative": false
+              }
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q09"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Reaction history; S4",
+        "branchAndClarification": "Clarify substance and patient-described reaction; uncertain allergy versus side effect remains uncertain. Current breathing/facial swelling concerns invoke E-policy.",
+        "workAccountability": "M; RD for food-related context"
+      }
+    },
+    {
+      "linkId": "Q10",
+      "openingPromptId": "Q10",
+      "presentation": "O",
+      "minimumDetailText": "If offered: known condition and relationship, or explicit none known. Unknown subtype stays unknown.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "familyHistory",
+          "text": "Family history or none known",
+          "type": "collection",
+          "item": [
+            {
+              "linkId": "condition",
+              "text": "Known condition",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q10.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "relationship",
+              "text": "Relationship",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q10.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q10"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Family context without a broad mandatory checklist; S4",
+        "branchAndClarification": "Clarify relationship or condition if volunteered. Do not treat “thyroid trouble” as medullary thyroid cancer or a medication contraindication.",
+        "workAccountability": "M"
+      }
+    },
+    {
+      "linkId": "Q11",
+      "openingPromptId": "Q11",
+      "presentation": "R",
+      "minimumDetailText": "One identified day's eating occasions including omitted meals, approximate times, foods/drinks and ordinary household amounts if recalled; snacks/overnight intake; whether representative and usual differences.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "day",
+          "text": "Identified recall day",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q11"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "occasions",
+          "text": "Eating/drinking occasions, including omitted meals",
+          "type": "collection",
+          "item": [
+            {
+              "linkId": "time",
+              "text": "Approximate time",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q11a"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "foods",
+              "text": "Food contents or explicit no food",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q11a"
+                ],
+                "acceptsNegative": true
+              }
+            },
+            {
+              "linkId": "drinks",
+              "text": "Drinks or none",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q11c"
+                ],
+                "acceptsNegative": true
+              }
+            },
+            {
+              "linkId": "drinkAdditions",
+              "text": "Anything added to the drink or none",
+              "type": "text",
+              "enableWhen": {
+                "question": "drinks",
+                "operator": "positive"
+              },
+              "corvo": {
+                "promptIds": [
+                  "Q11c"
+                ],
+                "acceptsNegative": true
+              }
+            },
+            {
+              "linkId": "foodAmounts",
+              "text": "Ordinary approximate food portions",
+              "type": "text",
+              "enableWhen": {
+                "question": "foods",
+                "operator": "positive"
+              },
+              "corvo": {
+                "promptIds": [
+                  "Q11b"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "drinkAmounts",
+              "text": "Ordinary approximate drink amounts",
+              "type": "text",
+              "enableWhen": {
+                "question": "drinks",
+                "operator": "positive"
+              },
+              "corvo": {
+                "promptIds": [
+                  "Q11b"
+                ],
+                "acceptsNegative": false
+              }
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q11",
+              "Q11a"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "otherIntake",
+          "text": "Snacks/evening/overnight intake or none",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q11d"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "typicality",
+          "text": "Whether representative and usual differences",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q11e"
+            ],
+            "acceptsNegative": false
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 2,
+        "wordingStatus": "proposed-detail",
+        "purpose": "Concrete diet recall and usual pattern; Jake direction, S1/S2",
+        "branchAndClarification": "Q11a–e fill missing occasions, drinks, approximate amounts, context and typicality. No calorie prescription or moral labels; refusal and eating-concern rules still apply.",
+        "workAccountability": "RD; M for concerns"
+      }
+    },
+    {
+      "linkId": "Q12",
+      "openingPromptId": "Q12",
+      "presentation": "R",
+      "minimumDetailText": "Explicit no concern, or concern type, current versus past, effect on wellbeing and requested support to the extent willingly shared. A private-discussion choice meets presentation, stops probing and leaves the information target unresolved for staff.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "concern",
+          "text": "Eating concern or explicit none",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q12"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "timing",
+          "text": "Current versus past",
+          "type": "text",
+          "enableWhen": {
+            "question": "concern",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q12.followup.1"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "effect",
+          "text": "Effect on wellbeing",
+          "type": "text",
+          "enableWhen": {
+            "question": "concern",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q16a"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "support",
+          "text": "Requested support or none",
+          "type": "text",
+          "enableWhen": {
+            "question": "concern",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q12.followup.2"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Offer sensitive concerns without diagnosis; S5",
+        "branchAndClarification": "Offer discussion/decline without requiring details. Volunteered concern invokes E05; do not ask for weight-loss tactics, amounts, or a diagnostic score.",
+        "workAccountability": "M + RD"
+      }
+    },
+    {
+      "linkId": "Q13",
+      "openingPromptId": "Q13",
+      "presentation": "R",
+      "minimumDetailText": "Barrier present/absent; practical effect and help requested when present.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "barrier",
+          "text": "Food access barrier or none",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q13"
+            ],
+            "acceptsNegative": true,
+            "extractionNegativeScope": "composite"
+          }
+        },
+        {
+          "linkId": "effect",
+          "text": "Practical effect",
+          "type": "text",
+          "enableWhen": {
+            "question": "barrier",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q13.followup.1"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "help",
+          "text": "Help requested or none",
+          "type": "text",
+          "enableWhen": {
+            "question": "barrier",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q13.followup.2"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Feasibility and food access; S2",
+        "branchAndClarification": "Clarify help requested; no income, benefits, or documentation requirement. Reported inability to eat due to illness also goes to M.",
+        "workAccountability": "RD; A for requested logistics"
+      }
+    },
+    {
+      "linkId": "Q14",
+      "openingPromptId": "Q14",
+      "presentation": "R",
+      "minimumDetailText": "Usual activity/movement type and approximate frequency; everyday functional limits or explicit none; patient preference.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "activity",
+          "text": "Usual movement type, including no routine",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q14"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "frequency",
+          "text": "Approximate frequency/pattern",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q14.followup.1"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "limits",
+          "text": "Functional limits or none",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q14.followup.2"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "preference",
+          "text": "Patient movement/function preference",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q14.followup.2"
+            ],
+            "acceptsNegative": false
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Function and patient preferences; S1, S2",
+        "branchAndClarification": "Clarify ordinary limitations versus a new/current symptom if needed; acute concern invokes E-policy. No exercise prescription or able-bodied assumption.",
+        "workAccountability": "RD + M as relevant"
+      }
+    },
+    {
+      "linkId": "Q15",
+      "openingPromptId": "Q15",
+      "presentation": "R",
+      "minimumDetailText": "Usual schedule/approximate duration, quality/daytime effect, known sleep condition and treatment or none.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "schedule",
+          "text": "Sleep schedule and approximate duration",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q15.followup.1"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "quality",
+          "text": "Rest/quality and daytime effect",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q15.followup.1"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "condition",
+          "text": "Known sleep condition or none",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q15.followup.2"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "treatment",
+          "text": "Treatment or none",
+          "type": "text",
+          "enableWhen": {
+            "question": "condition",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q15.followup.2"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Sleep context; S1, S2",
+        "branchAndClarification": "Clarify pattern or a patient-reported diagnosis/treatment. Snoring does not become an apnea diagnosis.",
+        "workAccountability": "M + RD"
+      }
+    },
+    {
+      "linkId": "Q16",
+      "openingPromptId": "Q16",
+      "presentation": "R",
+      "minimumDetailText": "Distinct depression/anxiety history/current-care status; four two-week frequency responses if PHQ-4 adopted; current stress/daily impact and desired support. Declines remain visible and unscored.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "depressionHistory",
+          "text": "Depression history",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q16"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "anxietyHistory",
+          "text": "Anxiety history",
+          "type": "presence",
+          "corvo": {
+            "promptIds": [
+              "Q16"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "currentCare",
+          "text": "Current mental-health care or none",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q16",
+              "Q16b"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "stress",
+          "text": "Current stress or none",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q16a"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "impact",
+          "text": "Daily impact",
+          "type": "text",
+          "enableWhen": {
+            "question": "stress",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q16a"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "support",
+          "text": "Existing/desired support or none",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q16b"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 2,
+        "wordingStatus": "proposed-detail",
+        "purpose": "Explicit mental/behavioral-health check; Jake direction, S1/S2; recommended S15 instrument below",
+        "branchAndClarification": "Collect distinct history/current-care answers, offer the exact PHQ-4 block, then stress/context/support. No diagnosis; spontaneous distress invokes E04 regardless of score.",
+        "workAccountability": "M; RD reviews full context"
+      }
+    },
+    {
+      "linkId": "Q17",
+      "openingPromptId": "Q17",
+      "presentation": "O",
+      "minimumDetailText": "If offered: which substances or explicit none, approximate usual frequency/amount in patient's units and any concern/help requested.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "substances",
+          "text": "Substances or none",
+          "type": "collection",
+          "item": [
+            {
+              "linkId": "substance",
+              "text": "Substance",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q17"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "frequencyAmount",
+              "text": "Usual frequency/amount in patient units",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q17.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "concern",
+              "text": "Concern/help requested or none",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q17.followup.2"
+                ],
+                "acceptsNegative": true
+              }
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q17"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Open medical context; original D prompt",
+        "branchAndClarification": "If offered, use the Q17 minimum targets and shared follow-up/stop rule. No mandatory disclosure, moral judgment, detox advice, or inferred disorder.",
+        "workAccountability": "M"
+      }
+    },
+    {
+      "linkId": "Q18",
+      "openingPromptId": "Q18",
+      "presentation": "C",
+      "minimumDetailText": "When triggered: relevance/status or explicit not applicable; current/planned pregnancy/breastfeeding concern or private-discussion choice.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "context",
+          "text": "Relevance/status or explicitly not applicable",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q18"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "concern",
+          "text": "Current/planned context to consider or none",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q18.followup.1"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Reproductive context can matter to medication review; S4",
+        "branchAndClarification": "Offer when weight-management medication is being discussed/reported, or the patient raises reproductive context. Never infer relevance from sex/name/voice. Unknown, not applicable, or private discussion accepted. No contraception/pregnancy-test checklist or autonomous medication direction.",
+        "workAccountability": "M"
+      }
+    },
+    {
+      "linkId": "Q19",
+      "openingPromptId": "Q19",
+      "presentation": "R",
+      "minimumDetailText": "Current clinicians/roles or none; relevant record/test description, approximate date and known availability or explicit none.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "clinicians",
+          "text": "Current clinicians/roles or none",
+          "type": "collection",
+          "item": [
+            {
+              "linkId": "owner",
+              "text": "Clinician or service/role",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q19.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q19"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "records",
+          "text": "Relevant records/tests or none",
+          "type": "collection",
+          "item": [
+            {
+              "linkId": "record",
+              "text": "Record/test description",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q19.followup.2"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "when",
+              "text": "Approximate date",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q19.followup.2"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "availability",
+              "text": "Known availability",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q19.followup.2"
+                ],
+                "acceptsNegative": false
+              }
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "Q19"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Care coordination; D",
+        "branchAndClarification": "Names/roles and record description only if known. No assumption of consent to contact or that records/labs have been received.",
+        "workAccountability": "M; A for record coordination"
+      }
+    },
+    {
+      "linkId": "Q20",
+      "openingPromptId": "Q20",
+      "presentation": "R",
+      "minimumDetailText": "Main logistics/access barriers or explicit none; impact on care and requested help if any.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "barrier",
+          "text": "Care access barrier or none",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q20"
+            ],
+            "acceptsNegative": true,
+            "extractionNegativeScope": "composite"
+          }
+        },
+        {
+          "linkId": "impact",
+          "text": "Effect on care",
+          "type": "text",
+          "enableWhen": {
+            "question": "barrier",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q20.followup.1"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "help",
+          "text": "Requested staff help or none",
+          "type": "text",
+          "enableWhen": {
+            "question": "barrier",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q20.followup.2"
+            ],
+            "acceptsNegative": true
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Access barriers; S2, D",
+        "branchAndClarification": "Clarify requested help, not personal financial details. Create A work only when there is an actionable request.",
+        "workAccountability": "A; relevant M/RD context"
+      }
+    },
+    {
+      "linkId": "Q21",
+      "openingPromptId": "Q21",
+      "presentation": "O",
+      "minimumDetailText": "If offered: name/address preference, language and accessibility/communication need or no additional support; relevant existing preferences reused.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "addressPreference",
+          "text": "Name/address preference",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q21"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "language",
+          "text": "Language",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q21"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "support",
+          "text": "Accessibility/communication need or none",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q21.followup.1"
+            ],
+            "acceptsNegative": true,
+            "extractionNegativeScope": "composite"
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Respectful participation; D",
+        "branchAndClarification": "Do not re-ask entry preferences. Preserve original wording; unsupported language needs staff help, not an unverified clinical translation.",
+        "workAccountability": "Relevant care team; A for support"
+      }
+    },
+    {
+      "linkId": "Q22",
+      "openingPromptId": "Q22",
+      "presentation": "R",
+      "minimumDetailText": "Specific remaining question/request with intended owner or explicit no further item.",
+      "stopWhen": [
+        "target-met",
+        "does-not-know",
+        "not-applicable",
+        "patient-declines",
+        "patient-moves-on",
+        "resistance-after-purpose",
+        "safety-interruption"
+      ],
+      "item": [
+        {
+          "linkId": "request",
+          "text": "Remaining agenda or no further item",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "Q22"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "help",
+          "text": "Requested action/clarification and intended owner",
+          "type": "text",
+          "enableWhen": {
+            "question": "request",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "Q22.followup.1"
+            ],
+            "acceptsNegative": false
+          }
+        }
+      ],
+      "corvo": {
+        "wordingVersion": 1,
+        "wordingStatus": "retained-approved-plan",
+        "purpose": "Patient agenda and omissions; D",
+        "branchAndClarification": "Classify each concern by requested work; do not promise an answer or action. Review follows, not another broad interview.",
+        "workAccountability": "Owner(s) by concern"
+      }
+    }
+  ],
+  "branches": [
+    {
+      "id": "diabetes",
+      "topic": {
+        "linkId": "DM",
+        "openingPromptId": "DM01",
+        "presentation": "C",
+        "minimumDetailText": "Known type/status; treatment; monitoring method; latest known result/date/units or unknown; reported/suspected low events and help needed; care owner. A1C is an optional separate fact, never substituted for point glucose.",
+        "stopWhen": [
+          "target-met",
+          "does-not-know",
+          "not-applicable",
+          "patient-declines",
+          "patient-moves-on",
+          "resistance-after-purpose",
+          "safety-interruption"
+        ],
+        "item": [
+          {
+            "linkId": "typeStatus",
+            "text": "Reported type/status",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "DM01"
+              ],
+              "acceptsNegative": false
+            }
+          },
+          {
+            "linkId": "when",
+            "text": "Approximate diagnosis timing",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "DM01"
+              ],
+              "acceptsNegative": false
+            }
+          },
+          {
+            "linkId": "treatment",
+            "text": "Current treatment or none; reuse Q08",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "DM02"
+              ],
+              "acceptsNegative": true
+            }
+          },
+          {
+            "linkId": "monitoring",
+            "text": "Monitoring method or none",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "DM03"
+              ],
+              "acceptsNegative": true
+            }
+          },
+          {
+            "linkId": "latestGlucose.value",
+            "text": "Latest known point glucose result",
+            "type": "positive-number",
+            "corvo": {
+              "promptIds": [
+                "DM03"
+              ]
+            }
+          },
+          {
+            "linkId": "latestGlucose.unit",
+            "text": "Point glucose units as reported",
+            "type": "text",
+            "enableWhen": {
+              "question": "latestGlucose.value",
+              "operator": "positive"
+            },
+            "corvo": {
+              "promptIds": [
+                "DM03"
+              ],
+              "acceptsNegative": false
+            }
+          },
+          {
+            "linkId": "latestGlucose.measuredWhen",
+            "text": "Point glucose exact or approximate date",
+            "type": "text",
+            "enableWhen": {
+              "question": "latestGlucose.value",
+              "operator": "positive"
+            },
+            "corvo": {
+              "promptIds": [
+                "DM03"
+              ],
+              "acceptsNegative": false
+            }
+          },
+          {
+            "linkId": "lowEvents",
+            "text": "Reported or suspected low blood sugar episodes",
+            "type": "presence",
+            "corvo": {
+              "promptIds": [
+                "DM04"
+              ],
+              "acceptsNegative": true
+            }
+          },
+          {
+            "linkId": "lowEvents.description",
+            "text": "What happened during the reported low episode",
+            "type": "text",
+            "enableWhen": {
+              "question": "lowEvents",
+              "operator": "positive"
+            },
+            "corvo": {
+              "promptIds": [
+                "DM04"
+              ],
+              "acceptsNegative": false
+            }
+          },
+          {
+            "linkId": "lowEvents.mostRecent",
+            "text": "When the most recent low episode occurred",
+            "type": "text",
+            "enableWhen": {
+              "question": "lowEvents",
+              "operator": "positive"
+            },
+            "corvo": {
+              "promptIds": [
+                "DM04"
+              ],
+              "acceptsNegative": false
+            }
+          },
+          {
+            "linkId": "lowEvents.help",
+            "text": "Whether someone else’s help was needed",
+            "type": "text",
+            "enableWhen": {
+              "question": "lowEvents",
+              "operator": "positive"
+            },
+            "corvo": {
+              "promptIds": [
+                "DM04"
+              ],
+              "acceptsNegative": true
+            }
+          },
+          {
+            "linkId": "owner",
+            "text": "Current care owner or none",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "DM05"
+              ],
+              "acceptsNegative": true
+            }
+          },
+          {
+            "linkId": "concern",
+            "text": "Current concern or none",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "DM05"
+              ],
+              "acceptsNegative": true
+            }
+          },
+          {
+            "linkId": "a1c.value",
+            "text": "Volunteered A1C value",
+            "type": "positive-number",
+            "required": false,
+            "corvo": {
+              "promptIds": [
+                "DM03"
+              ]
+            }
+          },
+          {
+            "linkId": "a1c.unit",
+            "text": "Volunteered A1C units",
+            "type": "text",
+            "required": false,
+            "corvo": {
+              "promptIds": [
+                "DM03"
+              ],
+              "acceptsNegative": false
+            }
+          },
+          {
+            "linkId": "a1c.measuredWhen",
+            "text": "Volunteered A1C date",
+            "type": "text",
+            "required": false,
+            "corvo": {
+              "promptIds": [
+                "DM03"
+              ],
+              "acceptsNegative": false
+            }
+          }
+        ],
+        "corvo": {
+          "wordingStatus": "proposed-detail"
+        }
+      },
+      "trigger": "Patient reports known diabetes or prediabetes; uncertain diagnosis first gets clarification without presumption.",
+      "rule": {
+        "id": "diabetes-explicit-status"
+      },
+      "requirementStatus": "accepted-user-direction",
+      "detailStatus": "proposed-detail",
+      "sourceIds": [
+        "S13",
+        "S14"
+      ],
+      "lead": "medical",
+      "optionalFacts": [
+        {
+          "id": "a1c",
+          "promptId": "DM03",
+          "fields": [
+            "value",
+            "unit",
+            "measuredWhen"
+          ],
+          "separateFrom": "latestGlucose"
+        }
+      ],
+      "optionalSlots": [
+        {
+          "linkId": "a1c.value",
+          "text": "Volunteered A1C value",
+          "type": "positive-number",
+          "required": false,
+          "corvo": {
+            "promptIds": [
+              "DM03"
+            ]
+          }
+        },
+        {
+          "linkId": "a1c.unit",
+          "text": "Volunteered A1C units",
+          "type": "text",
+          "required": false,
+          "corvo": {
+            "promptIds": [
+              "DM03"
+            ],
+            "acceptsNegative": false
+          }
+        },
+        {
+          "linkId": "a1c.measuredWhen",
+          "text": "Volunteered A1C date",
+          "type": "text",
+          "required": false,
+          "corvo": {
+            "promptIds": [
+              "DM03"
+            ],
+            "acceptsNegative": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "otherCondition",
+      "topic": {
+        "linkId": "COND",
+        "openingPromptId": "COND01",
+        "presentation": "C",
+        "minimumDetailText": "Patient term/status, current care/treatment, present concern or none and owner; no disease-specific laboratory interrogation.",
+        "stopWhen": [
+          "target-met",
+          "does-not-know",
+          "not-applicable",
+          "patient-declines",
+          "patient-moves-on",
+          "resistance-after-purpose",
+          "safety-interruption"
+        ],
+        "item": [
+          {
+            "linkId": "termStatus",
+            "text": "Patient term and reported status",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "COND01"
+              ],
+              "acceptsNegative": false
+            }
+          },
+          {
+            "linkId": "care",
+            "text": "Current treatment/follow-up or none",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "COND01"
+              ],
+              "acceptsNegative": true
+            }
+          },
+          {
+            "linkId": "difficulty",
+            "text": "Current difficulty or none",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "COND02"
+              ],
+              "acceptsNegative": true
+            }
+          },
+          {
+            "linkId": "owner",
+            "text": "Care owner or none",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "COND02"
+              ],
+              "acceptsNegative": true
+            }
+          }
+        ],
+        "corvo": {
+          "wordingStatus": "proposed-detail"
+        }
+      },
+      "trigger": "Any other reported condition or unclear label; apply separately to each patient condition term.",
+      "requirementStatus": "accepted-user-direction",
+      "detailStatus": "proposed-detail",
+      "sourceIds": [
+        "S12"
+      ],
+      "lead": "medical"
+    },
+    {
+      "id": "sleepApnea",
+      "topic": {
+        "linkId": "SLEEP",
+        "openingPromptId": "SLEEP01",
+        "presentation": "C",
+        "minimumDetailText": "Treatment or none, difficulty or none; snoring does not establish apnea.",
+        "stopWhen": [
+          "target-met",
+          "does-not-know",
+          "not-applicable",
+          "patient-declines",
+          "patient-moves-on",
+          "resistance-after-purpose",
+          "safety-interruption"
+        ],
+        "item": [
+          {
+            "linkId": "treatment",
+            "text": "Treatment or none",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "SLEEP01"
+              ],
+              "acceptsNegative": true
+            }
+          },
+          {
+            "linkId": "difficulty",
+            "text": "Difficulty using treatment or none",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "SLEEP01"
+              ],
+              "acceptsNegative": true
+            }
+          }
+        ],
+        "corvo": {
+          "wordingStatus": "proposed-detail"
+        }
+      },
+      "trigger": "Reported sleep apnea; reuse Q15.",
+      "rule": {
+        "id": "slot-positive",
+        "slot": "conditions.sleepApnea"
+      },
+      "requirementStatus": "accepted-user-direction",
+      "detailStatus": "proposed-detail",
+      "sourceIds": [
+        "S12"
+      ],
+      "lead": "medical"
+    },
+    {
+      "id": "digestive",
+      "topic": {
+        "linkId": "GI",
+        "openingPromptId": "GI01",
+        "presentation": "C",
+        "minimumDetailText": "Present effect or none; concerning current symptoms invoke the separate E-policy.",
+        "stopWhen": [
+          "target-met",
+          "does-not-know",
+          "not-applicable",
+          "patient-declines",
+          "patient-moves-on",
+          "resistance-after-purpose",
+          "safety-interruption"
+        ],
+        "item": [
+          {
+            "linkId": "effect",
+            "text": "Present eating/drinking/digestion effect or none",
+            "type": "text",
+            "corvo": {
+              "promptIds": [
+                "GI01"
+              ],
+              "acceptsNegative": true
+            }
+          }
+        ],
+        "corvo": {
+          "wordingStatus": "proposed-detail"
+        }
+      },
+      "trigger": "Reported digestive disease or relevant surgery with ongoing eating effects; reuse Q07/Q11.",
+      "rule": {
+        "id": "slot-positive",
+        "slot": "conditions.digestive"
+      },
+      "requirementStatus": "accepted-user-direction",
+      "detailStatus": "proposed-detail",
+      "sourceIds": [
+        "S12"
+      ],
+      "lead": "medical"
+    }
+  ],
+  "workflows": [
+    {
+      "id": "first-intake",
+      "workflowId": "W01",
+      "patientSummary": "Share your health history and what you want help with before your first visit.",
+      "openingPromptId": "Q01",
+      "contextRequirement": "Seeded appointment is explicit context, never invented from conversation.",
+      "reusableTopicIds": [
+        "Q01",
+        "Q02",
+        "Q03",
+        "Q04",
+        "Q05",
+        "Q06",
+        "Q07",
+        "Q08",
+        "Q09",
+        "Q10",
+        "Q11",
+        "Q12",
+        "Q13",
+        "Q14",
+        "Q15",
+        "Q16",
+        "Q17",
+        "Q18",
+        "Q19",
+        "Q20",
+        "Q21",
+        "Q22"
+      ],
+      "additionalTopics": [],
+      "owners": [
+        "medical",
+        "nutrition"
+      ],
+      "completion": "Complete intake requires applicable minimum targets including Q04. A confirmed partial handoff remains permitted. Medical and nutrition review/disposition are separate.",
+      "detailStatus": "proposed-detail"
+    },
+    {
+      "id": "pre-visit",
+      "workflowId": "W02",
+      "patientSummary": "Share updates and questions for your upcoming visit.",
+      "openingPromptId": "S01",
+      "missingContextPromptId": "S01a",
+      "contextRequirement": "Verified appointment date/time/timezone and dated prior update; otherwise use S01a and explicit context-check work.",
+      "reusableTopicIds": [
+        "Q02",
+        "Q08",
+        "Q09",
+        "Q20"
+      ],
+      "additionalTopics": [
+        {
+          "linkId": "W02",
+          "openingPromptId": "S01",
+          "presentation": "R",
+          "minimumDetailText": "Verified appointment/context or explicit mismatch; Relevant dated changes or no changes; Current visit priority; Needed logistics or none",
+          "stopWhen": [
+            "target-met",
+            "does-not-know",
+            "patient-declines",
+            "patient-moves-on",
+            "resistance-after-purpose",
+            "safety-interruption"
+          ],
+          "item": [
+            {
+              "linkId": "appointmentContext",
+              "text": "Verified appointment/context or explicit mismatch",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S01",
+                  "S01a"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "changes",
+              "text": "Relevant dated changes or no changes",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "W02.followup.1"
+                ],
+                "acceptsNegative": true
+              }
+            },
+            {
+              "linkId": "priority",
+              "text": "Current visit priority",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "W02.followup.2"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "logistics",
+              "text": "Needed logistics or none",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S01a",
+                  "Q20"
+                ],
+                "acceptsNegative": true,
+                "extractionNegativeScope": "composite"
+              }
+            }
+          ],
+          "corvo": {
+            "wordingStatus": "proposed-detail",
+            "scopedQuestions": {
+              "appointmentContext": "What appointment details should staff check?",
+              "priority": "What matters most to you for this visit?",
+              "logistics": "Is there anything practical you need help with before the visit?"
+            }
+          }
+        }
+      ],
+      "owners": [
+        "medical",
+        "nutrition"
+      ],
+      "missingContextOwner": "admin",
+      "completion": "Each relevant care owner reviews the update and records a next step. Appointment mismatch has admin ownership. An update is not check-in or appointment confirmation.",
+      "detailStatus": "proposed-detail",
+      "behaviour": {
+        "contextPrompts": {
+          "slotId": "appointmentContext",
+          "verifiedPromptId": "S01",
+          "missingPromptId": "S01a",
+          "requires": "appointment"
+        },
+        "extractionBlockedSlotIds": [
+          "appointmentContext"
+        ]
+      }
+    },
+    {
+      "id": "non-visit",
+      "workflowId": "W03",
+      "patientSummary": "Send an update or ask your care team for help between visits.",
+      "openingPromptId": "S02",
+      "contextRequirement": "No appointment required.",
+      "reusableTopicIds": [
+        "Q01",
+        "Q02",
+        "Q08",
+        "Q11",
+        "Q12",
+        "Q13",
+        "Q14",
+        "Q15",
+        "Q16",
+        "Q20",
+        "Q22"
+      ],
+      "additionalTopics": [
+        {
+          "linkId": "W03",
+          "openingPromptId": "S02",
+          "presentation": "R",
+          "minimumDetailText": "Reason for contact; Concrete update/concern; Approximate timing; Effect or difficulty; Requested help",
+          "stopWhen": [
+            "target-met",
+            "does-not-know",
+            "patient-declines",
+            "patient-moves-on",
+            "resistance-after-purpose",
+            "safety-interruption"
+          ],
+          "item": [
+            {
+              "linkId": "reason",
+              "text": "Reason for contact",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S02"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "update",
+              "text": "Concrete update/concern",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "W03.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "timing",
+              "text": "Approximate timing",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "B01"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "effect",
+              "text": "Effect or difficulty",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "B01"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "help",
+              "text": "Requested help",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "W03.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            }
+          ],
+          "corvo": {
+            "wordingStatus": "proposed-detail",
+            "scopedQuestions": {
+              "update": "What update or concern would you like to share?",
+              "timing": "About when did this start or change?",
+              "effect": "How is it affecting you?",
+              "help": "What would you like the care team to help with?"
+            }
+          }
+        }
+      ],
+      "owners": [
+        "medical",
+        "nutrition",
+        "admin"
+      ],
+      "completion": "Concern-specific owners record a staff response, request for information or explained next step. No full intake rerun or unowned ticket.",
+      "detailStatus": "proposed-detail"
+    },
+    {
+      "id": "post-visit",
+      "workflowId": "W04",
+      "patientSummary": "Share questions or difficulties after your visit.",
+      "openingPromptId": "S03",
+      "missingContextPromptId": "S03a",
+      "contextRequirement": "Exact authored plan source/version/author/date and relevant plan text, or explicit missing-plan state. Recollection is not an authored plan.",
+      "reusableTopicIds": [
+        "Q02",
+        "Q08",
+        "Q20",
+        "Q22"
+      ],
+      "additionalTopics": [
+        {
+          "linkId": "W04",
+          "openingPromptId": "S03",
+          "presentation": "R",
+          "minimumDetailText": "Authored plan identity/version or explicit missing plan; Question/experience tied to plan element, or concern with no plan; Difficulty/change or none; Requested support",
+          "stopWhen": [
+            "target-met",
+            "does-not-know",
+            "patient-declines",
+            "patient-moves-on",
+            "resistance-after-purpose",
+            "safety-interruption"
+          ],
+          "item": [
+            {
+              "linkId": "planContext",
+              "text": "Authored plan identity/version or explicit missing plan",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S03",
+                  "S03a"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "question",
+              "text": "Question/experience tied to plan element, or concern with no plan",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "W04.followup.1",
+                  "W04.followup.2"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "difficulty",
+              "text": "Difficulty/change or none",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S03",
+                  "S03a"
+                ],
+                "acceptsNegative": true
+              }
+            },
+            {
+              "linkId": "help",
+              "text": "Requested support",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q22.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            }
+          ],
+          "corvo": {
+            "wordingStatus": "proposed-detail",
+            "scopedQuestions": {
+              "planContext": "What plan or plan detail would you like the care team to check?",
+              "difficulty": "Has anything changed or been difficult since the visit?",
+              "question": "What question would you like the care team to review?",
+              "help": "What support would you like from the care team?"
+            }
+          }
+        }
+      ],
+      "owners": [
+        "medical",
+        "nutrition"
+      ],
+      "missingContextOwner": "medical",
+      "completion": "Relevant plan owner records disposition/next step. Missing plan creates medical clarification/record retrieval plus relevant nutrition support; no invented plan or treatment instruction.",
+      "detailStatus": "proposed-detail",
+      "behaviour": {
+        "contextPrompts": {
+          "slotId": "planContext",
+          "verifiedPromptId": "S03",
+          "missingPromptId": "S03a",
+          "requires": "plan"
+        },
+        "extractionBlockedSlotIds": [
+          "planContext"
+        ]
+      }
+    },
+    {
+      "id": "billing",
+      "workflowId": "W05",
+      "patientSummary": "Ask staff for help with a bill, coverage, or payment question.",
+      "openingPromptId": "S04",
+      "contextRequirement": "Bill/service reference if known; unavailable reference stays explicit. Never collect payment-card/bank credentials.",
+      "reusableTopicIds": [
+        "Q20"
+      ],
+      "additionalTopics": [
+        {
+          "linkId": "W05",
+          "openingPromptId": "S04",
+          "presentation": "R",
+          "minimumDetailText": "Type of billing question; Service date (YYYY-MM-DD), if known; Help requested from billing staff; Bill/service reference or explicitly unavailable; What seems wrong or unclear; Requested resolution",
+          "stopWhen": [
+            "target-met",
+            "does-not-know",
+            "patient-declines",
+            "patient-moves-on",
+            "resistance-after-purpose",
+            "safety-interruption"
+          ],
+          "item": [
+            {
+              "linkId": "issueType",
+              "text": "Type of billing question",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "value": "bill-question"
+                },
+                {
+                  "value": "coverage-question"
+                },
+                {
+                  "value": "payment-question"
+                },
+                {
+                  "value": "other-request"
+                }
+              ],
+              "corvo": {
+                "promptIds": [
+                  "S04"
+                ]
+              }
+            },
+            {
+              "linkId": "serviceDate",
+              "text": "Service date (YYYY-MM-DD), if known",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S04"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "requestedResolution",
+              "text": "Help requested from billing staff",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "value": "explanation"
+                },
+                {
+                  "value": "review-possible-error"
+                },
+                {
+                  "value": "payment-options"
+                },
+                {
+                  "value": "contact-me"
+                }
+              ],
+              "corvo": {
+                "promptIds": [
+                  "S04"
+                ]
+              }
+            },
+            {
+              "linkId": "reference",
+              "text": "Bill/service reference or explicitly unavailable",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S04"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "understanding",
+              "text": "What seems wrong or unclear",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "W05.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "help",
+              "text": "Requested resolution",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S04"
+                ],
+                "acceptsNegative": false
+              }
+            }
+          ],
+          "corvo": {
+            "wordingStatus": "proposed-detail",
+            "scopedQuestions": {
+              "issueType": "Is your question about a bill, coverage, payment, or something else?",
+              "serviceDate": "What was the service date, if you know it?",
+              "requestedResolution": "Would you like an explanation, a possible error reviewed, payment options, or staff to contact you?",
+              "reference": "Do you have a bill or service reference you can share?",
+              "help": "What would you like billing staff to help with?"
+            }
+          }
+        }
+      ],
+      "owners": [
+        "admin"
+      ],
+      "completion": "Admin records answer, clarification, decline or supported actual outcome. Receipt alone is not refund, coverage verification, payment or changed balance. Medical concern creates separate medical work.",
+      "detailStatus": "proposed-detail",
+      "behaviour": {
+        "dateSlotIds": [
+          "serviceDate"
+        ],
+        "alwaysOwners": [
+          "medical"
+        ],
+        "logistics": {
+          "kind": "billing",
+          "slotIds": [
+            "issueType",
+            "serviceDate",
+            "requestedResolution"
+          ]
+        }
+      }
+    },
+    {
+      "id": "scheduling",
+      "workflowId": "W06",
+      "patientSummary": "Ask staff to arrange, change, or cancel a visit.",
+      "openingPromptId": "S05",
+      "contextRequirement": "Intended appointment or explicit uncertainty; no guessed booking.",
+      "reusableTopicIds": [
+        "Q20",
+        "Q21"
+      ],
+      "additionalTopics": [
+        {
+          "linkId": "W06",
+          "openingPromptId": "S05",
+          "presentation": "R",
+          "minimumDetailText": "Request/change/cancel intent; Visit category; Preferred day; Preferred time of day; Requested date (YYYY-MM-DD), if known; Intended visit or explicit uncertainty; Acceptable dates/times; Time zone; Timing/accessibility constraints or none; Requested next step",
+          "stopWhen": [
+            "target-met",
+            "does-not-know",
+            "patient-declines",
+            "patient-moves-on",
+            "resistance-after-purpose",
+            "safety-interruption"
+          ],
+          "item": [
+            {
+              "linkId": "intent",
+              "text": "Request/change/cancel intent",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "value": "request"
+                },
+                {
+                  "value": "change"
+                },
+                {
+                  "value": "cancel"
+                }
+              ],
+              "corvo": {
+                "promptIds": [
+                  "S05"
+                ]
+              }
+            },
+            {
+              "linkId": "visitCategory",
+              "text": "Visit category",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "value": "first-visit"
+                },
+                {
+                  "value": "follow-up"
+                },
+                {
+                  "value": "not-sure"
+                }
+              ],
+              "corvo": {
+                "promptIds": [
+                  "S05"
+                ]
+              }
+            },
+            {
+              "linkId": "preferredDay",
+              "text": "Preferred day",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "value": "Monday"
+                },
+                {
+                  "value": "Tuesday"
+                },
+                {
+                  "value": "Wednesday"
+                },
+                {
+                  "value": "Thursday"
+                },
+                {
+                  "value": "Friday"
+                },
+                {
+                  "value": "Saturday"
+                },
+                {
+                  "value": "Sunday"
+                },
+                {
+                  "value": "Any day"
+                },
+                {
+                  "value": "Not sure"
+                }
+              ],
+              "corvo": {
+                "promptIds": [
+                  "W06.followup.1"
+                ]
+              }
+            },
+            {
+              "linkId": "preferredWindow",
+              "text": "Preferred time of day",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "value": "Morning"
+                },
+                {
+                  "value": "Afternoon"
+                },
+                {
+                  "value": "Evening"
+                },
+                {
+                  "value": "Flexible"
+                },
+                {
+                  "value": "Not sure"
+                }
+              ],
+              "corvo": {
+                "promptIds": [
+                  "W06.followup.1"
+                ]
+              }
+            },
+            {
+              "linkId": "requestedDate",
+              "text": "Requested date (YYYY-MM-DD), if known",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "W06.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "visit",
+              "text": "Intended visit or explicit uncertainty",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S05"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "timing",
+              "text": "Acceptable dates/times",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "W06.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "timezone",
+              "text": "Time zone",
+              "type": "choice",
+              "answerOption": [
+                {
+                  "value": "America/New_York"
+                },
+                {
+                  "value": "America/Chicago"
+                },
+                {
+                  "value": "America/Denver"
+                },
+                {
+                  "value": "America/Los_Angeles"
+                },
+                {
+                  "value": "America/Anchorage"
+                },
+                {
+                  "value": "Pacific/Honolulu"
+                },
+                {
+                  "value": "Other"
+                },
+                {
+                  "value": "Not sure"
+                }
+              ],
+              "corvo": {
+                "promptIds": [
+                  "W06.followup.1"
+                ]
+              }
+            },
+            {
+              "linkId": "constraints",
+              "text": "Timing/accessibility constraints or none",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S05"
+                ],
+                "acceptsNegative": true
+              }
+            },
+            {
+              "linkId": "help",
+              "text": "Requested next step",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S05"
+                ],
+                "acceptsNegative": false
+              }
+            }
+          ],
+          "corvo": {
+            "wordingStatus": "proposed-detail",
+            "scopedQuestions": {
+              "intent": "Would you like to request, change, or cancel a visit?",
+              "visitCategory": "Is this for a first visit or a follow-up, or are you unsure?",
+              "preferredDay": "Which day would you prefer?",
+              "preferredWindow": "What time of day works best for you?",
+              "requestedDate": "Is there a particular date you would like to request?",
+              "visit": "Which visit are you asking about, if you know?",
+              "timing": "What dates or times would work for you?",
+              "timezone": "What time zone should staff use?",
+              "constraints": "Are there any timing or accessibility needs staff should consider?",
+              "help": "What would you like scheduling staff to do next?"
+            }
+          }
+        }
+      ],
+      "owners": [
+        "admin"
+      ],
+      "missingContextOwner": "admin",
+      "completion": "Admin records disposition. Booking/change/cancellation needs separately recorded actual outcome or labeled synthetic fixture. Unavailable time gets alternative or information request.",
+      "detailStatus": "proposed-detail",
+      "behaviour": {
+        "dateSlotIds": [
+          "requestedDate"
+        ],
+        "alwaysOwners": [
+          "medical"
+        ],
+        "logistics": {
+          "kind": "scheduling",
+          "slotIds": [
+            "intent",
+            "visitCategory",
+            "preferredDay",
+            "preferredWindow",
+            "requestedDate",
+            "timezone"
+          ]
+        }
+      }
+    },
+    {
+      "id": "refill",
+      "workflowId": "W07",
+      "patientSummary": "Ask your medical care team to review a prescription refill request.",
+      "openingPromptId": "S06",
+      "contextRequirement": "Medicine/supply/pharmacy as known; unknown context is preserved, no prescription promise.",
+      "reusableTopicIds": [
+        "Q08",
+        "Q09",
+        "Q18"
+      ],
+      "additionalTopics": [
+        {
+          "linkId": "W07",
+          "openingPromptId": "S06",
+          "presentation": "R",
+          "minimumDetailText": "Medicine identity; Label directions as known; Actual use, distinct from label; Supply remaining; Intended pharmacy or unknown; Symptoms/use changes or explicit none; Requested help",
+          "stopWhen": [
+            "target-met",
+            "does-not-know",
+            "patient-declines",
+            "patient-moves-on",
+            "resistance-after-purpose",
+            "safety-interruption"
+          ],
+          "item": [
+            {
+              "linkId": "medicine",
+              "text": "Medicine identity",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S06",
+                  "B02"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "directions",
+              "text": "Label directions as known",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "B02"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "actualUse",
+              "text": "Actual use, distinct from label",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "Q08.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "remaining",
+              "text": "Supply remaining",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S06"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "pharmacy",
+              "text": "Intended pharmacy or unknown",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S06"
+                ],
+                "acceptsNegative": false
+              }
+            },
+            {
+              "linkId": "symptomsChanges",
+              "text": "Symptoms/use changes or explicit none",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "S07"
+                ],
+                "acceptsNegative": true
+              }
+            },
+            {
+              "linkId": "help",
+              "text": "Requested help",
+              "type": "text",
+              "corvo": {
+                "promptIds": [
+                  "W07.followup.1"
+                ],
+                "acceptsNegative": false
+              }
+            }
+          ],
+          "corvo": {
+            "wordingStatus": "proposed-detail",
+            "scopedQuestions": {
+              "medicine": "Which medicine is the refill request for?",
+              "directions": "What directions are written on the medicine label? Please do not guess if you are unsure.",
+              "actualUse": "How do you actually take or use the medicine?",
+              "remaining": "How much of the medicine do you have left?",
+              "pharmacy": "Which pharmacy would you like to use?",
+              "symptomsChanges": "Have you noticed any symptoms or changes in how you use the medicine?",
+              "help": "What would you like your medical care team to help with?"
+            }
+          }
+        }
+      ],
+      "owners": [
+        "medical"
+      ],
+      "completion": "Medical owns renewal, symptoms and uncertainty; admin logistics and nutrition support are separate. Human records renewal-request disposition/communication. Admin closure cannot close unresolved medical work.",
+      "detailStatus": "proposed-detail"
+    }
+  ],
+  "lockedInstruments": [
+    {
+      "id": "phq4",
+      "topicLinkId": "Q16",
+      "itemLinkIds": [
+        "MH01",
+        "MH02",
+        "MH03",
+        "MH04"
+      ],
+      "attribution": "Developed by Drs. Robert L. Spitzer, Janet B. W. Williams, Kurt Kroenke and colleagues with an educational grant from Pfizer Inc.",
+      "presentation": "buttons-only",
+      "freeTextAnswerable": false
+    }
+  ],
+  "mentalHealth": {
+    "options": {
+      "pending": {
+        "status": "unselected",
+        "scoring": "disabled",
+        "instruction": "Keep explicit depression/anxiety history and stress/support collection. Current-symptom implementation is unresolved; no implicit instrument or unscored alternative."
+      },
+      "phq4": {
+        "status": "accepted-targeted-choice",
+        "scoring": "explicit-complete-only-helper",
+        "stemPromptId": "MH.stem",
+        "introPromptId": "COPY-10",
+        "itemIds": [
+          "MH01",
+          "MH02",
+          "MH03",
+          "MH04"
+        ],
+        "choices": [
+          {
+            "value": 0,
+            "label": "Not at all"
+          },
+          {
+            "value": 1,
+            "label": "Several days"
+          },
+          {
+            "value": 2,
+            "label": "More than half the days"
+          },
+          {
+            "value": 3,
+            "label": "Nearly every day"
+          }
+        ],
+        "attribution": "Developed by Drs. Robert L. Spitzer, Janet B. W. Williams, Kurt Kroenke and colleagues with an educational grant from Pfizer Inc.",
+        "source": "https://www.phqscreeners.com/images/sites/g/files/g10016261/f/201412/instructions.pdf",
+        "instruction": "Exact stem/items/choices only, with explicit confirmed responses. No inference from vague language, diagnoses, past answers or missing items. Clinician review is required; a low score is not clearance."
+      },
+      "unscored": {
+        "status": "proposed-detail",
+        "scoring": "disabled",
+        "promptId": "MH.unscored",
+        "instruction": "Original unvalidated collection wording; never label this PHQ/GAD or calculate an instrument result."
+      }
+    },
+    "slots": {
+      "phq4": [
+        {
+          "linkId": "MH01",
+          "text": "Feeling nervous, anxious or on edge (over the last 2 weeks)",
+          "type": "choice",
+          "answerOption": [
+            {
+              "value": 0
+            },
+            {
+              "value": 1
+            },
+            {
+              "value": 2
+            },
+            {
+              "value": 3
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "MH01"
+            ]
+          }
+        },
+        {
+          "linkId": "MH02",
+          "text": "Not being able to stop or control worrying (over the last 2 weeks)",
+          "type": "choice",
+          "answerOption": [
+            {
+              "value": 0
+            },
+            {
+              "value": 1
+            },
+            {
+              "value": 2
+            },
+            {
+              "value": 3
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "MH02"
+            ]
+          }
+        },
+        {
+          "linkId": "MH03",
+          "text": "Little interest or pleasure in doing things (over the last 2 weeks)",
+          "type": "choice",
+          "answerOption": [
+            {
+              "value": 0
+            },
+            {
+              "value": 1
+            },
+            {
+              "value": 2
+            },
+            {
+              "value": 3
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "MH03"
+            ]
+          }
+        },
+        {
+          "linkId": "MH04",
+          "text": "Feeling down, depressed, or hopeless (over the last 2 weeks)",
+          "type": "choice",
+          "answerOption": [
+            {
+              "value": 0
+            },
+            {
+              "value": 1
+            },
+            {
+              "value": 2
+            },
+            {
+              "value": 3
+            }
+          ],
+          "corvo": {
+            "promptIds": [
+              "MH04"
+            ]
+          }
+        }
+      ],
+      "unscored": [
+        {
+          "linkId": "currentMoodAnxiety",
+          "text": "Current low mood/loss of interest/anxiety/worry, or none; unscored",
+          "type": "text",
+          "corvo": {
+            "promptIds": [
+              "MH.unscored"
+            ],
+            "acceptsNegative": true
+          }
+        },
+        {
+          "linkId": "currentImpact",
+          "text": "Current symptom impact",
+          "type": "text",
+          "enableWhen": {
+            "question": "currentMoodAnxiety",
+            "operator": "positive"
+          },
+          "corvo": {
+            "promptIds": [
+              "MH.unscored"
+            ],
+            "acceptsNegative": false
+          }
+        }
+      ]
+    }
+  }
+}

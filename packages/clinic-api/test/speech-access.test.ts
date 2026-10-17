@@ -53,6 +53,20 @@ describe('clinic speech authorization', () => {
     }
     f.set({ ...tail, phase: 'review' }); await expect(f.access.output(request, output)).rejects.toMatchObject({ code: 'speech-conversation-required' });
   });
+  it('push-to-talk transcription survives a question change but not a paused, reviewed or foreign session', async () => {
+    const f = await fixture(), input = f.scope(), request = await f.request();
+    await expect(f.access.upload(request, input)).resolves.toMatchObject({ sessionId: f.draft().id });
+    // The transcript only fills the unsent answer box; a newer revision or prompt does not invalidate it.
+    f.set({ ...f.draft(), revision: f.draft().revision + 2 });
+    await expect(f.access.upload(request, { ...input, promptId: 'Q99:gone' })).resolves.toMatchObject({ revision: f.draft().revision });
+    await expect(f.access.capture(request, input)).rejects.toMatchObject({ code: 'stale-session' });
+    await expect(f.access.upload(request, { ...input, sessionId: crypto.randomUUID() })).rejects.toMatchObject({ code: 'session-scope-denied' });
+    await expect(f.access.upload(await f.request({ identityConfirmed: false }), input)).rejects.toMatchObject({ code: 'identity-confirmation-required' });
+    f.set({ ...f.draft(), safety: { rule: 'E04', version: 'E-0.2', sourceId: 's', text: 't', at: new Date().toISOString(), paused: true } });
+    await expect(f.access.upload(request, input)).rejects.toMatchObject({ code: 'speech-conversation-required' });
+    f.set({ ...f.draft(), safety: undefined, phase: 'review' });
+    await expect(f.access.upload(request, input)).rejects.toMatchObject({ code: 'speech-conversation-required' });
+  });
   it('requires enabled speech, exact origin, valid confirmed patient cookie', async () => {
     const f = await fixture();
     await expect(f.access.capture(await f.request(), f.scope())).resolves.toMatchObject({ sessionId: f.draft().id });
@@ -119,5 +133,46 @@ describe('clinic speech authorization', () => {
     const result = await adaptive.accept(store, { requestId: crypto.randomUUID(), expectedRevision: 3, text: 'I want more energy.', channel: 'confirmed-transcript' });
     expect(result.draft.turns.at(-1)).toMatchObject({ text: 'I want more energy.', channel: 'confirmed-transcript' });
     await expect(f.access.capture(await f.request(), f.scope())).rejects.toMatchObject({ code: 'interpretation-pending' });
+  });
+});
+describe('hosted hands-free token authorization', () => {
+  it('mints for the current natural or free-text prompt of the verified session', async () => {
+    const f = await fixture(), request = await f.request(), scope = f.scope();
+    await expect(f.access.token(request, scope)).resolves.toEqual({ sessionId: f.draft().id, promptId: scope.promptId, revision: 3 });
+    f.set({ ...f.draft(), adaptive: { mode: 'adaptive', operations: {}, exchange: { prompt: { topicId: 'Q04', promptId: 'Q04', targetPaths: ['height.value'], kind: 'detail', text: 'What is your height?', labels: [], optional: false }, state: {}, status: 'question' } } });
+    const natural = f.scope();
+    expect(natural.promptId).toBe('Q04:Q04');
+    await expect(f.access.token(request, natural)).resolves.toMatchObject({ promptId: 'Q04:Q04', revision: 3 });
+  });
+  it('refuses exact-choice and structured-field prompts as button-only', async () => {
+    const f = await fixture(), request = await f.request();
+    f.set(content.select(f.draft(), 'Q06'));
+    expect(f.scope().promptId).toBe('Q06:conditions.diabetes');
+    await expect(f.access.token(request, f.scope())).rejects.toMatchObject({ code: 'speech-buttons-only', status: 409 });
+    f.set(content.select(f.draft(), 'Q04'));
+    expect(f.scope().promptId).toBe('Q04:height.value');
+    await expect(f.access.token(request, f.scope())).rejects.toMatchObject({ code: 'speech-buttons-only' });
+  });
+  it('refuses PHQ-4 items even though they are otherwise capture-eligible', async () => {
+    const f = await fixture(), request = await f.request();
+    f.set(content.select(f.draft(), 'Q16', 'MH01'));
+    await expect(f.access.capture(request, f.scope())).resolves.toMatchObject({ promptId: 'Q16:MH01' });
+    await expect(f.access.token(request, f.scope())).rejects.toMatchObject({ code: 'speech-buttons-only' });
+  });
+  it('refuses a stale revision, a wrong prompt, a paused safety state and a confirmed draft', async () => {
+    const f = await fixture(), request = await f.request(), scope = f.scope();
+    await expect(f.access.token(request, { ...scope, expectedRevision: 2 })).rejects.toMatchObject({ code: 'stale-session', status: 409 });
+    await expect(f.access.token(request, { ...scope, promptId: 'guessed' })).rejects.toMatchObject({ code: 'stale-prompt', status: 409 });
+    f.set({ ...f.draft(), safety: { rule: 'E04', version: 'E-0.2', sourceId: 's', text: 't', at: new Date().toISOString(), paused: true } });
+    await expect(f.access.token(request, scope)).rejects.toMatchObject({ code: 'speech-conversation-required', status: 409 });
+    // Amendment drafts stay in the conversation phase while a confirmed submission exists.
+    f.set({ ...f.draft(), safety: undefined, confirmed: {} as never });
+    await expect(f.access.token(request, scope)).rejects.toMatchObject({ code: 'speech-conversation-required', status: 409 });
+  });
+  it('refuses a foreign origin and an unconfirmed identity before any draft read', async () => {
+    const f = await fixture();
+    await expect(f.access.token(await f.request({}, 'https://evil.example'), f.scope())).rejects.toMatchObject({ code: 'origin-denied', status: 403 });
+    await expect(f.access.token(await f.request({ identityConfirmed: false }), f.scope())).rejects.toMatchObject({ code: 'identity-confirmation-required', status: 403 });
+    await expect(f.access.token(await f.request(), { ...f.scope(), sessionId: crypto.randomUUID() })).rejects.toMatchObject({ code: 'session-scope-denied', status: 403 });
   });
 });
