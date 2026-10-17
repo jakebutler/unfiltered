@@ -412,6 +412,7 @@ input,textarea,select{scroll-margin-top:24px;scroll-margin-bottom:24px}
 .safety-queue{border-top:1px solid var(--rule);margin-top:8px;padding-top:24px}
 .safety-queue>h2{font-size:1rem;margin:0 0 4px;padding:0 24px}
 .safety-queue>.queue-context{padding:0 24px}
+.safety-reviewed>summary{padding:16px 24px;font-size:.8125rem}
 .safety-queue .queue-status{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
 .safety-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:#fff0f0;color:#8c2828;font-size:.75rem;font-weight:600}
 .safety-detail{min-width:0}
